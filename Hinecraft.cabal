@@ -16,8 +16,9 @@ cabal-version:       >=1.8
 
 executable Hinecraft
   main-is:             Hinecraft.hs
-  other-modules:       View , Data , MqoFile , Types , Util , Ctrl
-                     , ModAPI , UICtrl
+  other-modules:       View , Util
+  --                     Data , MqoFile , Types , Util , Ctrl
+  --                   , ModAPI , UICtrl
 
   build-depends:       base ==4.6.*
                      , GLFW-b , OpenGL , mtl == 2.*
