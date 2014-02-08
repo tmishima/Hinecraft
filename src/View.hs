@@ -1,10 +1,21 @@
 module View where
+-- OpenGL
+import Graphics.Rendering.OpenGL
+import Graphics.Rendering.OpenGL.Raw
+import Foreign ( withForeignPtr, plusPtr, alloca, peek )
+import qualified Codec.Picture as CdP
+import qualified Data.Vector.Storable as Vct
 
+-- GLFW
 import qualified Graphics.UI.GLFW as GLFW
 import Data.IORef
 import Data.Maybe ( fromJust )
 import Control.Monad ( {-unless,void,when,-} replicateM )
 
+-- Common
+import Debug.Trace as Dbg
+
+-- Define
 type ProgCtrlStat = IORef Bool 
 
 data RunMode = TitleMode | PlayMode
@@ -20,8 +31,156 @@ data GLFWHandle = GLFWHandle
   }
 
 
+-- ##################### OpenGL ###########################
+data ViewMode = V2DMode | V3DTitleMode | V3DMode
+  deriving (Eq,Show)
 
+setPerspective :: ViewMode -> Int -> Int -> IO ()
+setPerspective viewMode' w h = do
+  matrixMode $= Projection
+  viewport   $= (Position 0 0, Size (fromIntegral w) (fromIntegral h))
+  loadIdentity
+  
+  case viewMode' of
+    V2DMode -> ortho2D 0 (realToFrac w) 0 (realToFrac h)
+    V3DMode -> perspective 60 (realToFrac w/realToFrac h) 0.05 300
+    V3DTitleMode -> perspective 100 (realToFrac w/realToFrac h) 0.05 300
+      
+  matrixMode $= Modelview 0
+  loadIdentity
 
+initGL :: IO ()
+initGL = do
+  tu <- get maxTextureUnit
+  tm <- get maxTextureSize
+  lt <- get maxLights
+  Dbg.traceIO $ unwords [ "\n max texutere unit =", show tu
+                        , "\n max texture size =", show tm
+                        , "\n max lights =" , show lt
+                        ]
+
+  texture Texture2D $= Enabled
+  shadeModel        $= Smooth
+  clearColor        $= Color4 0 0 0 0.0
+  clearDepth        $= 1.0
+  depthFunc         $= Just Less
+
+  --
+  lineSmooth        $= Enabled
+  lineWidth         $= 10.0
+  blend             $= Enabled
+  blendFunc         $= (SrcAlpha, OneMinusSrcAlpha)
+  --blendFunc         $= (SrcAlpha, OneMinusConstantAlpha)
+  alphaFunc         $= Just (Greater, 0.2)
+  --lightModelAmbient $= Color4 0.1 0.1 0.1 0.2
+  --lighting        $= Enabled
+  colorMaterial     $= Just (FrontAndBack, AmbientAndDiffuse)
+  --colorMaterial     $= Just (GL.Front, AmbientAndDiffuse)
+
+  glHint gl_PERSPECTIVE_CORRECTION_HINT gl_NICEST
+
+loadTextures :: FilePath -> IO GLuint
+loadTextures path = do
+  Dbg.traceIO path
+  Just (w,h,(ptr,off,_),t) <- rdImg
+  Dbg.traceIO $ unwords ["Image w = ", show w, "Image h = ", show h]
+  tex <- alloca $ \p -> do
+            glGenTextures 1 p
+            peek p
+  _ <- withForeignPtr ptr $ \p -> do
+    let p' = p `plusPtr` off
+        glNearest  = fromIntegral gl_NEAREST
+    -- create linear filtered texture
+    glBindTexture gl_TEXTURE_2D tex
+    glTexImage2D gl_TEXTURE_2D 0 4
+      (fromIntegral w) (fromIntegral h)
+      0 t gl_UNSIGNED_BYTE p'
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAG_FILTER glNearest
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MIN_FILTER glNearest
+
+  return tex
+  where
+    showInfo n i = putStrLn $ unwords [n, show $ CdP.imageWidth i, show $ CdP.imageHeight i]
+    getPtr i t = Just (CdP.imageWidth i
+                     , CdP.imageHeight i
+                     , Vct.unsafeToForeignPtr $ CdP.imageData i
+                     , t )
+    rdImg = do
+      Right img <- CdP.readImage path
+      case img of
+        CdP.ImageY8     i -> showInfo "Y8"     i >> return Nothing
+        CdP.ImageY16    i -> showInfo "Y16"    i >> return Nothing
+        CdP.ImageYF     i -> showInfo "YF"     i >> return Nothing
+        CdP.ImageYA8    i -> showInfo "YA8"    i >> return Nothing
+        CdP.ImageYA16   i -> showInfo "YA16"   i >> return Nothing
+        CdP.ImageRGB8   i -> showInfo "RGB8"   i
+          >> return (getPtr i gl_RGB)
+        CdP.ImageRGB16  i -> showInfo "RGB16"  i >> return Nothing
+        CdP.ImageRGBF   i -> showInfo "RGBF"   i >> return Nothing
+        CdP.ImageRGBA8  i -> showInfo "RGBA8"  i
+          >> return (getPtr i gl_RGBA)
+        CdP.ImageRGBA16 i -> showInfo "RGBA16" i >> return Nothing
+        CdP.ImageYCbCr8 i -> showInfo "YCbCr8" i >> return Nothing
+        CdP.ImageCMYK8  i -> showInfo "CMYK8"  i >> return Nothing
+        CdP.ImageCMYK16 i -> showInfo "CMYK16" i >> return Nothing
+
+-- ##################### GLFW #############################
+
+initGLFW :: (Int,Int) -> IO GLFWHandle
+initGLFW (wWidth,wHight) = do
+  True <- GLFW.init
+  GLFW.defaultWindowHints
+  --
+  win <- GLFW.createWindow wWidth wHight "Hinecraft" Nothing Nothing
+  exitFlg' <- newIORef False
+  runMode' <- newIORef TitleMode
+
+  keyStat' <- createKeyStatHdl
+  mouseStat' <- createMouseStatHdl
+  --
+  oldTime' <- newIORef 0.0 
+  --
+  GLFW.makeContextCurrent win
+  case win of
+    Just win' -> do
+      -- Callback
+      GLFW.setWindowCloseCallback win' (Just $ finishGLFW exitFlg')
+      GLFW.setKeyCallback win' (Just (keyPress keyStat'))
+      GLFW.setCursorPosCallback win'
+                           (Just (setCursorMotion runMode' mouseStat'))
+      GLFW.setMouseButtonCallback win' (Just (setButtonClick mouseStat'))
+      GLFW.setScrollCallback win' (Just (setScrollMotion mouseStat'))
+    Nothing -> return ()
+
+  return GLFWHandle 
+    { winHdl = win
+    , mouseStat = mouseStat'
+    , keyStat = keyStat'
+    , exitFlg = exitFlg'
+    , runMode = runMode'
+    , oldTime = oldTime'
+    }
+
+finishGLFW :: ProgCtrlStat -> GLFW.WindowCloseCallback
+finishGLFW exitflg _ = do
+  writeIORef exitflg True
+  return ()
+
+exitGLFW :: GLFWHandle -> IO ()
+exitGLFW glfwHdl = case win of 
+    Just win' -> do
+      GLFW.destroyWindow win'
+      GLFW.terminate
+    Nothing -> return ()
+  where
+    win = winHdl glfwHdl
+
+getDeltTime :: GLFWHandle -> IO Double
+getDeltTime glfwHdl = do 
+  Just newTime' <- GLFW.getTime  
+  oldTime' <- readIORef $ oldTime glfwHdl 
+  writeIORef (oldTime glfwHdl) newTime'
+  return $ newTime' - oldTime'
 
 -- ##################### Keybord ###########################
 data KeyStatusHdl = KeyStatusHdl

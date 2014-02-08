@@ -4,112 +4,18 @@ import Graphics.Rendering.OpenGL.Raw
 import Data.IORef
 import Debug.Trace as Dbg
 import Control.Exception ( bracket )
-import Control.Monad ( unless,void,when,replicateM )
-import Data.Maybe ( fromJust )
-import Foreign ( withForeignPtr, plusPtr, alloca, peek )
-import qualified Codec.Picture as CdP
-import qualified Data.Vector.Storable as Vct
+import Control.Monad ( unless,void,when,replicateM, {-filterM-} )
+import Data.Maybe ( fromJust,isJust )
 import System.Directory ( getHomeDirectory )
 import Graphics.Rendering.FTGL as Ft
 import Data.Array.IO
+import Data.Tuple
+import Data.List
+import Data.Ord
+import Control.Concurrent
 import View
 import Util
-
-initGL :: IO ()
-initGL = do
-  tu <- get maxTextureUnit
-  tm <- get maxTextureSize
-  lt <- get maxLights
-  Dbg.traceIO $ unwords [ "\n max texutere unit =", show tu
-                        , "\n max texture size =", show tm
-                        , "\n max lights =" , show lt
-                        ]
-
-  texture Texture2D $= Enabled
-  shadeModel        $= Smooth
-  clearColor        $= Color4 0 0 0 0.0
-  clearDepth        $= 1.0
-  depthFunc         $= Just Less
-
-  --
-  lineSmooth        $= Enabled
-  lineWidth         $= 10.0
-  blend             $= Enabled
-  blendFunc         $= (SrcAlpha, OneMinusSrcAlpha)
-  --blendFunc         $= (SrcAlpha, OneMinusConstantAlpha)
-  alphaFunc         $= Just (Greater, 0.2)
-  --lightModelAmbient $= Color4 0.1 0.1 0.1 0.2
-  --lighting        $= Enabled
-  colorMaterial     $= Just (FrontAndBack, AmbientAndDiffuse)
-  --colorMaterial     $= Just (GL.Front, AmbientAndDiffuse)
-
-  glHint gl_PERSPECTIVE_CORRECTION_HINT gl_NICEST
-
-data ViewMode = V2DMode | V3DTitleMode | V3DMode
-  deriving (Eq,Show)
-
-initGLFW :: (Int,Int) -> IO GLFWHandle
-initGLFW (wWidth,wHight) = do
-  True <- GLFW.init
-  GLFW.defaultWindowHints
-  --
-  win <- GLFW.createWindow wWidth wHight "Hinecraft" Nothing Nothing
-  exitFlg' <- newIORef False
-  runMode' <- newIORef TitleMode
-
-  keyStat' <- createKeyStatHdl
-  mouseStat' <- createMouseStatHdl
-  --
-  oldTime' <- newIORef 0.0 
-  --
-  GLFW.makeContextCurrent win
-  case win of
-    Just win' -> do
-      -- Callback
-      GLFW.setWindowCloseCallback win' (Just $ finishGLFW exitFlg')
-      GLFW.setKeyCallback win' (Just (keyPress keyStat'))
-      GLFW.setCursorPosCallback win' (Just (setCursorMotion runMode' mouseStat'))
-      GLFW.setMouseButtonCallback win' (Just (setButtonClick mouseStat'))
-      GLFW.setScrollCallback win' (Just (setScrollMotion mouseStat'))
-    Nothing -> return ()
-
-  return GLFWHandle 
-    { winHdl = win
-    , mouseStat = mouseStat'
-    , keyStat = keyStat'
-    , exitFlg = exitFlg'
-    , runMode = runMode'
-    , oldTime = oldTime'
-    }
-
-finishGLFW :: ProgCtrlStat -> GLFW.WindowCloseCallback
-finishGLFW exitflg _ = do
-  writeIORef exitflg True
-  return ()
-
-exitGLFW :: GLFWHandle -> IO ()
-exitGLFW glfwHdl = case win of 
-    Just win' -> do
-      GLFW.destroyWindow win'
-      GLFW.terminate
-    Nothing -> return ()
-  where
-    win = winHdl glfwHdl
-
-setPerspective :: ViewMode -> Int -> Int -> IO ()
-setPerspective viewMode' w h = do
-  matrixMode $= Projection
-  viewport   $= (Position 0 0, Size (fromIntegral w) (fromIntegral h))
-  loadIdentity
-  
-  case viewMode' of
-    V2DMode -> ortho2D 0 (realToFrac w) 0 (realToFrac h)
-    V3DMode -> perspective 60 (realToFrac w/realToFrac h) 0.05 300
-    V3DTitleMode -> perspective 100 (realToFrac w/realToFrac h) 0.05 300
-      -- perspective 45 ((realToFrac w)/(realToFrac h)) 0.05 300
-      
-  matrixMode $= Modelview 0
-  loadIdentity
+import Model
 
 data GuiResource = GuiResource
   { backgroundBoxTexture :: [GLuint]
@@ -167,51 +73,6 @@ loadGuiResource home = do
     widPng    = home ++ "/.Hinecraft/textures/gui/widgets.png"
     fontPath = "/usr/share/fonts/truetype/takao-mincho/TakaoPMincho.ttf" -- linux
 
-loadTextures :: FilePath -> IO GLuint
-loadTextures path = do
-  Dbg.traceIO path
-  Just (w,h,(ptr,off,_),t) <- rdImg
-  Dbg.traceIO $ unwords ["Image w = ", show w, "Image h = ", show h]
-  tex <- alloca $ \p -> do
-            glGenTextures 1 p
-            peek p
-  _ <- withForeignPtr ptr $ \p -> do
-    let p' = p `plusPtr` off
-        glNearest  = fromIntegral gl_NEAREST
-    -- create linear filtered texture
-    glBindTexture gl_TEXTURE_2D tex
-    glTexImage2D gl_TEXTURE_2D 0 4
-      (fromIntegral w) (fromIntegral h)
-      0 t gl_UNSIGNED_BYTE p'
-    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAG_FILTER glNearest
-    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MIN_FILTER glNearest
-
-  return tex
-  where
-    showInfo n i = putStrLn $ unwords [n, show $ CdP.imageWidth i, show $ CdP.imageHeight i]
-    getPtr i t = Just (CdP.imageWidth i
-                     , CdP.imageHeight i
-                     , Vct.unsafeToForeignPtr $ CdP.imageData i
-                     , t )
-    rdImg = do
-      Right img <- CdP.readImage path
-      case img of
-        CdP.ImageY8     i -> showInfo "Y8"     i >> return Nothing
-        CdP.ImageY16    i -> showInfo "Y16"    i >> return Nothing
-        CdP.ImageYF     i -> showInfo "YF"     i >> return Nothing
-        CdP.ImageYA8    i -> showInfo "YA8"    i >> return Nothing
-        CdP.ImageYA16   i -> showInfo "YA16"   i >> return Nothing
-        CdP.ImageRGB8   i -> showInfo "RGB8"   i
-          >> return (getPtr i gl_RGB)
-        CdP.ImageRGB16  i -> showInfo "RGB16"  i >> return Nothing
-        CdP.ImageRGBF   i -> showInfo "RGBF"   i >> return Nothing
-        CdP.ImageRGBA8  i -> showInfo "RGBA8"  i
-          >> return (getPtr i gl_RGBA)
-        CdP.ImageRGBA16 i -> showInfo "RGBA16" i >> return Nothing
-        CdP.ImageYCbCr8 i -> showInfo "YCbCr8" i >> return Nothing
-        CdP.ImageCMYK8  i -> showInfo "CMYK8"  i >> return Nothing
-        CdP.ImageCMYK16 i -> showInfo "CMYK16" i >> return Nothing
-
 main :: IO ()
 main = bracket initHinecraft exitHinecraft runHinecraft
 
@@ -233,93 +94,204 @@ exitHinecraft (glfwHdl,_,_) = do
   Dbg.traceIO "Hinecraft End"
 
 runHinecraft :: (GLFWHandle, GuiResource, WorldResource) -> IO ()
-runHinecraft (glfwHdl,guiRes,wldRes) = do
+runHinecraft resouce@(glfwHdl,guiRes,wldRes) = do
   wld <- genWorldData 
   sfl <- genSurfaceList wld
-  dsps <- genWorldDispList sfl 
-  useStat' <- newIORef $ UserStatus
-      { userPos = (0.0,16 * 3 + 1,0.0)
+  dsps <- genWorldDispList wldRes sfl 
+  rotwld <- newIORef (0.0 :: Double)
+  useStat <- newIORef $ UserStatus
+      { userPos = (0.0,16 * 4 + 1,0.0)
       , userRot = (0.0,0.0,0.0) 
-      , palletIndex = 2
+      , palletIndex = 0
+      , userVel = (0.0,0.0,0.0)
       } 
   _ <- getDeltTime glfwHdl
-  mainLoop useStat' (wld,sfl,dsps)
+  mainLoop rotwld useStat (wld,sfl,dsps) 
   where
-    mainLoop u' (w',f',d') = do
+    mainLoop r' u' (w',f',d') = do
       GLFW.pollEvents
+      --threadDelay 100000
       dt <- getDeltTime glfwHdl
       exitflg' <- readIORef $ exitFlg glfwHdl
-      exitkey' <- mainProcess (glfwHdl,guiRes) u' dt
-      u'' <- readIORef u'
-      drawView (glfwHdl,guiRes,wldRes,u'',d')
-      unless (exitflg' || exitkey') $ mainLoop u' (w',f',d')
+      (exitkey',pos) <- mainProcess resouce r' w' u' f' d' dt
+      drawView (glfwHdl,guiRes,wldRes) r' u' d' pos
+      unless (exitflg' || exitkey') $ mainLoop r' u' (w',f',d')
 
-getDeltTime :: GLFWHandle -> IO Double
-getDeltTime glfwHdl = do 
-  Just newTime' <- GLFW.getTime  
-  oldTime' <- readIORef $ oldTime glfwHdl 
-  writeIORef (oldTime glfwHdl) newTime'
-  return $ newTime' - oldTime'
-
-mainProcess :: (GLFWHandle, GuiResource) -> IORef UserStatus
-            -> Double -> IO Bool
-mainProcess (glfwHdl, guiRes) usrStat dt = do
+mainProcess :: (GLFWHandle, GuiResource, WorldResource) -> IORef Double 
+            -> WorldData -> IORef UserStatus -> SurfaceList
+            -> WorldDispList -> Double
+            -> IO (Bool,Maybe (WorldIndex,Surface))
+mainProcess (glfwHdl, guiRes, wldRes) rotW wld usrStat
+            sufList dsps dt = do
   -- Common User input
   mous <- getButtonClick glfwHdl
   syskey <- getSystemKeyOpe glfwHdl
   -- 
   mode' <- readIORef $ runMode glfwHdl
-  (newMode, extflg) <- case mode' of
-    TitleMode -> guiProcess guiRes mous -- ### 2D ###
+  (newMode, extflg,pos) <- case mode' of
+    TitleMode -> do
+      modifyIORef rotW (\ r -> let nr = (r + (1.0 * dt))
+                               in if nr > 360 then nr - 360 else nr ) 
+      (md,exflg') <- guiProcess guiRes mous -- ### 2D ###
+      return (md,exflg',Nothing)
     PlayMode -> do
       u' <- readIORef usrStat
-      (md,exflg,newStat) <- playProcess glfwHdl u' syskey dt
+      (md,exflg,newStat) <- playProcess glfwHdl wld u' syskey dt
       writeIORef usrStat newStat
-      return (md,exflg)
+      pos <- calcCursorPos wld sufList u'
+      mouseOpe wld newStat mous pos
+        (updateDisplist wldRes wld dsps sufList)
+      return (md,exflg,pos)
   when (mode' /= newMode) $ writeIORef (runMode glfwHdl) newMode
-  return extflg
+  return (extflg,pos)
 
-playProcess :: GLFWHandle -> UserStatus -> (Bool,Bool)
-            -> Double -> IO (RunMode,Bool,UserStatus)
-playProcess glfwHdl usrStat (esc,_ {-tool-}) dt = do
+updateDisplist :: WorldResource -> WorldData -> WorldDispList
+               -> SurfaceList -> WorldIndex -> IO ()
+updateDisplist wldRes wld dsps sufList pos = do 
+  clst <- calcReGenArea wld pos 
+  dsps' <- readIORef dsps
+  mapM_ (\ (cNo',bNo') -> do
+    case lookup cNo' dsps' of
+      Just d -> do
+        let (_,d') = d !! bNo'
+        sfs <- getSurface wld (cNo',bNo')
+        setSurfaceList sufList (cNo',bNo') sfs  
+        genSufDispList wldRes sfs (Just d')
+        return ()
+      Nothing -> return ()
+    ) clst
+
+type BlockNo = Int
+calcReGenArea :: WorldData -> WorldIndex -> IO [(ChunkNo,BlockNo)]
+calcReGenArea wld (x,y,z) = do
+  chl <- readIORef chlist
+  case getChunk chl (x,y,z) of
+    Nothing -> return [] 
+    Just (cNo,_) -> return $
+         map (\ bno' -> (cNo,bno')) blknos 
+      ++ map (\ cno' -> (cno',bNo)) (cNoX chl)
+      ++ map (\ cno' -> (cno',bNo)) (cNoZ chl)
+  where
+    chlist = chunkList wld
+    bNo = div y 16
+    blknos | (mod y 16) == 0 && bNo > 0 = [bNo,bNo - 1]
+           | (mod y 16) == 15 && bNo < 7 = [bNo,bNo + 1]
+           | otherwise = [bNo]
+    cNoX chl | (mod x 16) == 0 = case getChunk chl (x - 1,y,z) of
+                                   Nothing -> [] 
+                                   Just (cNo,_) -> [cNo]
+             | (mod x 16) == 15 = case getChunk chl (x + 1,y,z) of
+                                   Nothing -> [] 
+                                   Just (cNo,_) -> [cNo]
+             | otherwise = []
+    cNoZ chl | (mod z 16) == 0 = case getChunk chl (x,y,z - 1) of
+                                   Nothing -> [] 
+                                   Just (cNo,_) -> [cNo]
+             | (mod z 16) == 15 = case getChunk chl (x,y,z + 1) of
+                                   Nothing -> [] 
+                                   Just (cNo,_) -> [cNo]
+             | otherwise = []
+
+setSurfaceList :: SurfaceList -> (Int,Int) -> SurfacePos -> IO ()
+setSurfaceList sufList (cNo,bNo) sfs = do
+  s <- readIORef sufList
+  let b = fromJust $ lookup bNo $ fromJust $ lookup cNo s 
+  writeIORef b sfs 
+  return ()
+
+mouseOpe :: WorldData -> UserStatus -> (Double,Double,Bool,Bool,Bool)
+         -> Maybe (WorldIndex,Surface) -> (WorldIndex -> IO ())
+         -> IO ()
+mouseOpe _ _ _ Nothing _ = return ()
+mouseOpe _ _ (_,_,False,False,_) _ _ = return ()
+mouseOpe wld ustat (_,_,lb,rb,_) (Just ((cx,cy,cz),fpos)) callback
+  | rb == True = do
+    setBlockID wld setPos idx 
+    callback setPos
+  | lb == True = do
+    setBlockID wld (cx,cy,cz) 0 
+    callback (cx,cy,cz)
+  | otherwise = return ()
+  where
+    idx = palletIndex ustat 
+    setPos = case fpos of
+      STop    -> (cx,cy + 1,cz)
+      SBottom -> (cx,cy - 1,cz)
+      SRight  -> (cx + 1,cy,cz)
+      SLeft   -> (cx - 1,cy,cz)
+      SFront  -> (cx,cy,cz - 1)
+      SBack   -> (cx,cy,cz + 1)
+
+playProcess :: GLFWHandle -> WorldData -> UserStatus
+            -> (Bool,Bool) -> Double
+            -> IO (RunMode,Bool,UserStatus)
+playProcess glfwHdl wld usrStat (esc,_ {-tool-}) dt = do
   vm <- getCursorMotion glfwHdl
   sm <- getScrollMotion glfwHdl 
   mm <- getMoveKeyOpe glfwHdl
-  nst <- calcPlayerMotion usrStat vm mm dt
+  nst <- calcPlayerMotion wld usrStat vm mm sm dt
   return $ if esc
              then (TitleMode, False, nst)
              else (PlayMode, False, nst)
 
-calcPlayerMotion :: UserStatus -> (Int,Int) -> (Int,Int,Int,Int,Int)
+calcPlayerMotion :: WorldData -> UserStatus
+                 -> (Int,Int) -> (Int,Int,Int,Int,Int) -> (Int,Int)
                  -> Double
                  -> IO UserStatus
-calcPlayerMotion usrStat (sx,sy) (f,b,l,r,jmp) dt = do
+calcPlayerMotion wld usrStat (mx,my) (f,b,l,r,jmp) (_,sy) dt = do
+  w <- getBlockID wld (round' ox,(round' oy) - 1,round' oz) 
+         >>= (\ bid -> return $ if bid == voidBlockID
+            then  wo - (9.8 * dt)
+            else  if jmp == 2  then 8.0 else if wo > 0 then wo else 0.0)
   let (nrx,nry,nrz) = playerView dt ( realToFrac orx
                                     , realToFrac ory
                                     , realToFrac orz)
-                      ((fromIntegral sy)*0.5, (fromIntegral sx)*0.5, 0)
-      (ndx,ndy,ndz) = playerMotion dt nry ( fromIntegral (f - b)*4
-                                          , fromIntegral (r - l)*4
-                                          , 0)                
-  {-
-  let w = if jmp == 2
-            then 5.0
-            else maximum [ wo - (9.8 * dt), -9.8 ]
-  writeIORef wHold w
-  -}
+                        ((fromIntegral my)*0.5, (fromIntegral mx)*0.5, 0)
+      (dx,dy,dz) = playerMotion dt nry ( fromIntegral (b - f)*4
+                                       , fromIntegral (r - l)*4
+                                       , w)                
+     
+      idx = (palletIndex usrStat) - sy 
+  (nx,ny,nz) <- chkMove w (ox,oy,oz) (realToFrac dx
+                                     ,realToFrac dy
+                                     ,realToFrac dz)
   return UserStatus
-    { userPos = ( ox + realToFrac ndx
-                , oy + realToFrac ndy
-                , oz + realToFrac ndz)
+    { userPos = ( nx
+                , ny 
+                , nz)
     , userRot = (realToFrac nrx, realToFrac nry, realToFrac nrz) 
-    , palletIndex = palletIndex usrStat
+    , palletIndex = if idx < 0 then 0 else if idx > 8 then 8 else idx
+    , userVel = (0.0,w,0.0)
     }
 
   where
     (ox,oy,oz) = userPos usrStat
     (orx,ory,orz) = userRot usrStat 
+    (_,wo,_) = userVel usrStat
+    chkMove w (ox',oy',oz') (dx,dy,dz)
+      | dl < 1 = do
+          let ny = if w == 0 then fromIntegral $ round' oy'
+                             else oy' + realToFrac dy
+              nx = ox' + realToFrac dx  
+              nz = oz' + realToFrac dz
+          return (nx,ny,nz)
+      | otherwise = do
+          let (dx',dy',dz') = (dx / dl, dy / dl, dz / dl)
+              (tx,ty,tz) = if w == 0
+                 then (ox' + dx', oy', oz' + dz')
+                 else (ox' + dx', oy' + dy', oz' + dz')
+          bid <- getBlockID wld (round' tx, round' ty, round' tz)
+          w' <- getBlockID wld (round' tx, round' ty - 1, round' tz)
+                 >>= (\ b' -> return $ if voidBlockID == b then w else 0)
+          if bid == voidBlockID 
+            then chkMove w' (tx,ty,tz) (dx - dx', dy - dy', dz - dz')
+            else chkMove w' (tx,ty,tz) (0.0, dy - dy' , 0.0)
+      where 
+        dl = sqrt (dx * dx + dz * dz + dy * dy)
+
 
 type Pos' = (Double,Double,Double)
+type Rot' = (Double,Double,Double)
 type Vel' = Pos'
 playerView :: Double -> Pos' -> Pos' -> Pos' 
 playerView dt (frxo,fryo,frzo) (frx,fry,frz) = (rx, ry, rz) 
@@ -338,8 +310,8 @@ playerMotion dt r0 (v,u,w) = (dx,dy,dz)
     dy = dt * w                 -- up/down
     dz = dt * nextz (v,u,r0)    -- head
     phy r = (pi * r) / 180.0
-    nextz (df,ds,r) = (df * cos (phy r)) + (ds * sin (phy r))
-    nextx (df,ds,r) = (ds * cos (phy r)) - (df * sin (phy r))
+    nextz (df,ds,r) = (df * cos (phy r)) - (ds * sin (phy r))
+    nextx (df,ds,r) = (ds * cos (phy r)) + (df * sin (phy r))
 
 
 guiProcess :: GuiResource -> (Double,Double,Bool,Bool,Bool)
@@ -359,10 +331,11 @@ guiProcess res (x,y,True,_,_) = return (chkPlaybtn,chkExitbtn)
       then PlayMode else TitleMode 
     chkExitbtn = chkRectIn (exchg extbtnPosOrgn) (exchg extbtnSize)
 
-drawView :: ( GLFWHandle, GuiResource, WorldResource
-            , UserStatus, WorldDispList)
+drawView :: ( GLFWHandle, GuiResource, WorldResource)
+         -> IORef Double -> IORef UserStatus -> WorldDispList
+         -> Maybe (WorldIndex,Surface)
          -> IO ()
-drawView (glfwHdl, guiRes, wldRes, usrStat, worldDispList) = do
+drawView (glfwHdl, guiRes, wldRes) dw usrStat worldDispList pos = do
   clear [ColorBuffer,DepthBuffer]
   mode' <- readIORef $ runMode glfwHdl
   winSize <- GLFW.getFramebufferSize win
@@ -370,10 +343,11 @@ drawView (glfwHdl, guiRes, wldRes, usrStat, worldDispList) = do
   case mode' of
     TitleMode -> do -- ### 2D ###
       GLFW.setCursorInputMode win GLFW.CursorInputMode'Normal
-      drawTitle winSize guiRes
+      readIORef dw >>= (drawTitle winSize guiRes) . realToFrac
     PlayMode -> do
+      u' <- readIORef usrStat
       GLFW.setCursorInputMode win GLFW.CursorInputMode'Hidden
-      drawPlay winSize guiRes wldRes usrStat worldDispList
+      drawPlay winSize guiRes wldRes u' worldDispList pos
   flush
   GLFW.swapBuffers win
   where
@@ -383,6 +357,7 @@ data UserStatus = UserStatus
   { userPos :: (GLfloat,GLfloat,GLfloat)
   , userRot :: (GLfloat,GLfloat,GLfloat) 
   , palletIndex :: Int
+  , userVel :: (Double,Double,Double)
   }
   deriving (Eq,Show)
 
@@ -400,31 +375,6 @@ loadWorldResouce home = do
   where
     blkPng = home ++ "/.Hinecraft/terrain.png"
 
-data BlockInfo = BlockInfo
-  { textureIndex :: [Int]
-  , alpha :: Bool 
-  , enter :: Bool
-  }
-
-getBlockInfo :: BlockID -> BlockInfo
-getBlockInfo bid = fromJust $ lookup bid db
-  where
-    db = [ (voidBlockID, BlockInfo
-             { textureIndex = []
-             , alpha = True
-             , enter = True
-             })
-         , (stoneBlockID, BlockInfo
-             { textureIndex = []
-             , alpha = False
-             , enter = False
-             })
-         , (dirtBlockID, BlockInfo
-             { textureIndex = []
-             , alpha = False
-             , enter = False
-             })
-         ]
 
 test = do
   wld <- genWorldData 
@@ -438,7 +388,7 @@ test = do
 
 
 data Surface = STop | SBottom | SRight | SLeft | SFront | SBack 
-  deriving (Show,Eq)
+  deriving (Ord,Show,Eq)
 
 type WorldIndex = (Int,Int,Int)
 
@@ -545,7 +495,8 @@ getChunk :: [(ChunkNo,Chunk)] -> WorldIndex -> Maybe (ChunkNo,Chunk)
 getChunk [] _ = Nothing 
 getChunk (c:cs) (x,y,z) | (ox <= x) && (x < ox + bsize) &&
                           (oz <= z) && (z < oz + bsize) &&
-                          (ymin <= y) && (y < ymax ) = Just c  
+                          (ymin <= y) && (y < ymax )
+                           = Just c  
                         | otherwise = getChunk cs (x,y,z)
   where
     (ox,oz) = origin $ snd c
@@ -564,62 +515,83 @@ getSuface suf (chNo,bNo) = do
       Nothing -> return Nothing
     Nothing -> return Nothing
 
-genWorldDispList :: SurfaceList -> IO WorldDispList
-genWorldDispList suf = do
+genWorldDispList :: WorldResource -> SurfaceList -> IO WorldDispList
+genWorldDispList wldRes suf = do
   suf' <- readIORef suf
   mapM (\ (chNo,blks) -> do
     sb <- mapM (\ (bNo,sfs) -> do
       sfs' <- readIORef sfs
-      d <- genSufDispList sfs'
+      d <- genSufDispList wldRes sfs' Nothing
       return (bNo,d)) blks
     return (chNo,sb)) suf'
     >>= newIORef
 
-genSufDispList :: SurfacePos -> IO DisplayList
-genSufDispList bsf = do
-  defineNewList Compile $ do
-    --glBindTexture gl_TEXTURE_2D (tex !! (\ (_,m,_) -> m) (head elmTri))
-    texture Texture2D $= Disabled
-    renderPrimitive Quads $ mapM_ genFace bsf 
+d2fv3 :: (Double,Double,Double) -> (GLfloat,GLfloat,GLfloat)
+d2fv3 (a,b,c) = ( realToFrac a, realToFrac b, realToFrac c)
+
+genSufDispList :: WorldResource -> SurfacePos -> Maybe DisplayList
+               -> IO DisplayList
+genSufDispList wldRes bsf dsp = do
+  case dsp of
+    Nothing -> defineNewList Compile $ gen'
+    Just d -> do
+                defineList d Compile $ gen'
+                return d
   where
-    genFace ((x,y,z),bid,fs) = mapM_ (\ f -> case f of
-         STop -> topFace
-         SBottom -> btmFace
-         SFront -> frtFace
-         SBack -> bakFace
-         SRight -> rhtFace
-         SLeft -> lftFace) fs
+    gen' = do
+      glBindTexture gl_TEXTURE_2D tex
+      texture Texture2D $= Enabled
+      renderPrimitive Quads $ mapM_ genFace bsf 
+    tex = blockTexture wldRes
+    genFace ((x,y,z),bid,fs) = do
+      let texIdx = textureIndex $ getBlockInfo bid
+           -- Top | Bottom | Right | Left | Front | Back
+          [tt',tb',tr',tl',tf',tba'] = if null texIdx 
+                                  then take 6 $ repeat (0,0)
+                                  else texIdx
+      mapM_ (\ f -> case f of
+         STop -> topFace $ calcUV tt'
+         SBottom -> btmFace $ calcUV tb'
+         SFront -> frtFace $ calcUV tr'
+         SBack -> bakFace $ calcUV tl'
+         SRight -> rhtFace $ calcUV tf'
+         SLeft -> lftFace $ calcUV tba') fs
       where
-        btmFace = genSuf (0,-1,0) $ zip uvLst [p2,p3,p0,p1] -- Bottom
-        bakFace = genSuf (0,0,1) $ zip uvLst [p4,p5,p3,p2] -- Back
-        frtFace = genSuf (0,0,-1) $ zip uvLst [p6,p7,p1,p0] -- Front
-        rhtFace = genSuf (1,0,0) $ zip uvLst [p4,p2,p1,p7] -- Right
-        lftFace = genSuf (-1,0,0) $ zip uvLst [p3,p5,p6,p0] -- Left
-        topFace = genSuf (0,-1,0) $ zip uvLst [p5,p4,p7,p6] -- Top
+        setColor i = replicate 4 (d2fv3 $ bClr) 
+          where       
+            bClr = (bcolor $ getBlockInfo bid) !! i
+        topFace uvLst = genSuf (0,-1,0)
+          $ zip3 uvLst (setColor 0) [p5,p4,p7,p6]
+        btmFace uvLst = genSuf (0,-1,0)
+          $ zip3 uvLst (setColor 1) [p2,p3,p0,p1] 
+        rhtFace uvLst = genSuf (1,0,0)
+          $ zip3 uvLst (setColor 2) [p7,p4,p2,p1]
+        lftFace uvLst = genSuf (-1,0,0)
+          $ zip3 uvLst (setColor 3) [p5,p6,p0,p3]
+        frtFace uvLst = genSuf (0,0,-1)
+          $ zip3 uvLst (setColor 4) [p6,p7,p1,p0]
+        bakFace uvLst = genSuf (0,0,1)
+          $ zip3 uvLst (setColor 5) [p4,p5,p3,p2]
         genSuf :: (GLfloat,GLfloat,GLfloat)
-               -> [((GLfloat,GLfloat),(GLfloat,GLfloat,GLfloat))]
+               -> [((GLfloat,GLfloat),(GLfloat,GLfloat,GLfloat)
+                  ,(GLfloat,GLfloat,GLfloat))]
                -> IO ()
         genSuf (nx,ny,nz) ndlst = do
-          --normal $ Normal3 nx ny nz
-          mapM_ (\ ((u,v),(x', y', z')) -> do
-                   -- (glTexCoord2f u v)
+          normal $ Normal3 nx ny nz
+          mapM_ (\ ((u,v),(r,g,b),(x', y', z')) -> do
+                   color $ Color3 r g b
+                   glTexCoord2f u v
                    vertex (Vertex3 (x' + fromIntegral x)
                                    (y' + fromIntegral y)
                                    (z' + fromIntegral z))) ndlst
-        uvLst = [uv0,uv1,uv2,uv3]
         (p0,p1,p2,p3,p4,p5,p6,p7) = blockNodeVertex
-        uv0 = (0.0,0.0)
-        uv1 = (1.0,0.0)
-        uv2 = (1.0,1.0)
-        uv3 = (0.0,1.0)
-  
-{-
-        --putStrLn $ unwords ["box (x,y,z)",show (x,y,z) ]
-      where
-
--- [(WorldIndex,BlockID,[Surface])]
--}
-
+        calcUV (i',j') = [ ( i * (1/16), j * (1/16)) 
+                         , ( (i + 1) * (1/16), j * (1/16))
+                         , ( (i + 1) * (1/16), (j + 1) * (1/16))
+                         , ( i * (1/16), (j + 1) * (1/16))
+                         ]
+          where i = fromIntegral i' ; j = fromIntegral j'
+ 
 
 genSurfaceList :: WorldData -> IO SurfaceList
 genSurfaceList wld = readIORef chl
@@ -653,14 +625,6 @@ data Chunk = Chunk
   , local :: [(Int,(IOUArray Int Int))]
   }
 
-type BlockID = Int
-voidBlockID :: BlockID
-voidBlockID = 0 
-stoneBlockID :: BlockID
-stoneBlockID = 1 
-dirtBlockID :: BlockID
-dirtBlockID = 2 
-
 genChunk :: (Int,Int) -> IO Chunk
 genChunk org = do
   arrt <- replicateM 4
@@ -668,6 +632,8 @@ genChunk org = do
 
   arrs <- newArray (0,blength) voidBlockID :: IO (IOUArray Int Int)
   mapM_ (\ i -> writeArray arrs i dirtBlockID) [0 .. 16 * 16 * 2 - 1]
+  mapM_ (\ i -> writeArray arrs i grassBlockID)
+           [ 16 * 16 * 2 .. 16 * 16 * 3 - 1]
 
   arrb <- replicateM 3
     (newArray (0,blength) stoneBlockID) :: IO [IOUArray Int Int]
@@ -680,8 +646,10 @@ genChunk org = do
     blength = (blockSize chunkParam) ^ (3::Int) -1
 
 drawPlay :: (Int,Int) -> GuiResource -> WorldResource
-         -> UserStatus -> WorldDispList -> IO ()
-drawPlay (w,h) guiRes wldRes usrStat worldDispList = do
+         -> UserStatus -> WorldDispList
+         -> Maybe (WorldIndex,Surface)
+         -> IO ()
+drawPlay (w,h) guiRes wldRes usrStat worldDispList pos = do
   -- World
   preservingMatrix $ do
     setPerspective V3DMode w h
@@ -695,7 +663,12 @@ drawPlay (w,h) guiRes wldRes usrStat worldDispList = do
       drawBackGroundBox' 
 
     -- カメラ位置
-    translate $ Vector3 (-ux) (-uy) (-uz) 
+    translate $ Vector3 (-ux) (-uy - 1.5) (-uz) 
+
+    -- Cursol 選択された面を強調
+    --Dbg.traceIO $ show (pos, uy)
+    renderCurFace  pos
+
     color $ Color3 0.0 1.0 (0.0::GLfloat)
     readIORef worldDispList
       >>= mapM_ (\ (_,b) -> do
@@ -711,9 +684,19 @@ drawPlay (w,h) guiRes wldRes usrStat worldDispList = do
     -- Pallet
     drawBackPlane (394,2) (65*9, 69) (Just widTex')
                   (0,0) (183/256,22/256) (1.0,1.0,1.0,1.0)
-    let curXpos = 394 + (fromIntegral pIndex) * 64
+    let curXpos = 392 + (fromIntegral pIndex) * 64
     drawBackPlane (curXpos,2) (64, 64) (Just widTex')
                   (0,24/256) (22/256,22/256) (1.0,1.0,1.0,1.0)
+
+    preservingMatrix $ do
+      texture Texture2D $= Disabled
+      color $ Color3 0.0 0.0 (0.0::GLfloat)
+      lineWidth $= 2.0
+      renderPrimitive Lines $ do
+        vertex $ Vertex2 ((1366.0/2.0) - 7.0) (768.0/2.0 ::GLfloat)
+        vertex $ Vertex2 ((1366.0/2.0) + 7.0) (768.0/2.0 ::GLfloat)
+        vertex $ Vertex2 (1366.0/2.0) (768.0/2.0 - 7.0 ::GLfloat)
+        vertex $ Vertex2 (1366.0/2.0) (768.0/2.0 + 7.0 ::GLfloat)
 
     glPopAttrib 
     depthMask $= Enabled
@@ -743,13 +726,122 @@ drawPlay (w,h) guiRes wldRes usrStat worldDispList = do
       mapM_ (\ (x', y', z') ->
         vertex (Vertex3 x' y' z')) ndlst
 
+calcCursorPos :: WorldData -> SurfaceList -> UserStatus
+              -> IO (Maybe (WorldIndex,Surface))
+calcCursorPos wld sufList usr = do
+  chl <- readIORef chlist
+  f' <- readIORef sufList
+  case getChunk chl ( round' ux , round' uy , round' uz) of
+    Just (cNo,c) -> do
+      let (bx,bz) = origin c
+          cblkNo = div (round' uy) 16
+          bplst = if cblkNo == 0
+               then [cblkNo, cblkNo + 1]
+               else if cblkNo > 6
+                      then [cblkNo - 1, cblkNo]
+                      else [cblkNo - 1, cblkNo, cblkNo + 1]
+          clst = map (fst . fromJust) $ filter isJust $ map (getChunk chl)
+               $ [(bx + x, 0, bz + z) | x <-[-16,0,16], z <- [-16,0,16]]
+          slst = map (\ c' -> fromJust $ lookup c' f') clst
 
-drawTitle :: (Int,Int) -> GuiResource -> IO ()
-drawTitle (w,h) res = do
+      f <- mapM (\ (_,b) -> readIORef b)
+            $ concat $ map (\ s -> map (s !!) bplst) slst 
+      let res = filter (\ (_,r) -> isJust r)
+           $ map (tomasChk pos rot) $ map (\ (a,_,b) -> (a,b)) $ concat f
+          format =(\ (p,(_,s)) -> (p,s))
+                     $ minimumBy (comparing (\ (_,(t,_)) -> t))  $ 
+                          map (\ (p,a) -> (p,fromJust a)) res
+      --Dbg.traceIO (show ({-(ux,uy,uz),cblkNo,cNo,clst,bplst-}res)) 
+      return $ if null res
+             then Nothing
+             else Just format
+    Nothing -> return Nothing
+  where
+    chlist = chunkList wld
+    (ux,uy,uz) = userPos usr
+    rot = (\ (a,b,c) -> (realToFrac a, realToFrac b, realToFrac c)) $ userRot usr
+    pos = (\ (a,b,c) -> (realToFrac a, realToFrac b + 1.5, realToFrac c)) $ userPos usr
+
+calcPointer :: (Num a,Floating a) => (a,a,a) -> (a,a,a) -> a
+            -> (a,a,a)
+calcPointer (x,y,z) (rx,ry,_) r = ( x + r * ( -sin (d2r ry)
+                                             * cos (d2r rx))
+                                   , y + r * sin (d2r rx)
+                                   , z + r * cos (d2r (ry + 180)) * cos (d2r rx))
+  where
+    d2r d = pi*d/180.0
+
+
+
+tomasChk :: Pos' -> Rot' -> (WorldIndex,[Surface])
+         -> (WorldIndex,Maybe (Double,Surface)) 
+tomasChk pos@(px,py,pz) rot (ep,fs) = (ep, choise faceList)
+  where
+    dir =(\ (x,y,z) -> (x - px, y - py, z - pz)) $ calcPointer pos rot 1
+    choise lst = {-Dbg.trace (show lst) $-}
+               if null lst 
+                 then Nothing
+                 else Just $ (\ (Just a,s) -> (a,s)) (minimum $ map swap lst)
+    faceList = filter (\ (_,v) -> isJust v) $ zip fs $
+                    map (chk . genNodeList (i2d ep)) fs
+    chk ftri = {- Dbg.trace (show l) $ -} if null l then Nothing else minimum l
+      where l = {- Dbg.trace (unwords [show pos, show ftri]) $ -}
+                filter isJust $ map (\ (n1,n2,n3) -> tomasMollerRaw pos dir n1 n2 n3) ftri
+    genNodeList pos' face = genTri $ map (pos' .+. )
+      $ map (\ (a,b,c) -> (realToFrac a, realToFrac b, realToFrac c)) $ case face of
+      STop    -> [p5,p4,p7,p6] -- Top
+      SBottom -> [p2,p3,p0,p1] -- Bottom
+      SFront  -> [p6,p7,p1,p0] -- Front
+      SBack   -> [p4,p5,p3,p2] -- Back
+      SRight  -> [p4,p2,p1,p7] -- Right
+      SLeft   -> [p3,p5,p6,p0] -- Left 
+    genTri [a1,a2,a3,a4] = [(a1,a2,a3),(a3,a4,a1)]
+    (p0,p1,p2,p3,p4,p5,p6,p7) = blockNodeVertex
+    i2d (a,b,c) = (fromIntegral a, fromIntegral b, fromIntegral c)
+
+
+-- | 最小単位のブロックを囲う枠を描画する
+-- Private
+--
+gen3dCursol :: IO () 
+gen3dCursol = renderPrimitive LineLoop
+  $ drawCurLine $ map ajust [p5,p4,p7,p6] -- BackFace
+  where
+    drawCurLine = mapM_ (\ (x, y, z) -> vertex (Vertex3 x y z)) 
+    extnd v = if v > 0 then v + 0.05 else  v - 0.05
+    (_,_,_,_,p4,p5,p6,p7) = blockNodeVertex
+    ajust (a,b,c) = ( extnd a, extnd b, extnd c)
+
+renderCurFace :: Maybe (WorldIndex,Surface) -> IO ()
+renderCurFace objPos = 
+  case objPos of 
+    Just ((px,py,pz),s) -> preservingMatrix $ do -- 選択された面を強調
+      texture Texture2D $= Disabled
+      lineWidth         $= 1.2
+      color $ Color3 0.1 0.1 (0.1::GLfloat)
+      translate $ Vector3 (fromIntegral px)
+                          (fromIntegral py)
+                          (fromIntegral pz :: GLfloat)
+      rotCursol s -- SBack -- SLeft -- SRight -- SFront -- SBottom -- STop
+      gen3dCursol
+    Nothing -> return ()
+  where
+  rotCursol face = case face of
+    STop    -> return ()
+    SBottom -> rotate 180   $ Vector3 1.0 0.0 (0::GLfloat)
+    SFront  -> rotate (-90) $ Vector3 1.0 0.0 (0::GLfloat)
+    SBack   -> rotate 90    $ Vector3 1.0 0.0 (0::GLfloat)
+    SRight  -> rotate (-90) $ Vector3 0.0 0.0 (1::GLfloat)
+    SLeft   -> rotate 90    $ Vector3 0.0 0.0 (1::GLfloat)
+
+
+drawTitle :: (Int,Int) -> GuiResource -> GLfloat -> IO ()
+drawTitle (w,h) res rw = do
   preservingMatrix $ do
     setPerspective V3DTitleMode w h
     scale 10.0 10.0 (10.0::GLfloat)
-    rotate 10 $ Vector3 1.0 0 (0::GLfloat)
+    rotate 10 $ Vector3 1.0 0.0 (0::GLfloat)
+    rotate rw $ Vector3 0.0 1.0 (0::GLfloat)
     drawBackGroundBox bkgTex
 
   preservingMatrix $ do
@@ -781,7 +873,7 @@ drawTitle (w,h) res = do
     drawBackPlane (xExtbtnPos + wExtbtnSiz / 2, yExtbtnPos) (wExtbtnSiz / 2, hExtbtnSiz)
                   (Just widTex)
                   (0.58,0.258) (0.20,0.078) (1.0,1.0,1.0,1.0)
-    putTextLine font' (Just (1,1,1)) (Just 30) (820,768 - 614 + 20) "Exit" 
+    putTextLine font' (Just (1,1,1)) (Just 30) (780,768 - 614 + 20) "Quit game" 
 
     glPopAttrib 
     depthMask $= Enabled
@@ -879,17 +971,5 @@ drawBackPlane (xo,yo) (w,h) tex' (u0,v0) (tw,th) (r,g,b,a) =
           vertex $ Vertex2 (xo + w) (yo::GLfloat)
           vertex $ Vertex2 (xo + w) (yo + h)
           vertex $ Vertex2 xo  (yo + h)
-
-
-{-
-  cur <- gen3dCursol 
-  Just ot <- GLFW.getTime
-  ot' <- newIORef ot
-  blkList' <- newIORef []
-  sysIcontex <- loadTextures sysIconTextureFile 
-  uiState <- initUIState
-
--}
-
 
 
