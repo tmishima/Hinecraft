@@ -1,4 +1,7 @@
 module View where
+-- Font
+import Graphics.Rendering.FTGL as Ft
+
 -- OpenGL
 import Graphics.Rendering.OpenGL
 import Graphics.Rendering.OpenGL.Raw
@@ -10,10 +13,10 @@ import qualified Data.Vector.Storable as Vct
 import qualified Graphics.UI.GLFW as GLFW
 import Data.IORef
 import Data.Maybe ( fromJust )
-import Control.Monad ( {-unless,void,when,-} replicateM )
 
 -- Common
 import Debug.Trace as Dbg
+import Control.Monad ( {-unless,void,when,-} void, replicateM )
 
 -- Define
 type ProgCtrlStat = IORef Bool 
@@ -30,6 +33,18 @@ data GLFWHandle = GLFWHandle
   , oldTime :: IORef Double
   }
 
+data GuiResource = GuiResource
+  { backgroundBoxTexture :: [GLuint]
+  , backgroundTitleTexture :: GLuint
+  , widgetsTexture :: GLuint
+  , widgetPlayBtnPos :: (GLfloat,GLfloat)
+  , widgetPlayBtnSiz :: (GLfloat,GLfloat)
+  , widgetExitBtnPos :: (GLfloat,GLfloat)
+  , widgetExitBtnSiz :: (GLfloat,GLfloat)
+  , font :: Ft.Font
+  }
+
+type VertexPosition = (GLfloat,GLfloat,GLfloat)
 
 -- ##################### OpenGL ###########################
 data ViewMode = V2DMode | V3DTitleMode | V3DMode
@@ -123,6 +138,80 @@ loadTextures path = do
         CdP.ImageYCbCr8 i -> showInfo "YCbCr8" i >> return Nothing
         CdP.ImageCMYK8  i -> showInfo "CMYK8"  i >> return Nothing
         CdP.ImageCMYK16 i -> showInfo "CMYK16" i >> return Nothing
+
+drawBackPlane :: (GLfloat,GLfloat) -> (GLfloat,GLfloat)
+              -> Maybe GLuint -> (GLfloat,GLfloat) -> (GLfloat,GLfloat)
+              -> (GLfloat,GLfloat,GLfloat,GLfloat) -> IO ()
+drawBackPlane (xo,yo) (w,h) tex' (u0,v0) (tw,th) (r,g,b,a) =
+  preservingMatrix $ do
+    color $ Color4 r g b a 
+    case tex' of
+      Just t -> do
+        texture Texture2D $= Enabled 
+        glBindTexture gl_TEXTURE_2D t
+        renderPrimitive Quads $ do
+          glTexCoord2f u0 (v0 + th)
+          vertex $ Vertex2 xo  (yo::GLfloat)
+          glTexCoord2f (u0 + tw) (v0 + th)
+          vertex $ Vertex2 (xo + w) (yo::GLfloat)
+          glTexCoord2f (u0 + tw) v0
+          vertex $ Vertex2 (xo + w) (yo + h)
+          glTexCoord2f u0 v0
+          vertex $ Vertex2 xo  (yo + h)
+      Nothing -> do
+        texture Texture2D $= Disabled
+        renderPrimitive Quads $ do
+          vertex $ Vertex2 xo  (yo::GLfloat)
+          vertex $ Vertex2 (xo + w) (yo::GLfloat)
+          vertex $ Vertex2 (xo + w) (yo + h)
+          vertex $ Vertex2 xo  (yo + h)
+
+loadGuiResource :: FilePath -> IO GuiResource
+loadGuiResource home = do
+  tex' <- mapM (\ fn -> 
+    Dbg.trace ("loadBackgroundPic : " ++ fn)
+     $ loadTextures fn )
+    [ bkgndPng0 , bkgndPng1 , bkgndPng2
+    , bkgndPng3 , bkgndPng4 , bkgndPng5
+    ]
+  ttex' <- loadTextures bkgTtlPng
+  wtex' <- loadTextures widPng
+  font' <- Ft.createBitmapFont fontPath
+  return GuiResource
+    { backgroundBoxTexture = tex'
+    , backgroundTitleTexture = ttex'
+    , widgetsTexture = wtex'
+    , font = font'
+    , widgetPlayBtnPos = ( 365,768 - 410)
+    , widgetPlayBtnSiz = (640, 62.5)
+    , widgetExitBtnPos = (690, 768 - 614)
+    , widgetExitBtnSiz = (155 * 2, 62.5)
+    }
+  where
+    bkgndPng0 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_0.png"
+    bkgndPng1 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_1.png"
+    bkgndPng2 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_2.png"
+    bkgndPng3 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_3.png"
+    bkgndPng4 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_4.png"
+    bkgndPng5 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_5.png"
+    bkgTtlPng = home ++ "/.Hinecraft/textures/gui/title/hinecraft.png"
+    widPng    = home ++ "/.Hinecraft/textures/gui/widgets.png"
+    fontPath = "/usr/share/fonts/truetype/takao-mincho/TakaoPMincho.ttf" -- linux
+
+-- ##################### Font(Text) #######################
+
+putTextLine :: Ft.Font -> Maybe (GLfloat,GLfloat,GLfloat)
+            -> Maybe Int -> (GLfloat,GLfloat) -> String -> IO ()
+putTextLine ft cl sz (x,y) str = preservingMatrix $ do
+  texture Texture2D $= Disabled
+  case cl of
+    Just (r,g,b) -> color $ Color4 r g b 1.0
+    _ -> return ()
+  case sz of
+    Just s -> void $ Ft.setFontFaceSize ft s 72 
+    _ -> return ()
+  rasterPos $ Vertex2 x y
+  Ft.renderFont ft str Ft.Front
 
 -- ##################### GLFW #############################
 
