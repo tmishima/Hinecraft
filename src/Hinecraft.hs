@@ -7,7 +7,6 @@ import Control.Exception ( bracket )
 import Control.Monad ( unless,when, {-void,filterM-} )
 import Data.Maybe ( fromJust,isJust ) --,catMaybes )
 import System.Directory ( getHomeDirectory )
---import Data.Array.IO
 import Data.Tuple
 import Data.List
 import Data.Ord
@@ -104,13 +103,6 @@ updateDisplist wldRes wld dsps sufList pos = do
         return ()
       Nothing -> return ()
     ) clst
-
-setSurfaceList :: SurfaceList -> (Int,Int) -> SurfacePos -> IO ()
-setSurfaceList sufList (cNo,bNo) sfs = do
-  s <- readIORef sufList
-  let b = fromJust $ lookup bNo $ fromJust $ lookup cNo s 
-  writeIORef b sfs 
-  return ()
 
 mouseOpe :: WorldData -> UserStatus -> (Double,Double,Bool,Bool,Bool)
          -> Maybe (WorldIndex,Surface) -> (WorldIndex -> IO ())
@@ -359,30 +351,6 @@ genSufDispList wldRes bsf dsp = case dsp of
                          ]
           where i = fromIntegral i' ; j = fromIntegral j'
 
-getVertexList :: Surface -> [(GLfloat,GLfloat,GLfloat)]
-getVertexList f = case f of
-  STop    -> [p5,p4,p7,p6]
-  SBottom -> [p2,p3,p0,p1] 
-  SFront ->  [p6,p7,p1,p0]
-  SBack ->   [p4,p5,p3,p2]
-  SRight ->  [p7,p4,p2,p1]
-  SLeft ->   [p5,p6,p0,p3]
-  where
-    (p0,p1,p2,p3,p4,p5,p6,p7) = blockNodeVertex
-
-genSurfaceList :: WorldData -> IO SurfaceList
-genSurfaceList wld = readIORef chl
-  >>= mapM (\ (cNo,_) -> do
-    spos <- mapM (\ b -> do
-      fs' <- getSurface wld (cNo,b)
-      fs <- newIORef fs'
-      return (b,fs)) [0 .. bkNo]
-    return (cNo,spos)) 
-      >>= newIORef
-  where
-    chl = chunkList wld 
-    bkNo = blockNum chunkParam - 1
-
 drawPlay :: (Int,Int) -> GuiResource -> WorldResource
          -> UserStatus -> WorldDispList
          -> Maybe (WorldIndex,Surface)
@@ -522,19 +490,6 @@ drawIcon wldRes (ox,oy) bID | null texIdx = return ()
 
 -- 
 
-
--- | 最小単位のブロックを囲う枠を描画する
--- Private
---
-gen3dCursol :: IO () 
-gen3dCursol = renderPrimitive LineLoop
-  $ drawCurLine $ map ajust [p5,p4,p7,p6] -- BackFace
-  where
-    drawCurLine = mapM_ (\ (x, y, z) -> vertex (Vertex3 x y z)) 
-    extnd v = if v > 0 then v + 0.05 else  v - 0.05
-    (_,_,_,_,p4,p5,p6,p7) = blockNodeVertex
-    ajust (a,b,c) = ( extnd a, extnd b, extnd c)
-
 renderCurFace :: Maybe (WorldIndex,Surface) -> IO ()
 renderCurFace objPos = 
   case objPos of 
@@ -613,61 +568,6 @@ drawTitle (w,h) res rw = do
     (wExtbtnSiz,hExtbtnSiz) = widgetExitBtnSiz res
     font' = font res
 
-blockNodeVertex :: ( VertexPosition, VertexPosition
-                   , VertexPosition, VertexPosition
-                   , VertexPosition, VertexPosition
-                   , VertexPosition, VertexPosition
-                   )
-blockNodeVertex = 
-  ( ( -0.5, -0.5, -0.5) -- ^ P0
-  , (  0.5, -0.5, -0.5) -- ^ P1
-  , (  0.5, -0.5,  0.5) -- ^ P2
-  , ( -0.5, -0.5,  0.5) -- ^ P3
-  , (  0.5,  0.5,  0.5) -- ^ P4
-  , ( -0.5,  0.5,  0.5) -- ^ P5
-  , ( -0.5,  0.5, -0.5) -- ^ P6
-  , (  0.5,  0.5, -0.5) -- ~ P7
-  )
-
-drawBackGroundBox :: [GLuint] -> IO ()
-drawBackGroundBox [ftex',rtex',batex',ltex',ttex',botex'] = 
-  preservingMatrix $ do
-    texture Texture2D $= Enabled 
-    color $ Color4 0.7 0.7 0.7 (0.8::GLfloat)
-    glBindTexture gl_TEXTURE_2D ftex'
-    renderPrimitive Quads $ 
-      genSuf (0,0,-1) $ zip [uv0,uv1,uv2,uv3] [p6,p7,p1,p0] -- Front
-    glBindTexture gl_TEXTURE_2D rtex'
-    renderPrimitive Quads $ 
-      genSuf (-1,0,0) $ zip [uv1,uv0,uv3,uv2] [p4,p7,p1,p2] -- Right
-    glBindTexture gl_TEXTURE_2D ltex'
-    renderPrimitive Quads $ 
-      genSuf (1,0,0) $ zip [uv1,uv0,uv3,uv2] [p6,p5,p3,p0] -- Left
-    glBindTexture gl_TEXTURE_2D ttex'
-    renderPrimitive Quads $ 
-      genSuf (0,-1,0) $ zip [uv1,uv0,uv3,uv2] [p5,p4,p7,p6] -- Top
-    glBindTexture gl_TEXTURE_2D botex'
-    renderPrimitive Quads $ 
-      genSuf (0,1,0) $ zip [uv1,uv0,uv3,uv2] [p1,p0,p3,p2] -- Bottom
-    glBindTexture gl_TEXTURE_2D batex'
-    renderPrimitive Quads $ 
-      genSuf (0,0,1) $ zip [uv1,uv0,uv3,uv2] [p4,p5,p3,p2] -- Back  
-  where
-    genSuf :: (GLfloat,GLfloat,GLfloat)
-           -> [((GLfloat,GLfloat),(GLfloat,GLfloat,GLfloat))]
-           -> IO ()
-    genSuf (nx,ny,nz) ndlst = do
-      normal $ Normal3 nx ny nz
-      mapM_ (\ ((u,v),(x', y', z')) -> do
-               glTexCoord2f u v
-               vertex (Vertex3 x' y' z')) ndlst
-    --uvLst = [uv0,uv1,uv2,uv3]
-    (p0,p1,p2,p3,p4,p5,p6,p7) = blockNodeVertex
-    uv0 = (0.0,0.0)
-    uv1 = (1.0,0.0)
-    uv2 = (1.0,1.0)
-    uv3 = (0.0,1.0)
-
 tomasChk :: Pos' -> Rot' -> (WorldIndex,[(Surface,Bright)])
          -> (WorldIndex,Maybe (Double,Surface)) 
 tomasChk pos@(px,py,pz) rot (ep,fs) = (ep, choise faceList)
@@ -733,7 +633,6 @@ calcPointer (x,y,z) (rx,ry,_) r =
   , z + r * cos (d2r (ry + 180)) * cos (d2r rx))
   where
     d2r d = pi*d/180.0
-
 
 
 test = do

@@ -1,4 +1,26 @@
-module View where
+module View
+  ( RunMode (..)
+  , GLFWHandle (..)
+  , GuiResource (..)
+  , ViewMode (..)
+  , loadGuiResource
+  , initGL
+  , initGLFW
+  , exitGLFW
+  , getDeltTime
+  , getButtonClick
+  , getSystemKeyOpe
+  , getCursorMotion
+  , getScrollMotion
+  , getMoveKeyOpe
+  , loadTextures
+  , setPerspective
+  , gen3dCursol
+  , drawBackPlane
+  , getVertexList
+  , putTextLine
+  , drawBackGroundBox
+  ) where
 -- Font
 import Graphics.Rendering.FTGL as Ft
 
@@ -17,6 +39,7 @@ import Data.Maybe ( fromJust )
 -- Common
 import Debug.Trace as Dbg
 import Control.Monad ( {-unless,void,when,-} void, replicateM )
+import Types
 
 -- Define
 type ProgCtrlStat = IORef Bool 
@@ -49,6 +72,39 @@ type VertexPosition = (GLfloat,GLfloat,GLfloat)
 -- ##################### OpenGL ###########################
 data ViewMode = V2DMode | V3DTitleMode | V3DMode
   deriving (Eq,Show)
+
+blockNodeVertex :: ( VertexPosition, VertexPosition
+                   , VertexPosition, VertexPosition
+                   , VertexPosition, VertexPosition
+                   , VertexPosition, VertexPosition
+                   )
+blockNodeVertex = 
+  ( ( -0.5, -0.5, -0.5) -- ^ P0
+  , (  0.5, -0.5, -0.5) -- ^ P1
+  , (  0.5, -0.5,  0.5) -- ^ P2
+  , ( -0.5, -0.5,  0.5) -- ^ P3
+  , (  0.5,  0.5,  0.5) -- ^ P4
+  , ( -0.5,  0.5,  0.5) -- ^ P5
+  , ( -0.5,  0.5, -0.5) -- ^ P6
+  , (  0.5,  0.5, -0.5) -- ~ P7
+  )
+
+getVertexList :: Surface -> [(GLfloat,GLfloat,GLfloat)]
+getVertexList f = case f of
+  STop    -> [p7,p6,p5,p4]
+  SBottom -> [p0,p1,p2,p3] 
+  SFront ->  [p6,p7,p1,p0]
+  SBack ->   [p4,p5,p3,p2]
+  SRight ->  [p7,p4,p2,p1]
+  SLeft ->   [p5,p6,p0,p3]
+  where
+    (p0,p1,p2,p3,p4,p5,p6,p7) = blockNodeVertex
+
+genUVList :: [(GLfloat,GLfloat)] 
+genUVList = [uv0,uv1,uv2,uv3]
+  where
+    uv0 = (0.0,0.0) ; uv1 = (1.0,0.0)
+    uv2 = (1.0,1.0) ; uv3 = (0.0,1.0)
 
 setPerspective :: ViewMode -> Int -> Int -> IO ()
 setPerspective viewMode' w h = do
@@ -93,6 +149,18 @@ initGL = do
   --colorMaterial     $= Just (GL.Front, AmbientAndDiffuse)
 
   glHint gl_PERSPECTIVE_CORRECTION_HINT gl_NICEST
+
+-- | 最小単位のブロックを囲う枠を描画する
+-- Private
+--
+gen3dCursol :: IO () 
+gen3dCursol = renderPrimitive LineLoop
+  $ drawCurLine $ map ajust [p5,p4,p7,p6] -- BackFace
+  where
+    drawCurLine = mapM_ (\ (x, y, z) -> vertex (Vertex3 x y z)) 
+    extnd v = if v > 0 then v + 0.05 else  v - 0.05
+    (_,_,_,_,p4,p5,p6,p7) = blockNodeVertex
+    ajust (a,b,c) = ( extnd a, extnd b, extnd c)
 
 loadTextures :: FilePath -> IO GLuint
 loadTextures path = do
@@ -212,6 +280,30 @@ putTextLine ft cl sz (x,y) str = preservingMatrix $ do
     _ -> return ()
   rasterPos $ Vertex2 x y
   Ft.renderFont ft str Ft.Front
+
+drawBackGroundBox :: [GLuint] -> IO ()
+drawBackGroundBox [ftex',rtex',batex',ltex',ttex',botex'] = 
+  preservingMatrix $ do
+    texture Texture2D $= Enabled 
+    color $ Color4 0.7 0.7 0.7 (0.8::GLfloat)
+    mapM_ (\ (tex, nor, f) -> do
+      glBindTexture gl_TEXTURE_2D tex
+      renderPrimitive Quads $ genSuf nor f)
+        [ (ftex',(0,0,-1), SFront)
+        , (rtex',(-1,0,0), SRight)
+        , (ltex',(1,0,0),  SLeft)
+        , (ttex',(0,-1,0), STop)
+        , (botex',(0,1,0), SBottom)
+        , (batex',(0,0,1), SBack)
+        ]
+  where
+    genSuf :: (GLfloat,GLfloat,GLfloat) -> Surface -> IO ()
+    genSuf (nx,ny,nz) f = do
+      normal $ Normal3 nx ny nz
+      mapM_ (\ ((u,v),(x', y', z')) -> do
+               glTexCoord2f u v
+               vertex (Vertex3 x' y' z')) 
+           $ (zip genUVList . getVertexList) f
 
 -- ##################### GLFW #############################
 

@@ -4,6 +4,8 @@ module Data
   , SurfaceList
   , SurfacePos
   , getSurface
+  , genSurfaceList
+  , setSurfaceList
   , getSunLightEffect
   , getCompliePosList
   , ChunkParam (..)
@@ -21,6 +23,7 @@ import Data.IORef
 import Data.Maybe ( fromJust , catMaybes ) --,isJust )
 import Data.Array.IO
 import Control.Monad ( replicateM, {- unless,when, void,filterM-} )
+--import Control.Applicative
 import Types
 import Model
 
@@ -41,6 +44,26 @@ data Chunk = Chunk
   , local :: [(Int,IOUArray Int Int)]
   , sunLight :: IOUArray Int Int
   }
+
+genSurfaceList :: WorldData -> IO SurfaceList
+genSurfaceList wld = readIORef chl
+  >>= mapM (\ (cNo,_) -> do
+    spos <- mapM (\ b -> do
+      fs' <- getSurface wld (cNo,b)
+      fs <- newIORef fs'
+      return (b,fs)) [0 .. bkNo]
+    return (cNo,spos)) 
+      >>= newIORef
+  where
+    chl = chunkList wld 
+    bkNo = blockNum chunkParam - 1
+
+setSurfaceList :: SurfaceList -> (Int,Int) -> SurfacePos -> IO ()
+setSurfaceList sufList (cNo,bNo) sfs = do
+  s <- readIORef sufList
+  let b = fromJust $ lookup bNo $ fromJust $ lookup cNo s 
+  writeIORef b sfs 
+  return ()
 
 getSurface :: WorldData -> (ChunkNo,Int) 
            -> IO SurfacePos 
@@ -88,7 +111,8 @@ genWorldData = do
             c <- genChunk lst
             initSunLight c
             return c)
-          [ (x,z) | x <- [-32,-16 .. 32], z <- [-32,-16 .. 32] ]
+          [ (x,z) | x <- [-16,0 .. 16], z <- [-16,0 .. 16] ]
+        --  [ (x,z) | x <- [-32,-16 .. 32], z <- [-32,-16 .. 32] ]
         --  [ (x,z) | x <- [-64,-48 .. 48], z <- [-64,-48 .. 48] ]
   return WorldData 
     { chunkList =  cl
@@ -97,15 +121,13 @@ genWorldData = do
 setBlockID :: WorldData -> WorldIndex -> BlockID
            -> IO ()
 setBlockID wld (x,y,z) bid = do
-  chl <- readIORef chlist
+  chl <- readIORef (chunkList wld)
   case getChunk chl (x,y,z) of
     Just (_,c) -> do
       setBlockIDfromChunk c (x,y,z) bid
       let (ox,oz) = origin c
       calcSunLight c (x - ox,z - oz)
     Nothing -> return () 
-  where
-    chlist = chunkList wld
 
 setBlockIDfromChunk :: Chunk -> WorldIndex -> BlockID -> IO ()
 setBlockIDfromChunk c (x,y,z) = writeArray arr idx 
