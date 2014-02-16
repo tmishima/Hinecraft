@@ -52,21 +52,25 @@ runHinecraft resouce@(glfwHdl,guiRes,wldRes) = do
   _ <- getDeltTime glfwHdl
   mainLoop rotwld useStat (wld,sfl,dsps) 
   where
+    plt = [StoneBlockID, DirtBlockID, GlassBlockID, WoodBlockID
+          ,GrassBlockID, GlowBlockID, PlankBlockID, StonebrickBlockID
+          ,PlankHalfBlockID]
     mainLoop r' u' (w',f',d') = do
       GLFW.pollEvents
       threadDelay 1000
       dt <- getDeltTime glfwHdl
       exitflg' <- readIORef $ exitFlg glfwHdl
-      (exitkey',pos) <- mainProcess resouce r' w' u' f' d' dt
-      drawView (glfwHdl,guiRes,wldRes) r' u' d' pos
+      (exitkey',pos) <- mainProcess resouce r' w' u' f' d' plt dt
+      drawView (glfwHdl,guiRes,wldRes) r' u' d' pos plt
       unless (exitflg' || exitkey') $ mainLoop r' u' (w',f',d')
 
 mainProcess :: (GLFWHandle, GuiResource, WorldResource) -> IORef Double 
             -> WorldData -> IORef UserStatus -> SurfaceList
-            -> WorldDispList -> Double
+            -> WorldDispList -> [BlockID]
+            -> Double
             -> IO (Bool,Maybe (WorldIndex,Surface))
 mainProcess (glfwHdl, guiRes, wldRes) rotW wld usrStat
-            sufList dsps dt = do
+            sufList dsps plt dt = do
   -- Common User input
   mous <- getButtonClick glfwHdl
   syskey <- getSystemKeyOpe glfwHdl
@@ -83,7 +87,7 @@ mainProcess (glfwHdl, guiRes, wldRes) rotW wld usrStat
       (md,exflg,newStat) <- playProcess glfwHdl wld u' syskey dt
       writeIORef usrStat newStat
       pos <- calcCursorPos wld sufList u'
-      mouseOpe wld newStat mous pos
+      mouseOpe wld newStat mous pos plt
         (updateDisplist wldRes wld dsps sufList)
       return (md,exflg,pos)
   when (mode' /= newMode) $ writeIORef (runMode glfwHdl) newMode
@@ -105,16 +109,17 @@ updateDisplist wldRes wld dsps sufList pos = do
     ) clst
 
 mouseOpe :: WorldData -> UserStatus -> (Double,Double,Bool,Bool,Bool)
-         -> Maybe (WorldIndex,Surface) -> (WorldIndex -> IO ())
+         -> Maybe (WorldIndex,Surface) -> [BlockID]
+         -> (WorldIndex -> IO ())
          -> IO ()
-mouseOpe _ _ _ Nothing _ = return ()
-mouseOpe _ _ (_,_,False,False,_) _ _ = return ()
-mouseOpe wld ustat (_,_,lb,rb,_) (Just ((cx,cy,cz),fpos)) callback
+mouseOpe _ _ _ Nothing _ _ = return ()
+mouseOpe _ _ (_,_,False,False,_) _ _ _ = return ()
+mouseOpe wld ustat (_,_,lb,rb,_) (Just ((cx,cy,cz),fpos)) plt callback
   | rb == True = do
-    setBlockID wld setPos idx 
+    setBlockID wld setPos (plt !! idx)
     callback setPos
   | lb == True = do
-    setBlockID wld (cx,cy,cz) 0 
+    setBlockID wld (cx,cy,cz) VoidBlockID 
     callback (cx,cy,cz)
   | otherwise = return ()
   where
@@ -145,7 +150,7 @@ calcPlayerMotion :: WorldData -> UserStatus
                  -> IO UserStatus
 calcPlayerMotion wld usrStat (mx,my) (f,b,l,r,jmp) (_,sy) dt = do
   w <- getBlockID wld (round' ox,(round' oy) - 1,round' oz) 
-         >>= (\ bid -> return $ if bid == voidBlockID
+         >>= (\ bid -> return $ if bid == VoidBlockID
             then  wo - (9.8 * dt)
             else  if jmp == 2  then 4.0 else if wo > 0 then wo else 0.0)
   let (nrx,nry,nrz) = playerView dt ( realToFrac orx
@@ -184,9 +189,9 @@ calcPlayerMotion wld usrStat (mx,my) (f,b,l,r,jmp) (_,sy) dt = do
       bidB <- getBlockID wld (round' tx, round' ty, round' tz)
 
       w' <- getBlockID wld (round' tx, round' ty - 1, round' tz)
-             >>= (\ b' -> return $ if voidBlockID == b' then w else 0)
+             >>= (\ b' -> return $ if VoidBlockID == b' then w else 0)
 
-      if bidT == voidBlockID && bidB == voidBlockID
+      if bidT == VoidBlockID && bidB == VoidBlockID
         then if dl < 1
           then return (tx,ty,tz)
           else chkMove w' (tx,ty,tz) (dx - dx', dy - dy', dz - dz')
@@ -237,8 +242,9 @@ guiProcess res (x,y,True,_,_) = return (chkPlaybtn,chkExitbtn)
 drawView :: ( GLFWHandle, GuiResource, WorldResource)
          -> IORef Double -> IORef UserStatus -> WorldDispList
          -> Maybe (WorldIndex,Surface)
+         -> [BlockID]
          -> IO ()
-drawView (glfwHdl, guiRes, wldRes) dw usrStat worldDispList pos = do
+drawView (glfwHdl, guiRes, wldRes) dw usrStat worldDispList pos plt = do
   clear [ColorBuffer,DepthBuffer]
   mode' <- readIORef $ runMode glfwHdl
   winSize <- GLFW.getFramebufferSize win
@@ -250,7 +256,7 @@ drawView (glfwHdl, guiRes, wldRes) dw usrStat worldDispList pos = do
     PlayMode -> do
       u' <- readIORef usrStat
       GLFW.setCursorInputMode win GLFW.CursorInputMode'Hidden
-      drawPlay winSize guiRes wldRes u' worldDispList pos
+      drawPlay winSize guiRes wldRes u' worldDispList pos plt
   flush
   GLFW.swapBuffers win
   where
@@ -354,8 +360,9 @@ genSufDispList wldRes bsf dsp = case dsp of
 drawPlay :: (Int,Int) -> GuiResource -> WorldResource
          -> UserStatus -> WorldDispList
          -> Maybe (WorldIndex,Surface)
+         -> [BlockID]
          -> IO ()
-drawPlay (w,h) guiRes wldRes usrStat worldDispList pos = do
+drawPlay (w,h) guiRes wldRes usrStat worldDispList pos plt = do
   -- World
   preservingMatrix $ do
     setPerspective V3DMode w h
@@ -398,9 +405,9 @@ drawPlay (w,h) guiRes wldRes usrStat worldDispList pos = do
                   (0,24/256) (22/256,22/256) (1.0,1.0,1.0,1.0)
 
     preservingMatrix $ do
-      mapM_ (\ ib -> drawIcon wldRes
-        (pltOx + (icSz / 2) + bdSz + prSz + (icSz + prSz/2) * fromIntegral ib,12) ib)
-        [1,2,3,4,6,7,8] 
+      mapM_ (\ (p,ib) -> drawIcon wldRes
+        (pltOx + (icSz / 2) + bdSz + prSz + (icSz + prSz/2) * p ,12) ib)
+        $ zip [0.0,1.0 .. ] plt
 
     preservingMatrix $ do
       texture Texture2D $= Disabled

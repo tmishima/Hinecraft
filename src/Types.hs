@@ -1,6 +1,12 @@
 module Types where
 
-type BlockID = Int
+data BlockID = VoidBlockID | StoneBlockID | DirtBlockID
+             | GlassBlockID | WoodBlockID | GrassBlockID
+             | GlowBlockID | PlankBlockID | StonebrickBlockID
+             | PlankHalfBlockID  
+             | OutOfRange
+  deriving (Eq,Show,Ord)
+
 type WorldIndex = (Int,Int,Int)
 type Pos' = (Double,Double,Double)
 type Rot' = Pos'

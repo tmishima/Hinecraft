@@ -41,7 +41,7 @@ data WorldData = WorldData
 
 data Chunk = Chunk
   { origin :: (Int,Int)
-  , local :: [(Int,IOUArray Int Int)]
+  , local :: [(BlockNo,IOArray Int BlockID)]
   , sunLight :: IOUArray Int Int
   }
 
@@ -70,7 +70,7 @@ getSurface :: WorldData -> (ChunkNo,Int)
 getSurface wld (chNo,bkNo) = do
   blkpos <- getCompliePosList wld (chNo,bkNo)
   blks <- mapM (getBlockID wld) blkpos
-            >>= return . (filter (\ (_,bid) -> bid /= voidBlockID ))
+            >>= return . (filter (\ (_,bid) -> bid /= VoidBlockID ))
                        . (zip blkpos)
   blks' <- mapM (\ (pos,bid) -> do
     fs <- getSuf pos >>= return . catMaybes
@@ -87,8 +87,8 @@ getSurface wld (chNo,bkNo) = do
     getSuf (x',y',z') = mapM (\ (f,pos) -> do
         b <- getBlockID wld pos
         sun <- getSunLightEffect wld pos 
-        return $ if b == voidBlockID
-                   || b == (-1) || alpha (getBlockInfo b) 
+        return $ if b == VoidBlockID
+                   || b == OutOfRange || alpha (getBlockInfo b) 
            then Just (f,if sun then 16 else 5) 
            else Nothing 
         ) (getAroundIndex (x',y',z')) 
@@ -144,7 +144,7 @@ getBlockID wld (x,y,z) = do
   chl <- readIORef chlist
   case getChunk chl (x,y,z) of
     Just (_,c) -> getBlockIDfromChunk c (x,y,z)
-    Nothing -> return (-1)
+    Nothing -> return OutOfRange
   where
     chlist = chunkList wld
 
@@ -199,15 +199,15 @@ calcReGenArea wld (x,y,z) = do
 genChunk :: (Int,Int) -> IO Chunk
 genChunk org = do
   arrt <- replicateM 4
-    (newArray (0, blength) voidBlockID) :: IO [IOUArray Int Int]
+    (newArray (0, blength) VoidBlockID) :: IO [IOArray Int BlockID]
 
-  arrs <- newArray (0,blength) voidBlockID :: IO (IOUArray Int Int)
-  mapM_ (\ i -> writeArray arrs i dirtBlockID) [0 .. 16 * 16 * 2 - 1]
-  mapM_ (\ i -> writeArray arrs i grassBlockID)
+  arrs <- newArray (0,blength) VoidBlockID :: IO (IOArray Int BlockID)
+  mapM_ (\ i -> writeArray arrs i DirtBlockID) [0 .. 16 * 16 * 2 - 1]
+  mapM_ (\ i -> writeArray arrs i GrassBlockID)
            [ 16 * 16 * 2 .. 16 * 16 * 3 - 1]
 
   arrb <- replicateM 3
-    (newArray (0,blength) stoneBlockID) :: IO [IOUArray Int Int]
+    (newArray (0,blength) StoneBlockID) :: IO [IOArray Int BlockID]
 
   sun' <- newArray (0, ((blockSize chunkParam) ^ (2::Int)) - 1) 0
 
@@ -267,12 +267,12 @@ calcSunLight chunk pos =
         else return (y - blockSize chunkParam + v + 1)
                                               -- +1 して Indexを数へ変換
     layerSize = blockSize chunkParam ^ (2::Int)
-    chk' :: IOUArray Int Int -> Int -> Int -> IO Int
+    chk' :: IOArray Int BlockID -> Int -> Int -> IO Int
     chk' blk offset count
       | count < 0 = return (-1)
       | otherwise = do
           v <- readArray blk $ count * layerSize + offset
-          if v == voidBlockID || alpha (getBlockInfo v)
+          if v == VoidBlockID || alpha (getBlockInfo v)
             then chk' blk offset (count - 1)
             else return (count + 1) -- 一つ前のIndexへ戻す
 
