@@ -1,8 +1,5 @@
-module Model where
-import Types
-
-data Shape = Cube | Half | Stairs
-  deriving (Eq,Show,Ord)
+module Hinecraft.Model where
+import Hinecraft.Types
 
 -- Top | Bottom | Right | Left | Front | Back
 data BlockInfo = BlockInfo
@@ -74,10 +71,10 @@ getBlockInfo bid
              }
   | bid == PlankHalfBlockID = BlockInfo
              { textureIndex = replicate 6 (6,13)
-             , alpha = False
+             , alpha = True
              , bcolor = replicate 6 (0.5,0.5,0.5)
              , bright = 0
-             , shape = Half
+             , shape = Half False
              }
   | bid == StonebrickBlockID = BlockInfo
              { textureIndex = replicate 6 (6,3)
@@ -86,6 +83,4 @@ getBlockInfo bid
              , bright = 0
              , shape = Cube
              }
-
-
 

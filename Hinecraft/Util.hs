@@ -1,4 +1,4 @@
-module Util where
+module Hinecraft.Util where
 import Data.List as List
 --import Debug.Trace as Dbg
 

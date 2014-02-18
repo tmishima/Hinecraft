@@ -1,10 +1,13 @@
-module Types where
+module Hinecraft.Types where
 
 data BlockID = VoidBlockID | StoneBlockID | DirtBlockID
              | GlassBlockID | WoodBlockID | GrassBlockID
              | GlowBlockID | PlankBlockID | StonebrickBlockID
              | PlankHalfBlockID  
              | OutOfRange
+  deriving (Eq,Show,Ord)
+
+data Shape = Cube | Half Bool | Stairs
   deriving (Eq,Show,Ord)
 
 type WorldIndex = (Int,Int,Int)

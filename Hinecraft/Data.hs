@@ -1,4 +1,4 @@
-module Data
+module Hinecraft.Data
   ( WorldData (..)
   , Chunk (..)
   , SurfaceList
@@ -8,9 +8,7 @@ module Data
   , setSurfaceList
   , getSunLightEffect
   , getCompliePosList
-  , ChunkParam (..)
   , getChunk
-  , chunkParam
   , genWorldData
   , getBlockID
   , setBlockID
@@ -24,15 +22,20 @@ import Data.Maybe ( fromJust , catMaybes ) --,isJust )
 import Data.Array.IO
 import Control.Monad ( replicateM, {- unless,when, void,filterM-} )
 --import Control.Applicative
-import Types
-import Model
-
+import Hinecraft.Types
+import Hinecraft.Model
  
 type SurfaceList = IORef [(ChunkNo, [(BlockNo,IORef SurfacePos)])]
 
 data ChunkParam = ChunkParam
   { blockSize :: Int
   , blockNum  :: Int
+  }
+
+chunkParam :: ChunkParam
+chunkParam = ChunkParam
+  { blockSize = 16
+  , blockNum = 8
   }
 
 data WorldData = WorldData
@@ -44,6 +47,8 @@ data Chunk = Chunk
   , local :: [(BlockNo,IOArray Int BlockID)]
   , sunLight :: IOUArray Int Int
   }
+
+-- | 
 
 genSurfaceList :: WorldData -> IO SurfaceList
 genSurfaceList wld = readIORef chl
@@ -157,12 +162,6 @@ getBlockIDfromChunk c (x,y,z) = readArray arr idx
     dat = local c
     arr = fromJust $ lookup (div y bsize) dat
     idx = (bsize * bsize) * ly + bsize * lz + lx
-
-chunkParam :: ChunkParam
-chunkParam = ChunkParam
-  { blockSize = 16
-  , blockNum = 8
-  }
 
 calcReGenArea :: WorldData -> WorldIndex -> IO [(ChunkNo,BlockNo)]
 calcReGenArea wld (x,y,z) = do

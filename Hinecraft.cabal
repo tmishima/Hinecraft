@@ -15,18 +15,19 @@ build-type:          Simple
 cabal-version:       >=1.8
 
 executable Hinecraft
-  main-is:             Hinecraft.hs
-  other-modules:       View , Util , Data , Util , Types
-
+  main-is:           Hinecraft/Hinecraft.hs
+  other-modules:     Hinecraft.Types,
+                     Hinecraft.Render.View,
+                     Hinecraft.GUI.GLFWWindow
+                     Hinecraft.Data
+                     Hinecraft.Util
   build-depends:       base ==4.6.*
                      , GLFW-b , OpenGL , mtl == 2.*
-                     , bytestring == 0.10.* , msgpack-rpc
+                     , bytestring == 0.10.*
                      , array , vector , directory , process
-                     , parsec3 , OpenGLRaw , cereal , JuicyPixels
-                     , OpenGLRaw , FTGL , network , xml
-                     , gtk , glade , cairo
-  hs-source-dirs:      src
+                     , OpenGLRaw , cereal , JuicyPixels , FTGL 
+  -- hs-source-dirs:    Hinecraft
   -- ghc-options:         -Wall -threaded
   -- ghc-options:         -Wall -O2 -prof -auto-all -caf-all -fforce-recomp -rtsopts
   -- ghc-options:         -Wall -O2 -threaded 
-  ghc-options:         -O2 -threaded
+  ghc-options:       -O2 -threaded
