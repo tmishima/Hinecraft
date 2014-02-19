@@ -3,7 +3,7 @@ module Main (main) where
 import Data.IORef
 import Debug.Trace as Dbg
 import Control.Exception ( bracket )
-import Control.Monad ( unless,when, {-void,filterM-} )
+import Control.Monad ( unless,when,forM,forM_ {-void,filterM-} )
 import Data.Maybe ( fromJust,isJust ) --,catMaybes )
 import System.Directory ( getHomeDirectory )
 import Data.Tuple
@@ -11,6 +11,8 @@ import Data.List
 import Data.Ord
 --import Control.Concurrent
 import Hinecraft.Render.View
+--import Hinecraft.Render.UI
+--import Hinecraft.Render.Types
 import Hinecraft.Util
 import Hinecraft.Types
 import Hinecraft.Data
@@ -19,7 +21,7 @@ import Hinecraft.GUI.GLFWWindow
 main :: IO ()
 main = bracket initHinecraft exitHinecraft runHinecraft
 
-data RunMode = TitleMode | PlayMode
+data RunMode = TitleMode | PlayMode | InventoryMode
   deriving (Eq,Show)
 
 initHinecraft :: IO (GLFWHandle, GuiResource,WorldResource)
@@ -87,17 +89,27 @@ mainProcess (glfwHdl, guiRes, wldRes) rotW wld usrStat runMode'
       return (md,exflg',Nothing)
     PlayMode -> do
       u' <- readIORef usrStat
-      (md,exflg,newStat) <- playProcess glfwHdl wld u' syskey dt
+      newStat <- playProcess glfwHdl wld u' dt
       writeIORef usrStat newStat
       pos <- calcCursorPos wld sufList u'
       mouseOpe wld newStat mous pos plt
         (updateDisplist wldRes wld dsps sufList)
-      return (md,exflg,pos)
+      let md = case syskey of
+             (True,_) -> TitleMode
+             (False,True) -> InventoryMode
+             _ ->  PlayMode
+      return (md,False,pos)
+    InventoryMode -> do
+      let md = case syskey of
+             (True,_) -> TitleMode
+             (False,True) -> PlayMode
+             _ -> InventoryMode
+      return (md,False,Nothing)
   when (mode' /= newMode) $ do
     writeIORef runMode' newMode
-    setUIMode glfwHdl $ if newMode == TitleMode
-      then Mode2D
-      else Mode3D
+    setUIMode glfwHdl $ if newMode == PlayMode
+      then Mode3D
+      else Mode2D
                                               
   return (extflg,pos)
 
@@ -106,7 +118,7 @@ updateDisplist :: WorldResource -> WorldData -> WorldDispList
 updateDisplist wldRes wld dsps sufList pos = do 
   clst <- calcReGenArea wld pos 
   dsps' <- readIORef dsps
-  mapM_ (\ (cNo',bNo') -> case lookup cNo' dsps' of
+  forM_ clst $ \ (cNo',bNo') -> case lookup cNo' dsps' of
       Just d -> do
         let (_,d') = d !! bNo'
         sfs <- getSurface wld (cNo',bNo')
@@ -114,7 +126,6 @@ updateDisplist wldRes wld dsps sufList pos = do
         genSufDispList wldRes sfs (Just d')
         return ()
       Nothing -> return ()
-    ) clst
 
 mouseOpe :: WorldData -> UserStatus -> (Double,Double,Bool,Bool,Bool)
          -> Maybe (WorldIndex,Surface) -> [BlockID]
@@ -127,7 +138,7 @@ mouseOpe wld ustat (_,_,lb,rb,_) (Just ((cx,cy,cz),fpos)) plt callback
     setBlockID wld setPos (plt !! idx)
     callback setPos
   | lb == True = do
-    setBlockID wld (cx,cy,cz) VoidBlockID 
+    setBlockID wld (cx,cy,cz) AirBlockID 
     callback (cx,cy,cz)
   | otherwise = return ()
   where
@@ -140,17 +151,13 @@ mouseOpe wld ustat (_,_,lb,rb,_) (Just ((cx,cy,cz),fpos)) plt callback
       SFront  -> (cx,cy,cz - 1)
       SBack   -> (cx,cy,cz + 1)
 
-playProcess :: GLFWHandle -> WorldData -> UserStatus
-            -> (Bool,Bool) -> Double
-            -> IO (RunMode,Bool,UserStatus)
-playProcess glfwHdl wld usrStat (esc,_ {-tool-}) dt = do
+playProcess :: GLFWHandle -> WorldData -> UserStatus -> Double
+            -> IO UserStatus
+playProcess glfwHdl wld usrStat dt = do
   vm <- getCursorMotion glfwHdl
   sm <- getScrollMotion glfwHdl 
   mm <- getMoveKeyOpe glfwHdl
-  nst <- calcPlayerMotion wld usrStat vm mm sm dt
-  return $ if esc
-             then (TitleMode, False, nst)
-             else (PlayMode, False, nst)
+  calcPlayerMotion wld usrStat vm mm sm dt
 
 calcPlayerMotion :: WorldData -> UserStatus
                  -> (Int,Int) -> (Int,Int,Int,Int,Int) -> (Int,Int)
@@ -158,7 +165,7 @@ calcPlayerMotion :: WorldData -> UserStatus
                  -> IO UserStatus
 calcPlayerMotion wld usrStat (mx,my) (f,b,l,r,jmp) (_,sy) dt = do
   w <- getBlockID wld (round' ox,(round' oy) - 1,round' oz) 
-         >>= (\ bid -> return $ if bid == VoidBlockID
+         >>= (\ bid -> return $ if bid == AirBlockID
             then  wo - (9.8 * dt)
             else  if jmp == 2  then 4.0 else if wo > 0 then wo else 0.0)
   let (nrx,nry,nrz) = playerView dt ( realToFrac orx
@@ -197,15 +204,15 @@ calcPlayerMotion wld usrStat (mx,my) (f,b,l,r,jmp) (_,sy) dt = do
                              , round' $ ty
                              , round' $ oz' + dz' * 1.5)
 
-      if bidT == VoidBlockID && bidB == VoidBlockID
+      if bidT == AirBlockID && bidB == AirBlockID
         then if dl < 1 
           then return (tx,ty,tz)
           else do
-            w' <- fmap (\ b' -> if VoidBlockID == b' then w else 0)
+            w' <- fmap (\ b' -> if AirBlockID == b' then w else 0)
               $ getBlockID wld (round' tx, round' ty - 1, round' tz)
             chkMove w' (tx,ty,tz) (dx - dx', dy - dy', dz - dz')
         else do
-          w' <- fmap (\ b' -> if VoidBlockID == b' then w else 0)
+          w' <- fmap (\ b' -> if AirBlockID == b' then w else 0)
               $ getBlockID wld (round' ox, round' oy - 1, round' oz)
           if w' == 0
             then return (ox',oy',oz')
@@ -266,19 +273,20 @@ drawView (glfwHdl, guiRes, wldRes) dw usrStat runMode'
         readIORef dw >>= (drawTitle winSize guiRes) . realToFrac
       else do 
         u' <- readIORef usrStat
-        drawPlay winSize guiRes wldRes u' worldDispList pos plt
+        let invSw = mode' == InventoryMode
+        drawPlay winSize guiRes wldRes u' worldDispList pos plt invSw
   swapBuff glfwHdl
 --
 
 genWorldDispList :: WorldResource -> SurfaceList -> IO WorldDispList
 genWorldDispList wldRes suf = do
   suf' <- readIORef suf
-  mapM (\ (chNo,blks) -> do
-    sb <- mapM (\ (bNo,sfs) -> do
+  forM suf' (\ (chNo,blks) -> do
+    sb <- forM blks (\ (bNo,sfs) -> do
       sfs' <- readIORef sfs
       d <- genSufDispList wldRes sfs' Nothing
-      return (bNo,d)) blks
-    return (chNo,sb)) suf'
+      return (bNo,d)) 
+    return (chNo,sb)) 
       >>= newIORef
 
 -- 

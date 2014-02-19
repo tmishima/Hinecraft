@@ -20,8 +20,8 @@ module Hinecraft.Data
 import Data.IORef
 import Data.Maybe ( fromJust , catMaybes ) --,isJust )
 import Data.Array.IO
-import Control.Monad ( replicateM, {- unless,when, void,filterM-} )
---import Control.Applicative
+import Control.Monad ( replicateM, forM {- unless,when, void,filterM-} )
+import Control.Applicative
 import Hinecraft.Types
 import Hinecraft.Model
  
@@ -74,13 +74,12 @@ getSurface :: WorldData -> (ChunkNo,Int)
            -> IO SurfacePos 
 getSurface wld (chNo,bkNo) = do
   blkpos <- getCompliePosList wld (chNo,bkNo)
-  blks <- mapM (getBlockID wld) blkpos
-            >>= return . (filter (\ (_,bid) -> bid /= VoidBlockID ))
-                       . (zip blkpos)
-  blks' <- mapM (\ (pos,bid) -> do
-    fs <- getSuf pos >>= return . catMaybes
-    return (pos,bid,fs)) blks
-  return $ (filter (\ (_,_,fs) -> not $ null fs)) blks'
+  blks <- (filter (\ (_,bid) -> bid /= AirBlockID )). (zip blkpos)
+          <$> mapM (getBlockID wld) blkpos
+  blks' <- forM blks (\ (pos,bid) -> do
+    fs <- catMaybes <$> getSuf pos 
+    return (pos,bid,fs)) 
+  return $ filter (\ (_,_,fs) -> not $ null fs) blks'
   where
     getAroundIndex (x',y',z') = [ (SRight,(x' + 1, y', z'))
                                 , (SLeft, (x' - 1, y', z'))
@@ -89,14 +88,14 @@ getSurface wld (chNo,bkNo) = do
                                 , (SBack,(x', y', z' + 1))
                                 , (SFront,(x', y', z' - 1))
                                 ]
-    getSuf (x',y',z') = mapM (\ (f,pos) -> do
+    getSuf (x',y',z') = forM (getAroundIndex (x',y',z'))
+      $ \ (f,pos) -> do
         b <- getBlockID wld pos
         sun <- getSunLightEffect wld pos 
-        return $ if b == VoidBlockID
+        return $ if b == AirBlockID
                    || b == OutOfRange || alpha (getBlockInfo b) 
            then Just (f,if sun then 16 else 5) 
            else Nothing 
-        ) (getAroundIndex (x',y',z')) 
 
 {-
 getSuface :: SurfaceList -> (ChunkNo,Int) -> IO (Maybe SurfacePos)
@@ -198,9 +197,9 @@ calcReGenArea wld (x,y,z) = do
 genChunk :: (Int,Int) -> IO Chunk
 genChunk org = do
   arrt <- replicateM 4
-    (newArray (0, blength) VoidBlockID) :: IO [IOArray Int BlockID]
+    (newArray (0, blength) AirBlockID) :: IO [IOArray Int BlockID]
 
-  arrs <- newArray (0,blength) VoidBlockID :: IO (IOArray Int BlockID)
+  arrs <- newArray (0,blength) AirBlockID :: IO (IOArray Int BlockID)
   mapM_ (\ i -> writeArray arrs i DirtBlockID) [0 .. 16 * 16 * 2 - 1]
   mapM_ (\ i -> writeArray arrs i GrassBlockID)
            [ 16 * 16 * 2 .. 16 * 16 * 3 - 1]
@@ -271,7 +270,7 @@ calcSunLight chunk pos =
       | count < 0 = return (-1)
       | otherwise = do
           v <- readArray blk $ count * layerSize + offset
-          if v == VoidBlockID || alpha (getBlockInfo v)
+          if v == AirBlockID || alpha (getBlockInfo v)
             then chk' blk offset (count - 1)
             else return (count + 1) -- 一つ前のIndexへ戻す
 

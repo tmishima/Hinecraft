@@ -6,6 +6,7 @@ module Hinecraft.GUI.GLFWWindow
   , pollGLFW
   , getDeltTime
   , setUIMode
+  , togleUIMode
   , getWindowSize
   , swapBuff
   , getExitReqGLFW
@@ -85,6 +86,24 @@ setUIMode glfwHdl mode = do
     Nothing -> return ()
   where
     ui' = uiMode glfwHdl
+
+togleUIMode :: GLFWHandle -> IO ()
+togleUIMode glfwHdl = 
+  case winHdl glfwHdl of
+    Just win -> do
+      md <- readIORef ui'
+      nmd <- case md of
+        Mode3D -> 
+          GLFW.setCursorInputMode win GLFW.CursorInputMode'Normal
+            >> return Mode2D
+        Mode2D -> 
+          GLFW.setCursorInputMode win GLFW.CursorInputMode'Hidden
+            >> return Mode3D
+      writeIORef ui' nmd
+    Nothing -> return ()
+  where
+    ui' = uiMode glfwHdl
+
 
 pollGLFW :: IO ()
 pollGLFW = GLFW.pollEvents
@@ -210,10 +229,10 @@ keyPress s _ GLFW.Key'D      _ GLFW.KeyState'Pressed  _
   = writeIORef (rKey s) 1
 keyPress s _ GLFW.Key'D      _ GLFW.KeyState'Released _
   = writeIORef (rKey s) 0 
-keyPress s _ GLFW.Key'E      _ GLFW.KeyState'Pressed  _
-  = writeIORef (tolKey s) 1
+--keyPress s _ GLFW.Key'E      _ GLFW.KeyState'Pressed  _
+--  = writeIORef (tolKey s) 1
 keyPress s _ GLFW.Key'E      _ GLFW.KeyState'Released _
-  = writeIORef (tolKey s) 0 
+  = writeIORef (tolKey s) 1 
 keyPress s _ GLFW.Key'Space  _ GLFW.KeyState'Pressed  _
   = writeIORef (jmpKey s) 2
 keyPress s _ GLFW.Key'Space  _ GLFW.KeyState'Released _

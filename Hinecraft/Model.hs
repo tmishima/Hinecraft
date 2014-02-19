@@ -13,7 +13,7 @@ data BlockInfo = BlockInfo
 
 getBlockInfo :: BlockID -> BlockInfo
 getBlockInfo bid
-  | bid == VoidBlockID = BlockInfo
+  | bid == AirBlockID = BlockInfo
              { textureIndex = []
              , alpha = True
              , bcolor = replicate 6 (1.0,1.0,1.0)
@@ -80,6 +80,55 @@ getBlockInfo bid
              { textureIndex = replicate 6 (6,3)
              , alpha = False
              , bcolor = replicate 6 (0.5,0.5,0.5)
+             , bright = 0
+             , shape = Cube
+             }
+  | bid == CobbleStoneBlockID = BlockInfo
+             { textureIndex = replicate 6 (0,1)
+             , alpha = False
+             , bcolor = replicate 6 (0.5,0.5,0.5)
+             , bright = 0
+             , shape = Cube
+             }
+  | bid == GravelBlockID = BlockInfo
+             { textureIndex = replicate 6 (3,1)
+             , alpha = False
+             , bcolor = replicate 6 (0.5,0.5,0.5)
+             , bright = 0
+             , shape = Cube
+             }
+  | bid == SandBlockID = BlockInfo
+             { textureIndex = replicate 6 (2,1)
+             , alpha = False
+             , bcolor = replicate 6 (0.5,0.5,0.5)
+             , bright = 0
+             , shape = Cube
+             }
+  | bid == BrickBlockID = BlockInfo
+             { textureIndex = replicate 6 (7,0)
+             , alpha = False
+             , bcolor = replicate 6 (0.5,0.5,0.5)
+             , bright = 0
+             , shape = Cube
+             }
+  | bid == LeavesBlockID = BlockInfo
+             { textureIndex = replicate 6 (5,3)
+             , alpha = True
+             , bcolor = replicate 6 (0.2,0.2,0.7)
+             , bright = 0
+             , shape = Cube
+             }
+  | bid == RedWoolBlockID = BlockInfo
+             { textureIndex = replicate 6 (1,8)
+             , alpha = False
+             , bcolor = replicate 6 (0.2,0.2,0.7)
+             , bright = 0
+             , shape = Cube
+             }
+  | bid == BlueWoolBlockID = BlockInfo
+             { textureIndex = replicate 6 (1,11)
+             , alpha = False
+             , bcolor = replicate 6 (0.2,0.2,0.7)
              , bright = 0
              , shape = Cube
              }

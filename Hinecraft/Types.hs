@@ -1,9 +1,11 @@
 module Hinecraft.Types where
 
-data BlockID = VoidBlockID | StoneBlockID | DirtBlockID
+data BlockID = AirBlockID | StoneBlockID | DirtBlockID
              | GlassBlockID | WoodBlockID | GrassBlockID
              | GlowBlockID | PlankBlockID | StonebrickBlockID
-             | PlankHalfBlockID  
+             | PlankHalfBlockID | CobbleStoneBlockID 
+             | GravelBlockID | SandBlockID | BrickBlockID
+             | LeavesBlockID | RedWoolBlockID | BlueWoolBlockID
              | OutOfRange
   deriving (Eq,Show,Ord)
 
