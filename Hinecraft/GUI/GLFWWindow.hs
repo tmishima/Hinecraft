@@ -17,12 +17,15 @@ module Hinecraft.GUI.GLFWWindow
     --
   , getScrollMotion
   , getCursorMotion
+  , getCursorPosition
+  , BottonMode (..)
+  , setMouseBtnMode
   , getButtonClick
   )
   where
 
 import qualified Graphics.UI.GLFW as GLFW
-import Control.Monad ( replicateM )
+import Control.Monad ( replicateM, when )
 import Data.IORef
 
 data GLFWHandle = GLFWHandle
@@ -250,12 +253,16 @@ keyPress _ _ _               _ _                      _
 
 -- ##################### Mouse ############################
 data MouseStatusHdl = MouseStatusHdl
-  { deltMove :: IORef (Int,Int)
+  { deltMove :: IORef (Double,Double)
   , btn1Clk  :: IORef Bool
   , btn2Clk  :: IORef Bool
   , btn3Clk  :: IORef Bool
   , scrlMove :: IORef (Double,Double)
+  , btnMode  :: IORef BottonMode
   }
+
+data BottonMode = REdgeMode | StateMode
+  deriving (Eq,Show)
 
 createMouseStatHdl :: IO MouseStatusHdl
 createMouseStatHdl = do
@@ -264,12 +271,14 @@ createMouseStatHdl = do
   btn2 <- newIORef False
   btn3 <- newIORef False
   scr <- newIORef (0,0)
+  btnMd <- newIORef REdgeMode
   return MouseStatusHdl {
     deltMove = dltmv
   , btn1Clk  = btn1
   , btn2Clk  = btn2
   , btn3Clk  = btn3
   , scrlMove = scr
+  , btnMode  = btnMd
   }
 
 setScrollMotion :: MouseStatusHdl -> GLFW.ScrollCallback
@@ -289,15 +298,16 @@ setCursorMotion :: IORef UIMode -> MouseStatusHdl
 setCursorMotion mode opeMus w x y = do
   m' <- readIORef mode
   case m' of
-    Mode2D -> return ()
+    Mode2D -> return () 
     Mode3D -> do
       (wsx,wsy) <- GLFW.getWindowSize w
       let cx = fromIntegral wsx / 2.0
           cy = fromIntegral wsy / 2.0
       GLFW.setCursorPos w cx cy 
-      modifyIORef (deltMove opeMus) (\ (xo,yo) -> (xo + floor (cx-x), yo + floor (cy-y)))
+      modifyIORef (deltMove opeMus) (\ (xo,yo) -> ( xo + cx -x
+                                                  , yo + cy -y))
 
-getCursorMotion :: GLFWHandle -> IO (Int, Int)
+getCursorMotion :: GLFWHandle -> IO (Double, Double)
 getCursorMotion glfwHdl = do
   (dx,dy) <- readIORef (deltMove opeMus)
   writeIORef (deltMove opeMus) (0,0)
@@ -305,31 +315,52 @@ getCursorMotion glfwHdl = do
   where
     opeMus = mouseStat glfwHdl
 
-getButtonClick :: GLFWHandle -> IO (Double,Double,Bool,Bool,Bool)
-getButtonClick glfwHdl =
-  case win of 
+getCursorPosition :: GLFWHandle -> IO (Double, Double)
+getCursorPosition glfwHdl = case winHdl glfwHdl of 
     Just w -> do
-      (x,y) <- GLFW.getCursorPos w 
+      (_,h) <- GLFW.getFramebufferSize w
+      fmap (\ (x,y) -> (x,fromIntegral h - y))
+         $ GLFW.getCursorPos w
+    Nothing -> return (0,0)
+
+setMouseBtnMode :: GLFWHandle -> BottonMode -> IO ()
+setMouseBtnMode glfwHdl = writeIORef (btnMode opeMusS) 
+  where
+    opeMusS = mouseStat glfwHdl 
+
+getButtonClick :: GLFWHandle -> IO (Double,Double,Bool,Bool,Bool)
+getButtonClick glfwHdl = case winHdl glfwHdl of 
+    Just w -> do
+      (_,h) <- GLFW.getFramebufferSize w
+      (x,y) <- fmap (\ (x,y) -> (x,fromIntegral h - y))
+         $ GLFW.getCursorPos w
       btn1 <- readIORef (btn1Clk opeMusS)
-      writeIORef (btn1Clk opeMusS) False
       btn2 <- readIORef (btn2Clk opeMusS)
-      writeIORef (btn2Clk opeMusS) False
       btn3 <- readIORef (btn3Clk opeMusS)
-      writeIORef (btn3Clk opeMusS) False
+      btnMd <- readIORef (btnMode opeMusS) 
+      when (btnMd == REdgeMode) $ do
+          writeIORef (btn1Clk opeMusS) False
+          writeIORef (btn2Clk opeMusS) False
+          writeIORef (btn3Clk opeMusS) False
       return (x,y,btn1, btn2, btn3)
     Nothing -> return (0.0,0.0,False, False, False)
   where
-    win = winHdl glfwHdl
     opeMusS = mouseStat glfwHdl 
 
 -- | button press  
 setButtonClick :: MouseStatusHdl -> GLFW.MouseButtonCallback
 setButtonClick s _ GLFW.MouseButton'1 GLFW.MouseButtonState'Pressed _
   = writeIORef (btn1Clk s) True 
+setButtonClick s _ GLFW.MouseButton'1 GLFW.MouseButtonState'Released _
+  = writeIORef (btn1Clk s) False
 setButtonClick s _ GLFW.MouseButton'2 GLFW.MouseButtonState'Pressed _
   = writeIORef (btn2Clk s) True 
+setButtonClick s _ GLFW.MouseButton'2 GLFW.MouseButtonState'Released _
+  = writeIORef (btn2Clk s) False
 setButtonClick s _ GLFW.MouseButton'3 GLFW.MouseButtonState'Pressed _
   = writeIORef (btn3Clk s) True 
+setButtonClick s _ GLFW.MouseButton'3 GLFW.MouseButtonState'Released _
+  = writeIORef (btn3Clk s) False
 setButtonClick _ _ _                  _                             _
   = return () 
 

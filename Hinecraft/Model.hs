@@ -112,23 +112,23 @@ getBlockInfo bid
              , shape = Cube
              }
   | bid == LeavesBlockID = BlockInfo
-             { textureIndex = replicate 6 (5,3)
+             { textureIndex = replicate 6 (4,3)
              , alpha = True
-             , bcolor = replicate 6 (0.2,0.2,0.7)
+             , bcolor = replicate 6 (0.2,0.7,0.2)
              , bright = 0
              , shape = Cube
              }
   | bid == RedWoolBlockID = BlockInfo
              { textureIndex = replicate 6 (1,8)
              , alpha = False
-             , bcolor = replicate 6 (0.2,0.2,0.7)
+             , bcolor = replicate 6 (0.5,0.5,0.5)
              , bright = 0
              , shape = Cube
              }
   | bid == BlueWoolBlockID = BlockInfo
              { textureIndex = replicate 6 (1,11)
              , alpha = False
-             , bcolor = replicate 6 (0.2,0.2,0.7)
+             , bcolor = replicate 6 (0.5,0.5,0.5)
              , bright = 0
              , shape = Cube
              }

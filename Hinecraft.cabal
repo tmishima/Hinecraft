@@ -30,4 +30,4 @@ executable Hinecraft
   -- ghc-options:         -Wall -threaded
   -- ghc-options:         -Wall -O2 -prof -auto-all -caf-all -fforce-recomp -rtsopts
   -- ghc-options:         -Wall -O2 -threaded 
-  ghc-options:       -O2 -threaded
+  ghc-options:       -O2 -threaded 

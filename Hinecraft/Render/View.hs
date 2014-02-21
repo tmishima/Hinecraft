@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 module Hinecraft.Render.View
   ( GuiResource (..)
   , ViewMode (..)
@@ -29,7 +30,7 @@ import Graphics.Rendering.OpenGL.Raw
 -- Common
 import Debug.Trace as Dbg
 import Data.IORef
-import Control.Monad ( when, unless, forM_ {-,void,filterM-} )
+import Control.Monad (  forM_ {-,when, unless,void,filterM-} )
 import Hinecraft.Model
 import Hinecraft.Types
 import Hinecraft.Util
@@ -79,9 +80,10 @@ renderCurFace objPos =
 drawPlay :: (Int,Int) -> GuiResource -> WorldResource
          -> UserStatus -> WorldDispList
          -> Maybe (WorldIndex,Surface)
-         -> [BlockID] -> Bool
+         -> [BlockID] -> Bool -> Maybe (VrtxPos2D,BlockID)
          -> IO ()
-drawPlay (w,h) guiRes wldRes usrStat worldDispList pos plt invSw = do
+drawPlay (w,h) guiRes wldRes usrStat worldDispList pos plt
+         invSw dragDrop = do
   -- World
   preservingMatrix $ do
     setPerspective V3DMode w h
@@ -106,81 +108,12 @@ drawPlay (w,h) guiRes wldRes usrStat worldDispList pos plt invSw = do
       >>= mapM_ (\ (_,b) -> mapM_ (\ (_,d) -> callList d) b)  
 
   -- HUD
-  preservingMatrix $ do
-    setPerspective V2DMode w h
-    glPushAttrib gl_DEPTH_BUFFER_BIT
-    glDisable gl_DEPTH_TEST
-    depthMask $= Disabled
-
-    -- Inventry
-    when invSw $ preservingMatrix $ do
-      -- borad
-      let times = 2.5
-          (pltW,pltH) = (195 * times, 136 * times)
-          (pltOx,pltOy) = ((w' - pltW) / 2, (h' - pltH) / 2)
-      drawBackPlane (pltOx,pltOy) (pltW,pltH) (Just tdlg')
-                    (0,0) (195/256,136/256) (1.0,1.0,1.0,1.0)   
-      -- List
-      mapM_ (\ (p,ib) -> drawIcon wldRes (16 * times)
-          ( pltOx + 8 * times + (18 * times / 2) + (18 * times * p) 
-          , pltOy + (136 - 33) * times) ib)
-          $ zip [0.0,1.0 .. ]
-            [ StoneBlockID, DirtBlockID, GlassBlockID
-            , WoodBlockID, GrassBlockID, GlowBlockID
-            , PlankBlockID, StonebrickBlockID, PlankHalfBlockID
-            ]
-      mapM_ (\ (p,ib) -> drawIcon wldRes (16 * times)
-          ( pltOx + 8 * times + (18 * times / 2) + (18 * times * p) 
-          , pltOy + (136 - 33 - 18 * 2) * times) ib)
-          $ zip [0.0,1.0 .. ]
-            [ CobbleStoneBlockID, GravelBlockID, SandBlockID
-            , BrickBlockID, LeavesBlockID, RedWoolBlockID
-            , BlueWoolBlockID 
-            ]
-     
-      -- pallet
-      mapM_ (\ (p,ib) -> drawIcon wldRes (16 * times)
-          ( pltOx + 8 * times + (18 * times / 2) + (18 * times * p) 
-          , pltOy + (136 - 127) * times) ib)
-          $ zip [0.0,1.0 .. ] plt
-
-    preservingMatrix $ do
-      -- Pallet
-      let times = 2.5
-          (pltW,pltH) = (182 * times, 22 * times)
-          (pltOx,pltOy) = ((w' - pltW) / 2, 2)
-          curXpos = pltOx + times + 20 * times * fromIntegral pIndex 
-      drawBackPlane (pltOx,pltOy) (pltW,pltH) (Just widTex')
-                    (0,0) (182/256,22/256) (1.0,1.0,1.0,1.0)
-      drawBackPlane (curXpos,times) (20 * times, 20 * times)
-                    (Just widTex')
-                    (1/256,24/256) (22/256,22/256) (1.0,1.0,1.0,1.0)
-
-      mapM_ (\ (p,ib) -> drawIcon wldRes (16 * times)
-        (pltOx + times + (20 * times / 2) + (20 * times * p) ,12) ib)
-        $ zip [0.0,1.0 .. ] plt
-
-    unless invSw $ preservingMatrix $ do
-      texture Texture2D $= Disabled
-      color $ Color3 0.0 0.0 (0.0::GLfloat)
-      lineWidth $= 2.0
-      renderPrimitive Lines $ do
-        vertex $ Vertex2 ((w' / 2.0) - 7.0) (h' / 2.0 ::GLfloat)
-        vertex $ Vertex2 ((w' / 2.0) + 7.0) (h' / 2.0 ::GLfloat)
-        vertex $ Vertex2 (w' / 2.0) (h' / 2.0 - 7.0 ::GLfloat)
-        vertex $ Vertex2 (w' / 2.0) (h' / 2.0 + 7.0 ::GLfloat)
-
-    glPopAttrib 
-    depthMask $= Enabled
-    glEnable gl_DEPTH_TEST
+  renderHUD (w,h) guiRes wldRes pIndex invSw plt dragDrop
 
   where
-    (w',h') = (fromIntegral w, fromIntegral h)
     (ux,uy,uz) = userPos usrStat 
     (urx,ury,_) = userRot usrStat 
     pIndex =  palletIndex usrStat
-    widTex' = widgetsTexture guiRes
-    tdlg' = invDlgTexture guiRes
     drawBackGroundBox' = preservingMatrix $ do
       color $ Color4 (180/255) (226/255) (255/255) (1.0::GLfloat)
       texture Texture2D $= Disabled
@@ -197,6 +130,95 @@ drawPlay (w,h) guiRes wldRes usrStat worldDispList pos plt invSw = do
     genSuf (nx,ny,nz) ndlst = do
       normal $ Normal3 nx ny nz
       forM_ ndlst $ \ ((x', y', z'),_) -> vertex (Vertex3 x' y' z')
+
+renderHUD :: (Int,Int) -> GuiResource ->  WorldResource
+          -> Int -> Bool -> [BlockID] -> Maybe (VrtxPos2D,BlockID)
+          -> IO ()
+renderHUD (w,h) guiRes wldRes pIndex invSw plt dragDrop = 
+  preservingMatrix $ do
+    setPerspective V2DMode w h
+    glPushAttrib gl_DEPTH_BUFFER_BIT
+    glDisable gl_DEPTH_TEST
+    depthMask $= Disabled
+
+    if invSw
+      then renderInventory (w,h) guiRes wldRes plt dragDrop -- Inventry
+      else preservingMatrix $ do -- Scope
+        let !times = 2.5
+            !(pltW,pltH) = (15 * times, 15 * times)
+            !(pltOx,pltOy) = ((w' - pltW) / 2, (h' - pltH) / 2)
+        drawBackPlane (pltOx,pltOy) (pltW,pltH) (Just widTex')
+                      (240/256,0) (15/256,15/256) (1.0,1.0,1.0,1.0)   
+
+    preservingMatrix $ do
+      -- Pallet
+      let !times = 2.5
+          !(pltW,pltH) = (182 * times, 22 * times)
+          !(pltOx,pltOy) = ((w' - pltW) / 2, 2)
+          !curXpos = pltOx + times + 20 * times * fromIntegral pIndex 
+      drawBackPlane (pltOx,pltOy) (pltW,pltH) (Just widTex')
+                    (0,0) (182/256,22/256) (1.0,1.0,1.0,1.0)
+      drawBackPlane (curXpos,times) (20 * times, 20 * times)
+                    (Just widTex')
+                    (1/256,24/256) (22/256,22/256) (1.0,1.0,1.0,1.0)
+
+      mapM_ (\ (p,ib) -> drawIcon wldRes (16 * times)
+        (pltOx + times + (20 * times / 2) + (20 * times * p) ,12) ib)
+        $ zip [0.0,1.0 .. ] plt
+
+    glPopAttrib 
+    depthMask $= Enabled
+    glEnable gl_DEPTH_TEST
+  where
+    (w',h') = (fromIntegral w, fromIntegral h)
+    widTex' = widgetsTexture guiRes
+
+renderInventory :: (Int,Int) -> GuiResource -> WorldResource
+                -> [BlockID] -> Maybe (VrtxPos2D,BlockID) -> IO ()
+renderInventory (w,h) guiRes wldRes plt dragDrop = preservingMatrix $ do
+  -- Back
+  drawBackPlane (0,0) (fromIntegral w, fromIntegral h) Nothing
+                (0,0) (0,0) (0.0,0.0,0.0,0.8)
+  -- borad
+  let !(pltW,pltH) = (rate * fromIntegral dotW, rate * fromIntegral dotH )
+      !(pltOx,pltOy) = ((w' - pltW) * 0.5, (h' - pltH) * 0.5)
+  drawBackPlane (d2f (pltOx,pltOy)) (d2f (pltW,pltH)) (Just tdlg')
+                (d2f (orgU,orgV)) (d2f (uvRctW, uvRctH))
+                (1.0,1.0,1.0,1.0)   
+  -- Catalog
+  mapM_ (\ (liNo,iclst) ->
+    forM_ iclst (\ (p,ib) -> drawIcon wldRes (realToFrac $ icSz * rate)
+      (d2f 
+        ( pltOx + ((icloX - 1) + itvl * 0.5) * rate + (itvl * rate * p) 
+        , pltOy + ((icloY + 1) - itvl * liNo) * rate)) ib))
+      [ (0, zip [0.0,1.0 .. ] $ take 9 blockCatalog)
+      , (1, zip [0.0,1.0 .. ] $ take 9 $ drop 9 blockCatalog)
+      ]
+  -- pallet
+  mapM_ (\ (p,ib) -> drawIcon wldRes (realToFrac $ icSz * rate)
+      (d2f ( pltOx + ((ploX - 1) + itvl * 0.5) * rate + (itvl * rate * p) 
+           , pltOy + (ploY + 1) * rate)) ib)
+      $ zip [0.0,1.0 .. ] plt
+
+  -- Drag & Drop
+  case dragDrop of
+    Just ((x,y),bid) -> drawIcon wldRes (realToFrac $ icSz * rate) 
+                          (x, y - realToFrac (rate * icSz * 0.5))
+                          bid  
+    Nothing -> return ()
+  where
+    d2f (x,y) = (realToFrac x, realToFrac y)
+    icSz = iconSize inventoryParam
+    rate = projectionRate inventoryParam
+    itvl = iconListItvl inventoryParam
+    (uvRctW,uvRctH) = uvRectSize inventoryParam
+    (orgU,orgV) = uvOrg inventoryParam
+    (dotW,dotH) = rectDotSize inventoryParam
+    (icloX,icloY) = iconListOrg inventoryParam
+    (ploX,ploY) = palletOrg inventoryParam
+    (w',h') = (fromIntegral w, fromIntegral h)
+    tdlg' = invDlgTexture guiRes
+
 
 setPerspective :: ViewMode -> Int -> Int -> IO ()
 setPerspective viewMode' w h = do
@@ -254,10 +276,10 @@ genSufDispList wldRes bsf dsp = case dsp of
       renderPrimitive Quads $ mapM_ genFace bsf 
     tex = blockTexture wldRes
     genFace ((x,y,z),bid,fs) = do
-      let sp = shape $ getBlockInfo bid
-          texIdx = textureIndex $ getBlockInfo bid
+      let !sp = shape $ getBlockInfo bid
+          !texIdx = textureIndex $ getBlockInfo bid
            -- Top | Bottom | Right | Left | Front | Back
-          [tt',tb',tr',tl',tf',tba'] = if null texIdx 
+          ![tt',tb',tr',tl',tf',tba'] = if null texIdx 
                                   then replicate 6 (0,0)
                                   else texIdx
       mapM_ (\ (f,l) -> case f of

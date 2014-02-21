@@ -177,7 +177,7 @@ drawIcon wldRes icSz (ox,oy) bID | null texIdx = return ()
   let [tt,_,_,tl,tf,_] = texIdx
   renderPrimitive Quads $ do
     -- top 
-    color $ Color3 0.8 0.8 (0.8::GLfloat)
+    setColor 1.3 ct
     mapM_ drawf $ zip (calcUV tt)
       [ (ox, oy + icSzH)
       , (ox + icSzW, oy + icSzH + icSzW * (sin.d2r) rt)
@@ -185,7 +185,7 @@ drawIcon wldRes icSz (ox,oy) bID | null texIdx = return ()
       , (ox - icSzW, oy + icSzH + icSzW * (sin.d2r) rt)
       ]
     -- left 
-    color $ Color3 0.5 0.5 (0.5::GLfloat)
+    setColor 1.0 cl 
     mapM_ drawf $ zip (calcUV tl)
       [ (ox, oy + icSzH)
       , (ox + icSzW, oy + icSzH + icSzW * (sin.d2r) rt)
@@ -193,7 +193,7 @@ drawIcon wldRes icSz (ox,oy) bID | null texIdx = return ()
       , (ox, oy)
       ]
     -- front 
-    color $ Color3 0.5 0.5 (0.5::GLfloat)
+    setColor 1.0 cf 
     mapM_ drawf $ zip (calcUV tf)
       [ (ox - icSzW, oy + icSzH + icSzW * (sin.d2r) rt)
       , (ox, oy + icSzH)
@@ -208,8 +208,13 @@ drawIcon wldRes icSz (ox,oy) bID | null texIdx = return ()
               _ -> icSzW 
     rt = 30.0
     tex = blockTexture wldRes
-    d2r d = pi*d/180.0
+    d2r d = pi * d / 180.0
     texIdx = textureIndex $ getBlockInfo bID
+    [ct,_,_,cl,cf,_] = bcolor $ getBlockInfo bID
+    setColor :: Double -> (Double,Double,Double) -> IO () 
+    setColor c (r,g,b) =
+      color $ Color3 (realToFrac (c * r)) (realToFrac (c * g))
+                     (realToFrac (c * b) :: GLfloat) 
     calcUV (i',j') = [ ( i * (1/16), j * (1/16)) 
                      , ( (i + 1) * (1/16), j * (1/16))
                      , ( (i + 1) * (1/16), (j + 1) * (1/16))
