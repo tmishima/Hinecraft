@@ -53,6 +53,13 @@ inventoryParam = InventoryParam
   where
     (w,h) = (196,136)
 
+data UserStatus = UserStatus
+  { userPos :: Pos' 
+  , userRot :: Rot' 
+  , palletIndex :: Int
+  , userVel :: (Double,Double,Double)
+  }
+  deriving (Eq,Show)
 
 type WorldIndex = (Int,Int,Int)
 type Pos' = (Double,Double,Double)

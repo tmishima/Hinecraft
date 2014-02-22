@@ -35,18 +35,9 @@ import Hinecraft.Model
 import Hinecraft.Types
 import Hinecraft.Util
 
-
 import Hinecraft.Render.Types
 import Hinecraft.Render.Util
 -- Define
-
-data UserStatus = UserStatus
-  { userPos :: (GLfloat,GLfloat,GLfloat)
-  , userRot :: (GLfloat,GLfloat,GLfloat) 
-  , palletIndex :: Int
-  , userVel :: (Double,Double,Double)
-  }
-  deriving (Eq,Show)
 
 
 -- ##################### OpenGL ###########################
@@ -89,15 +80,15 @@ drawPlay (w,h) guiRes wldRes usrStat worldDispList pos plt
     setPerspective V3DMode w h
   
     -- 視線
-    rotate (-urx) $ Vector3 1.0 0.0 (0.0::GLfloat)
-    rotate (-ury) $ Vector3 0.0 1.0 (0.0::GLfloat) -- z軸
+    rotate (-urx :: GLfloat) $ Vector3 1.0 0.0 (0.0::GLfloat)
+    rotate (-ury :: GLfloat) $ Vector3 0.0 1.0 (0.0::GLfloat) -- z軸
  
     preservingMatrix $ do
       scale 100.0 100.0 (100.0::GLfloat)
       drawBackGroundBox' 
 
     -- カメラ位置
-    translate $ Vector3 (-ux) (-uy - 1) (-uz) 
+    translate $ Vector3 (-ux :: GLfloat) (-uy - 1.5) (-uz) 
 
     -- Cursol 選択された面を強調
     --Dbg.traceIO $ show (pos, uy)
@@ -111,8 +102,9 @@ drawPlay (w,h) guiRes wldRes usrStat worldDispList pos plt
   renderHUD (w,h) guiRes wldRes pIndex invSw plt dragDrop
 
   where
-    (ux,uy,uz) = userPos usrStat 
-    (urx,ury,_) = userRot usrStat 
+    d2f (a,b,c) = (realToFrac a, realToFrac b, realToFrac c)
+    (ux,uy,uz) = d2f $ userPos usrStat 
+    (urx,ury,_) = d2f $ userRot usrStat 
     pIndex =  palletIndex usrStat
     drawBackGroundBox' = preservingMatrix $ do
       color $ Color4 (180/255) (226/255) (255/255) (1.0::GLfloat)
