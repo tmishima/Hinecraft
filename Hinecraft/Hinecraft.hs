@@ -234,12 +234,6 @@ calcPlayerMotion :: WorldData -> UserStatus
                  -> Double
                  -> IO UserStatus
 calcPlayerMotion wld usrStat (mx,my) (f,b,l,r,jmp) (_,sy) dt = do
-  {-w <- getBlockID wld (round' ox,(round' oy) - 1,round' oz) 
-         >>= (\ bid -> return $ if bid == AirBlockID
-            then  wo - (9.8 * dt)
-            else  if jmp == 2  then 4.0 else if wo > 0 then wo else 0.0)
-  -}
-
   let !(nrx,nry,nrz) = playerView dt ( realToFrac orx
                                     , realToFrac ory
                                     , realToFrac orz)
@@ -261,139 +255,67 @@ calcPlayerMotion wld usrStat (mx,my) (f,b,l,r,jmp) (_,sy) dt = do
                 , nz)
     , userRot = (realToFrac nrx, realToFrac nry, realToFrac nrz) 
     , palletIndex = if idx < 0 then 0 else if idx > 8 then 8 else idx
-    -- , userVel = (0.0,w,0.0)
-    , userVel = (0.0, w,0.0) --if w < 0 then (ny - oy) / dt else 
+    , userVel = (0.0,w,0.0)
     }
   where
     (ox,oy,oz) = userPos usrStat
     (orx,ory,orz) = userRot usrStat 
     (_,wo,_) = userVel usrStat
     movePlayer (ox',oy',oz') (dx,dy,dz) = do
-      y' <- calpos wld (ox',oy',oz') dy
-      return {- $ trace (show (y',dy)) -} (tx,y',tz)
+      y' <- calYpos wld (ox',oy',oz') dy'
+      y'' <- calYpos wld (tx,y'+1,tz) (-1)
+      bid <- getBlockID wld (round' tx, round' oy' ,round' tz)
+      if bid == AirBlockID || chkHalf bid || y' + 0.6 > y''
+        then if dl < 1
+               then return (tx,y',tz)
+               else movePlayer (tx,y',tz) (dx - dx', dy - dy', dz - dz')
+        else return $! (ox',y',oz')
       where 
         !dl = sqrt (dx * dx + dz * dz + dy * dy)
         !(dx',dy',dz') = if dl < 1
               then (dx,dy,dz)
               else (dx / dl, dy / dl, dz / dl)
-        !(tx,ty,tz) = (ox' + dx', oy' + dy', oz' + dz')
+        !(tx,_,tz) = (ox' + dx', oy' + dy', oz' + dz')
 
---calpos :: [Int] -> Double -> Double -> Double
---WorldData
-calpos _   (_,y,_) 0 = return y
-calpos wld (x,y,z) dy = do
+calYpos :: WorldData -> (Double,Double,Double) -> Double
+        -> IO Double
+calYpos _   (_,y,_) 0 = return $! y
+calYpos wld (x,y,z) dy = do
   t <- getBlockID wld (round' x, round' y, round' z) 
-  t' <- {-trace (show (t,t1,t2,t3,y,dy)) $-}  if t == AirBlockID
-          then return 0 
-          else return $ if chkHalf t == True then 2 else 1 
-  let y0 = fromIntegral $ round' y
-      ly = y - y0
-      (ny,ndy,c) = calcPos' t' (ly,dy)
-      y' =  y0 + fromIntegral c + (if c > 0
+  let !y0 = fromIntegral $ (round' y :: Int)
+      !ly = y - y0
+      !t' = if t == AirBlockID
+              then 0
+              else if chkHalf t == True then 2 else 1
+      !(ny,ndy,c) = calcPos' t' (ly,dy)
+      !y' =  y0 + fromIntegral c + (if c > 0
                                      then ny + 0.001
                                      else ny - 0.001)
   if (abs ndy) < 0.001
-    then {-trace (show (y',y0,c,ly,dy,ndy)) -} return y'
-    else trace "a" {- (show (y',ndy)) $ -} calpos wld (x,y',z) ndy
-  where
-    chkHalf bid = case shape $ getBlockInfo bid of
-                        Half _ -> True
-                        _ -> False
+    then {-trace (show (y',y0,c,ly,dy,ndy)) -} return $! y'
+    else {- trace (show (y',ndy)) $ -} calYpos wld (x,y',z) ndy
 
-calcPos' t (y,dy)
+-- | 
+-- -0.5 < ly <= 0.5
+calcPos' :: Int -> (Double,Double) -> (Double,Double,Int)
+calcPos' t (ly,dy)
   | t == 0 = case (ny >= 0.5, ny < -0.5) of
                (True , _ ) -> (-0.5, ny - 0.5, 1) 
                (_ , True ) -> ( 0.5, ny + 0.5,-1)
-               _ -> if dy == 0 then (y,0,0) else (ny,0,0)
-  | t == 1 = (if y > 0 then -0.5 else 0.5 ,0,if dy > 0 then -1 else 1) 
+               _ -> if dy == 0 then (ly,0,0) else (ny,0,0)
+  | t == 1 = (if ly > 0 then -0.5 else 0.5 ,0,if dy > 0 then -1 else 1) 
   | t == 2 = case (ny >= 0.5,  ny < 0) of
                (True , _ ) -> (-0.5, ny - 0.5,1) 
                (_ , True ) -> (0, 0, 0)
                _ -> (ny,0,0) 
-  | otherwise = (y,dy,0) 
+  | otherwise = (ly,dy,0) 
   where
-    ny = y + dy
+    !ny = ly + dy
 
-{-
-  --t1 <- getBlockID wld (round' x, 52, round' z) 
-  --t2 <- getBlockID wld (round' x, 51, round' z) 
-  --t3 <- getBlockID wld (round' x, 50, round' z) 
-
-
--    calcY :: (Double,Double,Double) -> Double -> IO Double
-    calcY (ox',oy',oz') dy'
-      | dy' == 0 = return oy'
-      | dy' > 0 = do
-          bid <- getBlockID wld (round' ox',round' oy' + 2,round' oz')
-          return $ if bid == AirBlockID
-            then oy' + dy'
-            else min (oy' + dy') (1.5 + fromIntegral (round' oy')) 
-      | otherwise = do
-          bid <- getBlockID wld (round' ox',round' oy' - 1,round' oz')
-          return $ if bid == AirBlockID
-            then oy' + dy'
-            else if chkHalf bid
-              then max (oy' + dy') (fromIntegral (round' oy') - 0.9)
-              else max (oy' + dy') (fromIntegral (round' oy') - 0.5)
-    chkMove (ox',oy',oz') (dx,dy,dz) = do
-      ny <- calcY (ox',oy',oz') dy'
-      traceIO (show ny)
-      if dl < 1
-        then return (tx,ny,tz)
-        else chkMove (tx,ny,tz) (dx - dx', dy - dy', dz - dz')
- 
- -      bidT <- getBlockID wld ( round' $ tx 
-                             , round' $ ty + 1
-                             , round' $ tz)
-      bidC <- getBlockID wld ( round' $ tx
-                             , round' $ ty
-                             , round' $ tz)
-      bidB <- getBlockID wld ( round' $ tx
-                             , round' $ ty - 1
-                             , round' $ tz)     
-      let ny = case bidB of
-                 AirBlockID -> ty
-                 _ -> if chkHalf bidB 
-                        then ty 
-        ajustY bid ty'' = if w == 0
-                      then if chkHalf bid
-                             then (fromIntegral $ round' ty'') - 0.5
-                             else fromIntegral $ round' ty''
-                      else ty''
-      case (bidT,bidC,bidB,chkHalf bidB) of 
-        (AirBlockID,AirBlockID,bid,halfg) -> if dl < 1
-          then do
-            bid <- getBlockID wld (round' tx, round' ty - 1, round' tz)
-            return (tx,ajustY bid ty,tz)
-          else do
-             (w',ty'') <- fmap (\ b' -> if AirBlockID == b'
-                                   then (w,ty)
-                                   else (0,fromIntegral $ round' ty))
-                $ getBlockID wld (round' tx, round' ty - 1, round' tz) 
-             chkMove w' (tx,ty'',tz) (dx - dx', dy - dy', dz - dz')
-        (AirBlockID,_,True) -> if dl < 1
-          then return (tx,ty + 0.5 ,tz)
-          else  do
-             w' <- fmap (\ b' -> if AirBlockID == b' then w else 0)
-                $ getBlockID wld (round' tx, round' ty - 1, round' tz) 
-             chkMove w' (tx,ty,tz) (dx - dx', dy - dy' + 0.5, dz - dz')
-        _ -> return (ox',oy',oz')
-
-      if bidT == AirBlockID &&
-         (bidB == AirBlockID || ()
-        then if dl < 1 
-          then return (tx,ty,tz)
-          else do
-            w' <- fmap (\ b' -> if AirBlockID == b' then w else 0)
-              $ getBlockID wld (round' tx, round' ty - 1, round' tz)
-            chkMove w' (tx,ty,tz) (dx - dx', dy - dy', dz - dz')
-        else do
-          w' <- fmap (\ b' -> if AirBlockID == b' then w else 0)
-              $ getBlockID wld (round' ox, round' oy - 1, round' oz)
-          if w' == 0
-            then return (ox',oy',oz')
-            else chkMove w' (ox',ty,oz') (0.0, dy - dy' , 0.0)
--}
+chkHalf :: BlockID -> Bool
+chkHalf bid = case shape $ getBlockInfo bid of
+                Half _ -> True
+                _ -> False
 
 playerView :: Double -> Pos' -> Pos' -> Pos' 
 playerView dt (frxo,fryo,frzo) (frx,fry,frz) = (rx, ry, rz) 
