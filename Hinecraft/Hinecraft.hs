@@ -5,11 +5,8 @@ import Data.IORef
 import Debug.Trace as Dbg
 import Control.Exception ( bracket )
 import Control.Monad ( unless,when,forM,forM_ {-void,filterM-} )
-import Data.Maybe ( fromJust,isJust ) --,catMaybes )
+--import Data.Maybe ( fromJust,isJust ) --,catMaybes )
 import System.Directory ( getHomeDirectory )
-import Data.Tuple
-import Data.List
-import Data.Ord
 --import Control.Concurrent
 
 import Hinecraft.Render.View
@@ -63,7 +60,7 @@ runHinecraft resouce@(glfwHdl,guiRes,wldRes) = do
   where
     mainLoop r' u' m' dg' plt' (w',f',d') = do
       pollGLFW
-      --threadDelay 1000
+      --threadDelay 10000
       dt <- getDeltTime glfwHdl
       exitflg' <- getExitReqGLFW glfwHdl
       plt <- readIORef plt'
@@ -87,7 +84,7 @@ mainProcess (glfwHdl, guiRes, wldRes) rotW wld usrStat runMode'
   mode' <- readIORef runMode'
   (newMode, extflg,pos,drgsta,nPlt) <- case mode' of
     TitleMode -> do
-      modifyIORef rotW (\ r -> let nr = (r + (1.0 * dt))
+      modifyIORef rotW (\ r -> let !nr = (r + (1.0 * dt))
                                in if nr > 360 then nr - 360 else nr ) 
       (md,exflg') <- guiProcess guiRes mous -- ### 2D ###
       return (md,exflg',Nothing,Nothing,plt)
@@ -98,13 +95,13 @@ mainProcess (glfwHdl, guiRes, wldRes) rotW wld usrStat runMode'
       pos <- calcCursorPos wld sufList u'
       mouseOpe wld newStat mous pos plt
         (updateDisplist wldRes wld dsps sufList)
-      let md = case syskey of
+      let !md = case syskey of
              (True,_) -> TitleMode
              (False,True) -> InventoryMode
              _ ->  PlayMode
-      return (md,False,pos,Nothing,plt)
+      return $! (md,False,pos,Nothing,plt)
     InventoryMode -> do
-      let md = case syskey of
+      let !md = case syskey of
              (True,_) -> TitleMode
              (False,True) -> PlayMode
              _ -> InventoryMode
@@ -141,8 +138,8 @@ invMouseOpe (w,h) (x,y, btn, _, _) drgMd plt = do
                                _ -> plt )
       Nothing -> if btn 
                  then do -- Drag
-                   let bid = case getInventoryIndex (w,h) (x,y) of
-                               Just (i,j) -> let idx = j * 9 + i
+                   let !bid = case getInventoryIndex (w,h) (x,y) of
+                               Just (i,j) -> let !idx = j * 9 + i
                                  in if length blockCatalog > idx
                                    then Just $ blockCatalog !! idx
                                    else Nothing
@@ -190,7 +187,7 @@ updateDisplist wldRes wld dsps sufList pos = do
   dsps' <- readIORef dsps
   forM_ clst $ \ (cNo',bNo') -> case lookup cNo' dsps' of
       Just d -> do
-        let (_,d') = d !! bNo'
+        let !(_,d') = d !! bNo'
         sfs <- getSurface wld (cNo',bNo')
         setSurfaceList sufList (cNo',bNo') sfs  
         genSufDispList wldRes sfs (Just d')
@@ -388,71 +385,5 @@ genWorldDispList wldRes suf = do
       >>= newIORef
 
 -- 
-
-tomasChk :: Pos' -> Rot' -> (WorldIndex,[(Surface,Bright)])
-         -> (WorldIndex,Maybe (Double,Surface)) 
-tomasChk pos@(px,py,pz) rot (ep,fs) = (ep, choise faceList)
-  where
-    fs' = map fst fs
-    dir =(\ (x,y,z) -> (x - px, y - py, z - pz))
-          $ calcPointer pos rot 1
-    choise lst = if null lst 
-                   then Nothing
-                   else Just $ (\ (Just a,s) -> (a,s))
-                                     (minimum $ map swap lst)
-    faceList = filter (\ (_,v) -> isJust v) $ zip fs' $
-                    map (chk . genNodeList (i2d ep)) fs'
-    chk ftri = if null l then Nothing else minimum l
-      where l = filter isJust $ map (\ (n1,n2,n3) ->
-                           tomasMollerRaw pos dir n1 n2 n3) ftri
-    genNodeList pos' face = genTri $ map ((pos' .+. )
-      . (\ ((a,b,c),_) -> (realToFrac a, realToFrac b, realToFrac c)))
-      $ getVertexList Cube face
-    genTri [a1,a2,a3,a4] = [(a1,a2,a3),(a3,a4,a1)]
-    i2d (a,b,c) = (fromIntegral a, fromIntegral b, fromIntegral c)
-
-calcCursorPos :: WorldData -> SurfaceList -> UserStatus
-              -> IO (Maybe (WorldIndex,Surface))
-calcCursorPos wld sufList usr = do
-  chl <- readIORef chlist
-  f' <- readIORef sufList
-  case getChunk chl ( round' ux , round' uy , round' uz) of
-    Just (cNo,c) -> do
-      let (bx,bz) = origin c
-          cblkNo = div (round' uy) 16
-          bplst | cblkNo == 0 = [cblkNo, cblkNo + 1]
-                | cblkNo > 6 = [cblkNo - 1, cblkNo]
-                | otherwise = [cblkNo - 1, cblkNo, cblkNo + 1]
-          clst = map (fst . fromJust) $ filter isJust $ map (getChunk chl)
-               $ [(bx + x, 0, bz + z) | x <-[-16,0,16], z <- [-16,0,16]]
-          slst = map (\ c' -> fromJust $ lookup c' f') clst
-
-      f <- mapM (\ (_,b) -> readIORef b)
-            $ concatMap (\ s -> map (s !!) bplst) slst 
-      let res = filter (\ (_, Just (d,_)) -> d > 0)
-           $ filter (\ (_,r) -> isJust r)
-           $ map (tomasChk pos rot . (\ (a,_,b) -> (a,b))) (concat f)
-          format =(\ (p,(_,s)) -> (p,s))
-                     $ minimumBy (comparing (\ (_,(t,_)) -> t))  $ 
-                          map (\ (p,a) -> (p,fromJust a)) res
-      --Dbg.traceIO (show ({-(ux,uy,uz),cblkNo,cNo,clst,bplst-}res)) 
-      return $ if null res
-             then Nothing
-             else Just format
-    Nothing -> return Nothing
-  where
-    chlist = chunkList wld
-    (ux,uy,uz) = userPos usr
-    rot = (\ (a,b,c) -> (realToFrac a, realToFrac b, realToFrac c)) $ userRot usr
-    pos = (\ (a,b,c) -> (realToFrac a, realToFrac b + 1.5, realToFrac c)) $ userPos usr
-
-calcPointer :: (Num a,Floating a) => (a,a,a) -> (a,a,a) -> a
-            -> (a,a,a)
-calcPointer (x,y,z) (rx,ry,_) r =
-  ( x + r * ( -sin (d2r ry) * cos (d2r rx))
-  , y + r * sin (d2r rx)
-  , z + r * cos (d2r (ry + 180)) * cos (d2r rx))
-  where
-    d2r d = pi*d/180.0
 
 

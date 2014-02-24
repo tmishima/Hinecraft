@@ -132,4 +132,11 @@ getBlockInfo bid
              , bright = 0
              , shape = Cube
              }
+  | bid == OutOfRange = BlockInfo
+             { textureIndex = []
+             , alpha = False
+             , bcolor = []
+             , bright = 0
+             , shape = Cube
+             }
 

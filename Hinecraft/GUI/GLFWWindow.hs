@@ -46,7 +46,8 @@ initGLFW :: (Int,Int) -> IO GLFWHandle
 initGLFW (wWidth,wHight) = do
   True <- GLFW.init
   GLFW.defaultWindowHints
-  --
+  --GLFW.windowHint $ GLFW.WindowHint'ContextVersionMajor (3::Int)
+  --GLFW.windowHint $ GLFW.WindowHint'RefreshRate (60::Int)
   win <- GLFW.createWindow wWidth wHight "Hinecraft" Nothing Nothing
   exitFlg' <- newIORef False
   uiMode' <- newIORef Mode2D
@@ -68,6 +69,7 @@ initGLFW (wWidth,wHight) = do
       GLFW.setScrollCallback win' (Just (setScrollMotion mouseStat'))
     Nothing -> return ()
 
+  --GLFW.swapInterval 5
   return GLFWHandle 
     { winHdl = win
     , mouseStat = mouseStat'
