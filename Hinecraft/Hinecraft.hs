@@ -23,6 +23,7 @@ main = bracket initHinecraft exitHinecraft runHinecraft
 data RunMode = TitleMode | PlayMode | InventoryMode
   deriving (Eq,Show)
 
+
 initHinecraft :: IO (GLFWHandle, GuiResource,WorldResource)
 initHinecraft = do
   home <- getHomeDirectory
@@ -86,8 +87,8 @@ mainProcess (glfwHdl, guiRes, wldRes) rotW wld usrStat runMode'
     TitleMode -> do
       modifyIORef rotW (\ r -> let !nr = (r + (1.0 * dt))
                                in if nr > 360 then nr - 360 else nr ) 
-      (md,exflg') <- guiProcess guiRes mous -- ### 2D ###
-      return (md,exflg',Nothing,Nothing,plt)
+      let !(md,exflg') = guiProcess guiRes mous -- ### 2D ###
+      return $! (md,exflg',Nothing,Nothing,plt)
     PlayMode -> do
       u' <- readIORef usrStat
       newStat <- playProcess glfwHdl wld u' dt
@@ -107,7 +108,7 @@ mainProcess (glfwHdl, guiRes, wldRes) rotW wld usrStat runMode'
              _ -> InventoryMode
       winSize <- getWindowSize glfwHdl
       (drgSta,nPlt') <- invMouseOpe winSize mous drgMd plt
-      return (md,False,Nothing,drgSta,nPlt')
+      return $! (md,False,Nothing,drgSta,nPlt')
   when (mode' /= newMode) $ do
     writeIORef runMode' newMode
     if (newMode == InventoryMode)
@@ -336,21 +337,20 @@ playerMotion dt r0 (v,u,w) = (dx,dy,dz)
 
 
 guiProcess :: GuiResource -> (Double,Double,Bool,Bool,Bool)
-           -> IO (RunMode,Bool)
-guiProcess _   (_,_,False,_,_) = return (TitleMode, False)
-guiProcess res (x,y,True,_,_) = return (chkPlaybtn,chkExitbtn)
+           -> (RunMode,Bool)
+guiProcess _   (_,_,False,_,_) = (TitleMode, False)
+guiProcess res (x,y,True,_,_) = (chkPlaybtn,chkExitbtn)
   where
     plybtnPosOrgn = widgetPlayBtnPos res
     plybtnSize = widgetPlayBtnSiz res
     extbtnPosOrgn = widgetExitBtnPos res
     extbtnSize = widgetExitBtnSiz res
-    exchg (a,b) = (realToFrac a, realToFrac b)
-    chkRectIn (xo,yo) (w,h) =
-       {- Dbg.trace ("2D clk = " ++ (show (x,y,xo,yo,w,h))) $ -}
+    f2d (a,b) = (realToFrac a, realToFrac b) -- GLfloat to Double
+    chkBtnClk (xo,yo) (w,h) =
        xo < x && x < (xo + w) && yo < y && y < (yo + h) 
-    chkPlaybtn = if chkRectIn (exchg plybtnPosOrgn) (exchg plybtnSize)
+    chkPlaybtn = if chkBtnClk (f2d plybtnPosOrgn) (f2d plybtnSize)
       then PlayMode else TitleMode 
-    chkExitbtn = chkRectIn (exchg extbtnPosOrgn) (exchg extbtnSize)
+    chkExitbtn = chkBtnClk (f2d extbtnPosOrgn) (f2d extbtnSize)
 
 drawView :: ( GLFWHandle, GuiResource, WorldResource)
          -> IORef Double -> IORef UserStatus -> IORef RunMode

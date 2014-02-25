@@ -1,8 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 module Hinecraft.Render.View
-  ( GuiResource (..)
-  , ViewMode (..)
-  , WorldResource (..)
+  ( ViewMode (..)
   , UserStatus (..)
   , WorldDispList
   , loadGuiResource
@@ -91,7 +89,6 @@ drawPlay (w,h) guiRes wldRes usrStat worldDispList pos plt
     translate $ Vector3 (-ux :: GLfloat) (-uy - 1.5) (-uz) 
 
     -- Cursol 選択された面を強調
-    --Dbg.traceIO $ show (pos, uy)
     renderCurFace  pos
 
     color $ Color3 0.0 1.0 (0.0::GLfloat)
@@ -136,34 +133,33 @@ renderHUD (w,h) guiRes wldRes pIndex invSw plt dragDrop =
     if invSw
       then renderInventory (w,h) guiRes wldRes plt dragDrop -- Inventry
       else preservingMatrix $ do -- Scope
-        let !times = 2.5
-            !(pltW,pltH) = (15 * times, 15 * times)
+        let !(pltW,pltH) = (15 * rate, 15 * rate)
             !(pltOx,pltOy) = ((w' - pltW) / 2, (h' - pltH) / 2)
         drawBackPlane (pltOx,pltOy) (pltW,pltH) (Just widTex')
                       (240/256,0) (15/256,15/256) (1.0,1.0,1.0,1.0)   
 
     preservingMatrix $ do
       -- Pallet
-      let !times = 2.5
-          !(pltW,pltH) = (182 * times, 22 * times)
+      let !(pltW,pltH) = (182 * rate, 22 * rate)
           !(pltOx,pltOy) = ((w' - pltW) / 2, 2)
-          !curXpos = pltOx + times + 20 * times * fromIntegral pIndex 
+          !curXpos = pltOx + rate + 20 * rate * fromIntegral pIndex 
       drawBackPlane (pltOx,pltOy) (pltW,pltH) (Just widTex')
                     (0,0) (182/256,22/256) (1.0,1.0,1.0,1.0)
-      drawBackPlane (curXpos,times) (20 * times, 20 * times)
+      drawBackPlane (curXpos,rate) (20 * rate, 20 * rate)
                     (Just widTex')
                     (1/256,24/256) (22/256,22/256) (1.0,1.0,1.0,1.0)
 
-      mapM_ (\ (p,ib) -> drawIcon wldRes (16 * times)
-        (pltOx + times + (20 * times / 2) + (20 * times * p) ,12) ib)
+      mapM_ (\ (p,ib) -> drawIcon wldRes (16 * rate)
+        (pltOx + rate + (20 * rate / 2) + (20 * rate * p) ,12) ib)
         $ zip [0.0,1.0 .. ] plt
 
     glPopAttrib 
     depthMask $= Enabled
     glEnable gl_DEPTH_TEST
   where
-    (w',h') = (fromIntegral w, fromIntegral h)
-    widTex' = widgetsTexture guiRes
+    !rate = 2.5
+    !(w',h') = (fromIntegral w, fromIntegral h)
+    !widTex' = widgetsTexture guiRes
 
 renderInventory :: (Int,Int) -> GuiResource -> WorldResource
                 -> [BlockID] -> Maybe (VrtxPos2D,BlockID) -> IO ()
@@ -330,7 +326,7 @@ drawTitle (w,h) res rw = do
     glDisable gl_DEPTH_TEST
     depthMask $= Disabled
 
-    putTextLine font' (Just (1,1,1)) (Just 20) (10,10) "Hinecraft 0.0.1" 
+    putTextLine font' (Just (1,1,1)) (Just 20) (10,10) "Hinecraft 0.0.2" 
 
     -- White
     drawBackPlane (0,0) (fromIntegral w, fromIntegral h) Nothing
