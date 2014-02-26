@@ -311,13 +311,13 @@ genSufDispList wldRes bsf dsp = case dsp of
 
 -- 
 
-drawTitle :: (Int,Int) -> GuiResource -> GLfloat -> IO ()
-drawTitle (w,h) res rw = do
+drawTitle :: (Int,Int) -> GuiResource -> TitleModeState -> IO ()
+drawTitle (w,h) res stat = do
   preservingMatrix $ do
     setPerspective V3DTitleMode w h
     scale 10.0 10.0 (10.0::GLfloat)
     rotate 10 $ Vector3 1.0 0.0 (0::GLfloat)
-    rotate rw $ Vector3 0.0 1.0 (0::GLfloat)
+    rotate (realToFrac $ rotW stat) $ Vector3 0.0 1.0 (0::GLfloat)
     drawBackGroundBox bkgTex
 
   preservingMatrix $ do
@@ -339,17 +339,20 @@ drawTitle (w,h) res rw = do
 
 
     -- Botton 
-
-    drawBackPlane (xPlybtnPos, yPlybtnPos) (wPlybntSiz,hPlybtnSiz) (Just widTex)
-                  (0,0.258) (0.78,0.078) (1.0,1.0,1.0,1.0)
+    let vm = slcBtnTexCrd $ isModeChgBtnEntr stat
+    drawBackPlane (xPlybtnPos, yPlybtnPos) (wPlybntSiz,hPlybtnSiz)
+                  (Just widTex)
+                  (0,vm) (200/256,20/256) (1.0,1.0,1.0,1.0)
     putTextLine font' (Just (1,1,1)) (Just 30)
       (590,768 - 410 + 20) "Single Player" 
     -- 
-    drawBackPlane (xExtbtnPos, yExtbtnPos) (wExtbtnSiz / 2, hExtbtnSiz) (Just widTex)
-                  (0,0.258) (0.20,0.078) (1.0,1.0,1.0,1.0)
+    let ve = slcBtnTexCrd $ isExitBtnEntr stat
+    drawBackPlane (xExtbtnPos, yExtbtnPos) (wExtbtnSiz / 2, hExtbtnSiz)
+                  (Just widTex)
+                  (0,ve) (0.20,0.078) (1.0,1.0,1.0,1.0)
     drawBackPlane (xExtbtnPos + wExtbtnSiz / 2, yExtbtnPos) (wExtbtnSiz / 2, hExtbtnSiz)
                   (Just widTex)
-                  (0.58,0.258) (0.20,0.078) (1.0,1.0,1.0,1.0)
+                  (0.58,ve) (0.20,0.078) (1.0,1.0,1.0,1.0)
     putTextLine font' (Just (1,1,1)) (Just 30) (780,768 - 614 + 20) "Quit game" 
 
     glPopAttrib 
@@ -357,6 +360,7 @@ drawTitle (w,h) res rw = do
     glEnable gl_DEPTH_TEST
 
   where
+    slcBtnTexCrd sw = if sw then 86 / 256 else 66 / 256
     bkgTex = backgroundBoxTexture res
     titleTex = backgroundTitleTexture res
     widTex = widgetsTexture res
@@ -386,6 +390,8 @@ loadWorldResouce home = do
     }
   where
     blkPng = home ++ "/.Hinecraft/terrain.png"
+    --skyPng = home ++ "/.Hinecraft/mcpatcher/sky/world0/cloud1.png"
+    --starPng = home ++ "/.Hinecraft/mcpatcher/sky/world0/star1.png"
 
 loadGuiResource :: FilePath -> IO GuiResource
 loadGuiResource home = do
@@ -405,14 +411,20 @@ loadGuiResource home = do
     , backgroundTitleTexture = ttex'
     , widgetsTexture = wtex'
     , font = font'
-    , widgetPlayBtnPos = (365, 768 - 410)
-    , widgetPlayBtnSiz = (640, 62.5)
-    , widgetExitBtnPos = (690, 768 - 614)
-    , widgetExitBtnSiz = (155 * 2, 62.5)
+    , widgetPlayBtnPos = ((1366 - texBtnWd * rate) * 0.5 , 768 - 410)
+    , widgetPlayBtnSiz = (texBtnWd * rate, texBtnHt * rate)
+    , widgetExitBtnPos = ( 1366 - (1366 - texBtnWd * rate) * 0.5
+                           - texBtnWd * hfrate
+                         , 768 - 614)
+    , widgetExitBtnSiz = (texBtnWd * hfrate , texBtnHt * rate)
     , invDlgTexture = itex'
     , invDlgTbTexture = ibtex'
     }
   where
+    rate = 3.0
+    hfrate = 1.4
+    texBtnWd = 200
+    texBtnHt = 20
     bkgndPng0 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_0.png"
     bkgndPng1 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_1.png"
     bkgndPng2 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_2.png"

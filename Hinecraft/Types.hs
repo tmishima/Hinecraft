@@ -6,6 +6,8 @@ data BlockID = AirBlockID | StoneBlockID | DirtBlockID
              | PlankHalfBlockID | CobbleStoneBlockID 
              | GravelBlockID | SandBlockID | BrickBlockID
              | LeavesBlockID | RedWoolBlockID | BlueWoolBlockID
+             | Pumpkin | Melon | Chest | Water | GlassPane 
+             | Buttons | PressurePlates | WoodenDoor
              | OutOfRange
   deriving (Eq,Show,Ord)
 
@@ -20,7 +22,8 @@ blockCatalog = [ StoneBlockID, DirtBlockID, GlassBlockID
                , PlankBlockID, StonebrickBlockID, PlankHalfBlockID
                , CobbleStoneBlockID, GravelBlockID, SandBlockID
                , BrickBlockID, LeavesBlockID, RedWoolBlockID
-               , BlueWoolBlockID]
+               , BlueWoolBlockID, Pumpkin, Melon
+               ]
 
 data InventoryParam = InventoryParam
   { dlgTexturePath :: FilePath
@@ -58,6 +61,13 @@ data UserStatus = UserStatus
   , userRot :: Rot' 
   , palletIndex :: Int
   , userVel :: (Double,Double,Double)
+  }
+  deriving (Eq,Show)
+
+data TitleModeState = TitleModeState
+  { rotW :: Double 
+  , isModeChgBtnEntr :: Bool 
+  , isExitBtnEntr :: Bool
   }
   deriving (Eq,Show)
 

@@ -132,6 +132,27 @@ getBlockInfo bid
              , bright = 0
              , shape = Cube
              }
+-- Top | Bottom | Right | Left | Front | Back
+  | bid == Pumpkin = BlockInfo
+             { textureIndex = [(6,6),(6,6),(6,7),(6,7),(7,7),(6,7)]
+             , alpha = False
+             , bcolor = replicate 6 (0.5,0.5,0.5)
+             , bright = 0
+             , shape = Cube
+             }
+  | bid == Melon = BlockInfo
+             { textureIndex = [(9,8),(9,8),(8,8),(8,8),(8,8),(8,8)]
+             , alpha = False
+             , bcolor = replicate 6 (0.5,0.5,0.5)
+             , bright = 0
+             , shape = Cube
+             }
+  -- | bid == PressurePlates
+  -- | bid == Chest
+  -- | bid == Water
+  -- | bid == GlassPane 
+  -- | bid == Buttons
+  -- | bid == WoodenDoor
   | bid == OutOfRange = BlockInfo
              { textureIndex = []
              , alpha = False

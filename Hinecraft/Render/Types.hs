@@ -24,6 +24,8 @@ data GuiResource = GuiResource
 
 data WorldResource = WorldResource
   { blockTexture :: GLuint
+  --, skyTexture :: GLuint
+  --, starTexture :: GLuint
   }
   deriving (Eq,Show)
 
