@@ -69,9 +69,9 @@ renderCurFace objPos =
 drawPlay :: (Int,Int) -> GuiResource -> WorldResource
          -> UserStatus -> WorldDispList
          -> Maybe (WorldIndex,Surface)
-         -> [BlockID] -> Bool -> Maybe (VrtxPos2D,BlockID)
+         -> [BlockID] -> Bool -> DragDropState 
          -> IO ()
-drawPlay (w,h) guiRes wldRes usrStat worldDispList pos plt
+drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
          invSw dragDrop = do
   -- World
   preservingMatrix $ do
@@ -100,9 +100,9 @@ drawPlay (w,h) guiRes wldRes usrStat worldDispList pos plt
 
   where
     d2f (a,b,c) = (realToFrac a, realToFrac b, realToFrac c)
-    (ux,uy,uz) = d2f $ userPos usrStat 
-    (urx,ury,_) = d2f $ userRot usrStat 
-    pIndex =  palletIndex usrStat
+    (ux,uy,uz) = d2f $ userPos usrStat'
+    (urx,ury,_) = d2f $ userRot usrStat'
+    pIndex =  palletIndex usrStat'
     drawBackGroundBox' = preservingMatrix $ do
       color $ Color4 (180/255) (226/255) (255/255) (1.0::GLfloat)
       texture Texture2D $= Disabled
@@ -121,7 +121,7 @@ drawPlay (w,h) guiRes wldRes usrStat worldDispList pos plt
       forM_ ndlst $ \ ((x', y', z'),_) -> vertex (Vertex3 x' y' z')
 
 renderHUD :: (Int,Int) -> GuiResource ->  WorldResource
-          -> Int -> Bool -> [BlockID] -> Maybe (VrtxPos2D,BlockID)
+          -> Int -> Bool -> [BlockID] -> DragDropState
           -> IO ()
 renderHUD (w,h) guiRes wldRes pIndex invSw plt dragDrop = 
   preservingMatrix $ do
@@ -162,7 +162,7 @@ renderHUD (w,h) guiRes wldRes pIndex invSw plt dragDrop =
     !widTex' = widgetsTexture guiRes
 
 renderInventory :: (Int,Int) -> GuiResource -> WorldResource
-                -> [BlockID] -> Maybe (VrtxPos2D,BlockID) -> IO ()
+                -> [BlockID] -> DragDropState -> IO ()
 renderInventory (w,h) guiRes wldRes plt dragDrop = preservingMatrix $ do
   -- Back
   drawBackPlane (0,0) (fromIntegral w, fromIntegral h) Nothing
@@ -191,7 +191,7 @@ renderInventory (w,h) guiRes wldRes plt dragDrop = preservingMatrix $ do
   -- Drag & Drop
   case dragDrop of
     Just ((x,y),bid) -> drawIcon wldRes (realToFrac $ icSz * rate) 
-                          (x, y - realToFrac (rate * icSz * 0.5))
+                          (realToFrac x,realToFrac $ y - (rate * icSz * 0.5))
                           bid  
     Nothing -> return ()
   where

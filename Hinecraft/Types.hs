@@ -68,8 +68,21 @@ data TitleModeState = TitleModeState
   { rotW :: Double 
   , isModeChgBtnEntr :: Bool 
   , isExitBtnEntr :: Bool
+  , isQuit :: Bool
   }
   deriving (Eq,Show)
+
+type DragDropMode = Maybe BlockID
+type DragDropState = Maybe ((Double,Double),BlockID)
+
+data PlayModeState = PlayModeState
+  { usrStat :: UserStatus
+  , drgdrpMd :: DragDropMode
+  , drgSta ::  DragDropState
+  , curPos :: Maybe (WorldIndex,Surface)
+  , pallet :: [BlockID]
+  }
+  deriving (Show)
 
 type WorldIndex = (Int,Int,Int)
 type Pos' = (Double,Double,Double)

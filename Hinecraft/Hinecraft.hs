@@ -43,59 +43,62 @@ exitHinecraft (glfwHdl,_,_) = do
 
 runHinecraft :: (GLFWHandle, GuiResource, WorldResource) -> IO ()
 runHinecraft resouce@(glfwHdl,guiRes,wldRes) = do
-  let tmstat = TitleModeState (0::Double) False False
+  let tmstat = TitleModeState (0::Double) False False False
+      plstat = PlayModeState
+        { usrStat = UserStatus
+                     { userPos = (0.0,16 * 4 + 1,0.0)
+                     , userRot = (0.0,0.0,0.0) 
+                     , palletIndex = 0
+                     , userVel = (0.0,0.0,0.0)
+                     }
+        , drgdrpMd = Nothing
+        , drgSta = Nothing
+        , curPos = Nothing
+        , pallet = replicate 9 AirBlockID
+        }
   wld <- genWorldData 
   sfl <- genSurfaceList wld
   dsps <- genWorldDispList wldRes sfl 
-  drgMd <- newIORef Nothing
-  useStat <- newIORef UserStatus
-      { userPos = (0.0,16 * 4 + 1,0.0)
-      , userRot = (0.0,0.0,0.0) 
-      , palletIndex = 0
-      , userVel = (0.0,0.0,0.0)
-      } 
-  plt' <- newIORef $ replicate 9 AirBlockID
   _ <- getDeltTime glfwHdl
-  mainLoop tmstat useStat TitleMode drgMd plt' (wld,sfl,dsps) 
+  mainLoop tmstat plstat TitleMode (wld,sfl,dsps) 
   where
-    mainLoop tmstat' u' runMode dg' plt' (w',f',d') = do
+    mainLoop tmstat' plstat' runMode (w',f',d') = do
       pollGLFW
       --threadDelay 10000
       dt <- getDeltTime glfwHdl
       exitflg' <- getExitReqGLFW glfwHdl
-      plt <- readIORef plt'
-      (exitkey',pos,drgsta,nPlt,ntmstat',runMode') <- mainProcess
-                   resouce tmstat' w' u' runMode f' d' dg' plt dt
-      u'' <- readIORef u'
-      drawView (glfwHdl,guiRes,wldRes) ntmstat' u'' runMode' d' pos drgsta nPlt 
-      writeIORef plt' nPlt
-      unless (exitflg' || exitkey') $ mainLoop ntmstat' u' runMode' dg' plt' (w',f',d')
+      (ntmstat',nplstat',runMode') <- mainProcess
+                   resouce tmstat' plstat' w' runMode f' d' dt
+      drawView (glfwHdl,guiRes,wldRes) ntmstat' nplstat' runMode' d' 
+      unless (exitflg' || (isQuit ntmstat'))
+        $ mainLoop ntmstat' nplstat' runMode' (w',f',d')
 
 mainProcess :: (GLFWHandle, GuiResource, WorldResource) -> TitleModeState 
-            -> WorldData -> IORef UserStatus -> RunMode
-            -> SurfaceList -> WorldDispList -> DragDropMode -> [BlockID]
+            -> PlayModeState ->  WorldData ->RunMode
+            -> SurfaceList -> WorldDispList 
             -> Double
-            -> IO (Bool,Maybe (WorldIndex,Surface), DragDropState,[BlockID],TitleModeState, RunMode)
-mainProcess (glfwHdl, guiRes, wldRes) tmstat wld usrStat runMode
-            sufList dsps drgMd plt dt = do
+            -> IO (TitleModeState, PlayModeState, RunMode)
+mainProcess (glfwHdl, guiRes, wldRes) tmstat plstat wld  runMode
+            sufList dsps dt = do
   -- Common User input
   mous <- getButtonClick glfwHdl
   syskey <- getSystemKeyOpe glfwHdl
   -- 
-  (newMode, extflg, pos,drgsta,nPlt,rotW') <- case runMode of
+  (newMode,newPmstat,newTmstat) <- case runMode of
     TitleMode -> do
       let !((md,cEt),(exflg',eEt)) = guiProcess guiRes mous -- ### 2D ###
           !r' = (rotW tmstat) + (1.0 * dt)
-          ntstat = TitleModeState
+          !ntstat = TitleModeState
             { rotW = if r' > 360 then r' - 360 else r'
             , isModeChgBtnEntr = cEt
             , isExitBtnEntr = eEt
+            , isQuit = exflg'
             }
-      return $! (md,exflg',Nothing,Nothing,plt,ntstat)
+      return $! (md,plstat,ntstat)
     PlayMode -> do
-      u' <- readIORef usrStat
+      let !u' = usrStat plstat
+          !plt = pallet plstat
       newStat <- playProcess glfwHdl wld u' dt
-      writeIORef usrStat newStat
       pos <- calcCursorPos wld sufList u'
       mouseOpe wld newStat mous pos plt
         (updateDisplist wldRes wld dsps sufList)
@@ -103,15 +106,31 @@ mainProcess (glfwHdl, guiRes, wldRes) tmstat wld usrStat runMode
              (True,_) -> TitleMode
              (False,True) -> InventoryMode
              _ ->  PlayMode
-      return $! (md,False,pos,Nothing,plt,tmstat)
+          !nplstat' = PlayModeState
+                       { usrStat = newStat
+                       , drgdrpMd = Nothing
+                       , drgSta = Nothing
+                       , curPos = pos
+                       , pallet = plt
+                       }
+      return $! (md,nplstat',tmstat)
     InventoryMode -> do
+      winSize <- getWindowSize glfwHdl
       let !md = case syskey of
              (True,_) -> TitleMode
              (False,True) -> PlayMode
              _ -> InventoryMode
-      winSize <- getWindowSize glfwHdl
-      (drgSta,nPlt') <- invMouseOpe winSize mous drgMd plt
-      return $! (md,False,Nothing,drgSta,nPlt',tmstat)
+          !drgMd = drgdrpMd plstat
+          !plt = pallet plstat
+          !(drgSta',drgMd',nPlt') = invMouseOpe winSize mous drgMd plt
+          !nplstat' = PlayModeState
+                       { usrStat = usrStat plstat
+                       , drgdrpMd = drgMd'
+                       , drgSta = drgSta'
+                       , curPos = Nothing
+                       , pallet = nPlt'
+                       }
+      return $! (md,nplstat',tmstat)
   when (runMode /= newMode) $ do
     if (newMode == InventoryMode)
       then setMouseBtnMode glfwHdl StateMode
@@ -119,43 +138,38 @@ mainProcess (glfwHdl, guiRes, wldRes) tmstat wld usrStat runMode
     setUIMode glfwHdl $ if newMode == PlayMode
       then Mode3D
       else Mode2D
-                                              
-  return (extflg,pos,drgsta,nPlt,rotW',newMode)
+  return $! (newTmstat,newPmstat,newMode)
 
-type DragDropMode = IORef (Maybe BlockID)
-type DragDropState = Maybe (VrtxPos2D,BlockID)
 
 invMouseOpe :: (Int,Int) -> (Double,Double,Bool,Bool,Bool) -> DragDropMode
-            -> [BlockID] -> IO (DragDropState, [BlockID])
-invMouseOpe (w,h) (x,y, btn, _, _) drgMd plt = do
-  readIORef drgMd >>=  \ md ->
-    case md of
+            -> [BlockID] -> (DragDropState, DragDropMode, [BlockID])
+invMouseOpe (w,h) (x,y, btn, _, _) drgMd plt = 
+    case drgMd of
       Just bid -> if btn
-                  then return (Just ((x',y'),bid), plt)
-                  else do -- Drop
-                    writeIORef drgMd Nothing
-                    return ( Nothing
-                           , case getInventoryIndex (w,h) (x,y) of
+                  then (Just ((x',y'),bid), drgMd, plt)
+                  else  -- Drop
+                    ( Nothing , Nothing
+                    , case getInventoryIndex (w,h) (x,y) of
                                Just (i,5) -> newPallet i bid
                                Nothing -> plt
                                _ -> plt )
       Nothing -> if btn 
-                 then do -- Drag
-                   let !bid = case getInventoryIndex (w,h) (x,y) of
-                               Just (i,j) -> let !idx = j * 9 + i
-                                 in if length blockCatalog > idx
-                                   then Just $ blockCatalog !! idx
-                                   else Nothing
-                               Nothing -> Nothing 
-                   writeIORef drgMd bid
-                   return ( case bid of
-                              Just i -> Just ((x',y'),i)
-                              Nothing -> Nothing
-                          , plt)
-                 else return (Nothing, plt)
+                 then  -- Drag
+                   ( case bid' of
+                       Just i -> Just ((x',y'),i)
+                       Nothing -> Nothing
+                   , bid'
+                   , plt)
+                 else (Nothing,drgMd, plt)
   where
     (x',y') = (realToFrac x, realToFrac y)
     newPallet i b = (take i plt) ++ (b : (drop (i + 1) plt))
+    bid' = case getInventoryIndex (w,h) (x,y) of
+             Just (i,j) -> let !idx = j * 9 + i
+                           in if length blockCatalog > idx
+                                then Just $ blockCatalog !! idx
+                                else Nothing
+             Nothing -> Nothing
 
 getInventoryIndex :: (Int,Int) -> (Double,Double) -> Maybe (Int,Int)
 getInventoryIndex (w,h) (x,y) = case (flt (> x) xbordLst , yIdx ) of
@@ -223,17 +237,17 @@ mouseOpe wld ustat (_,_,lb,rb,_) (Just ((cx,cy,cz),fpos)) plt callback
 
 playProcess :: GLFWHandle -> WorldData -> UserStatus -> Double
             -> IO UserStatus
-playProcess glfwHdl wld usrStat dt = do
+playProcess glfwHdl wld usrStat' dt = do
   vm <- getCursorMotion glfwHdl
   sm <- getScrollMotion glfwHdl 
   mm <- getMoveKeyOpe glfwHdl
-  calcPlayerMotion wld usrStat vm mm sm dt
+  calcPlayerMotion wld usrStat' vm mm sm dt
 
 calcPlayerMotion :: WorldData -> UserStatus
                  -> (Double,Double) -> (Int,Int,Int,Int,Int) -> (Int,Int)
                  -> Double
                  -> IO UserStatus
-calcPlayerMotion wld usrStat (mx,my) (f,b,l,r,jmp) (_,sy) dt = do
+calcPlayerMotion wld usrStat' (mx,my) (f,b,l,r,jmp) (_,sy) dt = do
   let !(nrx,nry,nrz) = playerView dt ( realToFrac orx
                                     , realToFrac ory
                                     , realToFrac orz)
@@ -242,14 +256,14 @@ calcPlayerMotion wld usrStat (mx,my) (f,b,l,r,jmp) (_,sy) dt = do
                                        , fromIntegral (r - l)*4
                                        , w)                
      
-      !idx = (palletIndex usrStat) - sy 
+      !idx = (palletIndex usrStat') - sy 
       !w = if jmp == 2
             then 5
             else wo - (9.8 * dt)
   (nx,ny,nz) <- movePlayer (ox,oy,oz) (realToFrac dx
                                       ,realToFrac dy
                                       ,realToFrac dz)
-  return UserStatus
+  return $! UserStatus
     { userPos = ( nx
                 , ny 
                 , nz)
@@ -258,9 +272,9 @@ calcPlayerMotion wld usrStat (mx,my) (f,b,l,r,jmp) (_,sy) dt = do
     , userVel = (0.0,w,0.0)
     }
   where
-    (ox,oy,oz) = userPos usrStat
-    (orx,ory,orz) = userRot usrStat 
-    (_,wo,_) = userVel usrStat
+    (ox,oy,oz) = userPos usrStat'
+    (orx,ory,orz) = userRot usrStat'
+    (_,wo,_) = userVel usrStat'
     movePlayer (ox',oy',oz') (dx,dy,dz) = do
       y' <- calYpos wld (ox',oy',oz') dy'
       y'' <- calYpos wld (tx,y'+1,tz) (-1)
@@ -356,22 +370,25 @@ guiProcess res (x,y,btn1,_,_) = (chkModeChg,chkExit)
     chkExit = ( isExtBtnEntr && btn1 , isExtBtnEntr) 
 
 drawView :: ( GLFWHandle, GuiResource, WorldResource)
-         -> TitleModeState -> UserStatus -> RunMode
-         -> WorldDispList -> Maybe (WorldIndex,Surface)
-         -> DragDropState -> [BlockID]
+         -> TitleModeState -> PlayModeState -> RunMode
+         -> WorldDispList 
          -> IO ()
-drawView (glfwHdl, guiRes, wldRes) tmstat usrStat runMode'
-         worldDispList pos drgSta plt = do
+drawView (glfwHdl, guiRes, wldRes) tmstat plstat runMode'
+         worldDispList = do
   winSize <- getWindowSize glfwHdl
   updateDisplay $
     if runMode' == TitleMode
-      then do -- 2D
+      then -- 2D
         drawTitle winSize guiRes tmstat
-      else do 
-        let invSw = runMode' == InventoryMode
-        drawPlay winSize guiRes wldRes usrStat worldDispList pos plt
-                 invSw drgSta
+      else  
+        drawPlay winSize guiRes wldRes usrStat' worldDispList pos plt
+                 (runMode' == InventoryMode) drgSta'
   swapBuff glfwHdl
+  where
+    usrStat' = usrStat plstat
+    pos = curPos plstat
+    drgSta' = drgSta plstat
+    plt = pallet plstat
 --
 
 genWorldDispList :: WorldResource -> SurfaceList -> IO WorldDispList
