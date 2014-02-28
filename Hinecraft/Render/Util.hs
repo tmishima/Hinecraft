@@ -168,7 +168,7 @@ putTextLine ft cl sz (x,y) str = preservingMatrix $ do
   Ft.renderFont ft str Ft.Front
 
 drawIcon :: WorldResource -> GLfloat -> (GLfloat,GLfloat)
-         -> BlockID -> IO ()
+         -> BlockIDNum -> IO ()
 drawIcon wldRes icSz (ox,oy) bID | null texIdx = return ()
                                  | otherwise = preservingMatrix $ do
   texture Texture2D $= Enabled 

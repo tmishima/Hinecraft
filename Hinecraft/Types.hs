@@ -1,29 +1,11 @@
 module Hinecraft.Types where
 
-data BlockID = AirBlockID | StoneBlockID | DirtBlockID
-             | GlassBlockID | WoodBlockID | GrassBlockID
-             | GlowBlockID | PlankBlockID | StonebrickBlockID
-             | PlankHalfBlockID | CobbleStoneBlockID 
-             | GravelBlockID | SandBlockID | BrickBlockID
-             | LeavesBlockID | RedWoolBlockID | BlueWoolBlockID
-             | Pumpkin | Melon | Chest | Water | GlassPane 
-             | Buttons | PressurePlates | WoodenDoor
-             | OutOfRange
-  deriving (Eq,Show,Ord)
+type BlockIDNum = Int
 
 data Shape = Cube | Half Bool | Stairs
   deriving (Eq,Show,Ord)
 
-type BlockCatalog = [BlockID]
-
-blockCatalog :: BlockCatalog
-blockCatalog = [ StoneBlockID, DirtBlockID, GlassBlockID
-               , WoodBlockID, GrassBlockID, GlowBlockID
-               , PlankBlockID, StonebrickBlockID, PlankHalfBlockID
-               , CobbleStoneBlockID, GravelBlockID, SandBlockID
-               , BrickBlockID, LeavesBlockID, RedWoolBlockID
-               , BlueWoolBlockID, Pumpkin, Melon
-               ]
+type BlockCatalog = [BlockIDNum]
 
 data InventoryParam = InventoryParam
   { dlgTexturePath :: FilePath
@@ -72,15 +54,15 @@ data TitleModeState = TitleModeState
   }
   deriving (Eq,Show)
 
-type DragDropMode = Maybe BlockID
-type DragDropState = Maybe ((Double,Double),BlockID)
+type DragDropMode = Maybe BlockIDNum
+type DragDropState = Maybe ((Double,Double),BlockIDNum)
 
 data PlayModeState = PlayModeState
   { usrStat :: UserStatus
   , drgdrpMd :: DragDropMode
   , drgSta ::  DragDropState
   , curPos :: Maybe (WorldIndex,Surface)
-  , pallet :: [BlockID]
+  , pallet :: [BlockIDNum]
   }
   deriving (Show)
 
@@ -89,7 +71,7 @@ type Pos' = (Double,Double,Double)
 type Rot' = Pos'
 type Vel' = Pos'
 
-type SurfacePos = [(WorldIndex,BlockID,[(Surface,Bright)])]
+type SurfacePos = [(WorldIndex,BlockIDNum,[(Surface,Bright)])]
 data Surface = STop | SBottom | SRight | SLeft | SFront | SBack 
   deriving (Ord,Show,Eq)
 

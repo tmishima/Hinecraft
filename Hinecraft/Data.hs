@@ -7,34 +7,34 @@ module Hinecraft.Data
   , getSurface
   , genSurfaceList
   , setSurfaceList
-  , getSunLightEffect
+  --, getSunLightEffect
   , getChunk
   , genWorldData
   , getBlockID
   , setBlockID
   , calcReGenArea
-  , calcSunLight
-  , initSunLight
+  --, calcSunLight
+  --, initSunLight
   , calcCursorPos
   ) where
 
---import qualified Data.Vector.Storable as DVS
+import qualified Data.Vector.Storable as DVS
 import Data.Maybe ( fromJust , catMaybes ,isJust, mapMaybe )
 import Data.List
 import Data.Ord
 import Data.Tuple
-import Data.Array.IO
-import Control.Monad ( replicateM, forM {- unless,when, void,filterM-} )
-import Control.Applicative
+import Control.Monad (  forM {- unless,when, void,filterM replicateM,-} )
+--import Control.Applicative
 import Hinecraft.Types
 import Hinecraft.Model
 import Hinecraft.Util
 import Hinecraft.Render.Util
 --import Debug.Trace as Dbg
---tem :: DVS.Vector BlockID
---tem = DVS.replicate 10 AirBlockID
 
-type SurfaceList = [(ChunkNo, [(BlockNo,SurfacePos)])]
+--tem :: (Int,Int)
+--tem = DVS.replicate 10 0
+
+type SurfaceList = [(ChunkNo, [(BlockIDNum,SurfacePos)])]
 
 data ChunkParam = ChunkParam
   { blockSize :: Int
@@ -53,8 +53,8 @@ data WorldData = WorldData
 
 data Chunk = Chunk
   { origin :: (Int,Int)
-  , local :: [IOArray Int BlockID]
-  , sunLight :: IOUArray Int Int
+  , local :: [DVS.Vector Int]
+  -- , sunLight :: IOUArray Int Int
   }
 
 -- | 
@@ -130,35 +130,30 @@ calcPointer (x,y,z) (rx,ry,_) r =
 genSurfaceList :: WorldData -> IO SurfaceList
 genSurfaceList wld = mapM (\ (cNo,_) -> do
     spos <- forM [0 .. bkNo] (\ b -> do
-      fs <- getSurface wld (cNo,b)
-      return (b,fs)) 
+      return (b,getSurface wld (cNo,b))) 
     return (cNo,spos)) chl 
   where
     chl = chunkList wld 
     bkNo = blockNum chunkParam - 1
 
 setSurfaceList :: SurfaceList -> (Int,Int) -> SurfacePos -> SurfaceList
-setSurfaceList sufList (cNo,bNo) sfs = foldl repC [] sufList
+setSurfaceList sufList (cNo,bNo) sfs = foldr repC [] sufList
   where
-    repC lst (cNo',blks) = if cNo' == cNo
+    repC (cNo',blks) lst = if cNo' == cNo
                             then (cNo',repB blks):lst
                             else (cNo',blks):lst 
-    repB = foldl (\ lst (i,b) -> if i == bNo
+    repB = foldr (\ (i,b) lst -> if i == bNo
                                    then (i,sfs):lst
                                    else (i,b):lst)
                  []
 
-getSurface :: WorldData -> (ChunkNo,Int) 
-           -> IO SurfacePos 
-getSurface wld (chNo,bkNo) = do
-  let !blkpos = getCompliePosList wld (chNo,bkNo)
-  blks <- filter (\ (_,bid) -> bid /= AirBlockID ) . zip blkpos
-          <$> mapM (getBlockID wld) blkpos
-  blks' <- forM blks (\ (pos,bid) -> do
-    fs <- catMaybes <$> getSuf pos 
-    return (pos,bid,fs)) 
-  return $! filter (\ (_,_,fs) -> not $ null fs) blks'
+getSurface :: WorldData -> (ChunkNo,Int) -> SurfacePos 
+getSurface wld (chNo,bkNo) = filter (\ (_,_,fs) -> not $ null fs) blks'
   where
+    blkpos = getCompliePosList wld (chNo,bkNo)
+    blks = filter (\ (_,bid) -> bid /= airBlockID ) . zip blkpos
+          $ catMaybes $ map (getBlockID wld) blkpos
+    blks' = map (\ (pos,bid) -> (pos,bid,catMaybes $ getSuf pos)) blks
     getAroundIndex (x',y',z') = [ (SRight,(x' + 1, y', z'))
                                 , (SLeft, (x' - 1, y', z'))
                                 , (STop, (x', y' + 1, z'))
@@ -166,14 +161,16 @@ getSurface wld (chNo,bkNo) = do
                                 , (SBack,(x', y', z' + 1))
                                 , (SFront,(x', y', z' - 1))
                                 ]
-    getSuf (x',y',z') = forM (getAroundIndex (x',y',z'))
-      $ \ (f,pos) -> do
-        b <- getBlockID wld pos
-        sun <- getSunLightEffect wld pos 
-        return $! if b == AirBlockID || alpha (getBlockInfo b) 
-           then Just (f,if sun then 16 else 5) 
-           else Nothing 
-
+    getSuf (x',y',z') = map 
+      (\ (f,pos) -> 
+        case getBlockID wld pos of
+          Just b -> if b == airBlockID || alpha (getBlockInfo b)
+            then Just (f,16) 
+            else Nothing 
+          Nothing -> Nothing) (getAroundIndex (x',y',z'))
+        --sun <- getSunLightEffect wld pos 
+        --   then Just (f,if sun then 16 else 5) 
+         
 
 getCompliePosList :: WorldData -> (ChunkNo,Int) -> [WorldIndex]
 getCompliePosList wld (chNo,blkNo) = 
@@ -182,53 +179,56 @@ getCompliePosList wld (chNo,blkNo) =
            , z <- [sz .. sz + bsize - 1]]
   where
     !bsize = blockSize chunkParam
-    f a = bsize * (div a bsize)
-    !chunk = (fromJust . (lookup chNo)) $ chunkList wld
+    f a = bsize * div a bsize
+    !chunk = fromJust . lookup chNo $ chunkList wld
     !(x',z') = origin chunk 
     !y' = blkNo * bsize
     !(sx,sy,sz) = (f x', f y', f z')
 
-genWorldData :: IO WorldData
-genWorldData = do
-  cl <- return . zip [0 ..]
-    =<< mapM (\ lst -> do
-            c <- genChunk lst
-            initSunLight c
-            return c)
-          [ (x,z) | x <- [-16,0 .. 16], z <- [-16,0 .. 16] ]
+genWorldData :: WorldData
+genWorldData = WorldData 
+    { chunkList = zip [0 ..] $ map genChunk 
+        [ (x,z) | x <- [-16,0 .. 16], z <- [-16,0 .. 16] ]
         --  [ (x,z) | x <- [-32,-16 .. 32], z <- [-32,-16 .. 32] ]
         --  [ (x,z) | x <- [-64,-48 .. 48], z <- [-64,-48 .. 48] ]
-  return WorldData 
-    { chunkList =  cl
     }
+    --initSunLight c
 
-setBlockID :: WorldData -> WorldIndex -> BlockID -> IO ()
+setBlockID :: WorldData -> WorldIndex -> BlockIDNum -> WorldData
 setBlockID wld (x,y,z) bid = 
-  case getChunk (chunkList wld) (x,y,z) of
-    Just (_,c) -> do
-      setBlockIDfromChunk c (x,y,z) bid
-      let (ox,oz) = origin c
-      calcSunLight c (x - ox,z - oz)
-    Nothing -> return () 
-
-setBlockIDfromChunk :: Chunk -> WorldIndex -> BlockID -> IO ()
-setBlockIDfromChunk c (x,y,z) = writeArray arr idx 
+  case getChunk clist (x,y,z) of
+    Just (cNo,_) -> WorldData $ foldr (rep cNo) [] clist
+      --let (ox,oz) = origin c
+      --calcSunLight c (x - ox,z - oz)
+    Nothing -> wld 
   where
+    clist = chunkList wld
+    rep cNo' (i,c) cs = if i == cNo'
+      then (i , setBlockIDfromChunk c (x,y,z) bid) : cs
+      else (i , c) : cs
+
+setBlockIDfromChunk :: Chunk -> WorldIndex -> BlockIDNum -> Chunk
+setBlockIDfromChunk c (x,y,z) bid = Chunk
+  { origin = (ox,oz)
+  , local = foldr rep [] $ zip [0 .. ] $ local c 
+  }
+  where
+    rep (i,d) ds = if i == (div y bsize)
+      then (d DVS.// [(idx,bid)]):ds
+      else d:ds 
     bsize = blockSize chunkParam
     (lx,ly,lz) = (x - ox, y - bsize * div y bsize, z - oz )
     (ox,oz) = origin c
-    dat = local c
-    arr = dat !! (div y bsize)
     idx = (bsize ^ (2::Int)) * ly + bsize * lz + lx
 
-getBlockID :: WorldData -> WorldIndex -> IO BlockID
+getBlockID :: WorldData -> WorldIndex -> Maybe BlockIDNum
 getBlockID wld (x,y,z) = 
   case getChunk (chunkList wld) (x,y,z) of
     Just (_,c) -> getBlockIDfromChunk c (x,y,z)
-    Nothing -> return OutOfRange
+    Nothing -> Nothing 
 
-getBlockIDfromChunk :: Chunk -> WorldIndex -> IO BlockID
-getBlockIDfromChunk c (x,y,z) = readArray arr idx
+getBlockIDfromChunk :: Chunk -> WorldIndex -> Maybe BlockIDNum 
+getBlockIDfromChunk c (x,y,z) = arr DVS.!? idx
   where
     bsize = blockSize chunkParam
     (lx,ly,lz) = (x - ox, y - (div y bsize) * bsize, z - oz)
@@ -237,11 +237,11 @@ getBlockIDfromChunk c (x,y,z) = readArray arr idx
     arr = dat !! (div y bsize) 
     idx = (bsize * bsize) * ly + bsize * lz + lx
 
-calcReGenArea :: WorldData -> WorldIndex -> IO [(ChunkNo,BlockNo)]
-calcReGenArea wld (x,y,z) = do
+calcReGenArea :: WorldData -> WorldIndex -> [(ChunkNo,BlockNo)]
+calcReGenArea wld (x,y,z) = 
   case getChunk (chunkList wld) (x,y,z) of
-    Nothing -> return [] 
-    Just (cNo,_) -> return $
+    Nothing -> [] 
+    Just (cNo,_) ->
          map (\ bno' -> (cNo,bno')) blknos 
       ++ map (\ cno' -> (cno',bNo)) (cNoX $ chunkList wld)
       ++ map (\ cno' -> (cno',bNo)) (cNoZ $ chunkList wld)
@@ -267,28 +267,25 @@ calcReGenArea wld (x,y,z) = do
                                    Just (cNo,_) -> [cNo]
              | otherwise = []
 
-genChunk :: (Int,Int) -> IO Chunk
-genChunk org = do
-  arrt <- replicateM 4
-    (newArray (0, blength) AirBlockID) :: IO [IOArray Int BlockID]
-
-  arrs <- newArray (0,blength) AirBlockID :: IO (IOArray Int BlockID)
-  mapM_ (\ i -> writeArray arrs i DirtBlockID) [0 .. 16 * 16 * 2 - 1]
-  mapM_ (\ i -> writeArray arrs i GrassBlockID)
-           [ 16 * 16 * 2 .. 16 * 16 * 3 - 1]
-
-  arrb <- replicateM 3
-    (newArray (0,blength) StoneBlockID) :: IO [IOArray Int BlockID]
-
-  sun' <- newArray (0, (blockSize chunkParam ^ (2::Int)) - 1) 0
-
-  return Chunk
+genChunk :: (Int,Int) -> Chunk
+genChunk org = Chunk
     { origin = org
-    , local = arrb ++ (arrs : arrt)
-    , sunLight = sun'
+    , local = arrb ++ (arrs'' : arrt)
+    -- , sunLight = sun'
     } 
+  --sun' <- newArray (0, (blockSize chunkParam ^ (2::Int)) - 1) 0
   where
-    blength = (blockSize chunkParam ^ (3::Int)) -1
+    blength = blockSize chunkParam ^ (3::Int) 
+    arrt = replicate 4 (DVS.replicate blength airBlockID)
+             :: [DVS.Vector BlockIDNum]
+    arrs = DVS.replicate blength airBlockID :: DVS.Vector BlockIDNum
+    arrs' = arrs DVS.// map (\ i -> (i,dirtBlockID))
+                               [0 .. 16 * 16 * 2 - 1]
+    arrs'' = arrs' DVS.// map (\ i -> (i,grassBlockID)) 
+                               [ 16 * 16 * 2 .. 16 * 16 * 3 - 1]
+    arrb = replicate 3 (DVS.replicate blength stoneBlockID)
+             :: [DVS.Vector BlockIDNum]
+
 
 getChunk :: [(ChunkNo,Chunk)] -> WorldIndex -> Maybe (ChunkNo,Chunk)
 getChunk [] _ = Nothing 
@@ -302,6 +299,7 @@ getChunk (c:cs) (x,y,z) | (ox <= x) && (x < ox + bsize) &&
     (ymin,ymax) = (0,blockSize chunkParam * blockNum chunkParam)
     bsize = blockSize chunkParam
 
+{-
 initSunLight :: Chunk -> IO ()
 initSunLight chunk = mapM_ (calcSunLight chunk) 
       [(x,z) | x <- lst, z <- lst]
@@ -334,14 +332,13 @@ calcSunLight chunk pos =
             else return (count + 1) -- 一つ前のIndexへ戻す
 
 getSunLightEffect :: WorldData -> WorldIndex -> IO Bool
-getSunLightEffect wld pos@(x,y,z) = do
+getSunLightEffect wld pos@(x,y,z) = 
   case getChunk (chunkList wld) pos of
     Just (_,cnk) -> do
       let (ox,oz) = origin cnk
-      readArray (sunLight cnk) (calcIdx (x - ox,z - oz))
-        >>= return . (y >=)  
+      (y >=) <$> readArray (sunLight cnk) (calcIdx (x - ox,z - oz))
     Nothing -> return False
   where
-    calcIdx (x',z') = z' * (blockSize chunkParam) + x'
-
+    calcIdx (x',z') = z' * blockSize chunkParam + x'
+-}
 

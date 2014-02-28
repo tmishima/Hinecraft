@@ -69,7 +69,7 @@ renderCurFace objPos =
 drawPlay :: (Int,Int) -> GuiResource -> WorldResource
          -> UserStatus -> WorldDispList
          -> Maybe (WorldIndex,Surface)
-         -> [BlockID] -> Bool -> DragDropState 
+         -> [BlockIDNum] -> Bool -> DragDropState 
          -> IO ()
 drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
          invSw dragDrop = do
@@ -121,7 +121,7 @@ drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
       forM_ ndlst $ \ ((x', y', z'),_) -> vertex (Vertex3 x' y' z')
 
 renderHUD :: (Int,Int) -> GuiResource ->  WorldResource
-          -> Int -> Bool -> [BlockID] -> DragDropState
+          -> Int -> Bool -> [BlockIDNum] -> DragDropState
           -> IO ()
 renderHUD (w,h) guiRes wldRes pIndex invSw plt dragDrop = 
   preservingMatrix $ do
@@ -162,7 +162,7 @@ renderHUD (w,h) guiRes wldRes pIndex invSw plt dragDrop =
     !widTex' = widgetsTexture guiRes
 
 renderInventory :: (Int,Int) -> GuiResource -> WorldResource
-                -> [BlockID] -> DragDropState -> IO ()
+                -> [BlockIDNum] -> DragDropState -> IO ()
 renderInventory (w,h) guiRes wldRes plt dragDrop = preservingMatrix $ do
   -- Back
   drawBackPlane (0,0) (fromIntegral w, fromIntegral h) Nothing
@@ -326,7 +326,7 @@ drawTitle (w,h) res stat = do
     glDisable gl_DEPTH_TEST
     depthMask $= Disabled
 
-    putTextLine font' (Just (1,1,1)) (Just 20) (10,10) "Hinecraft 0.0.2" 
+    putTextLine font' (Just (1,1,1)) (Just 20) (10,10) "Hinecraft 0.0.3" 
 
     -- White
     drawBackPlane (0,0) (fromIntegral w, fromIntegral h) Nothing

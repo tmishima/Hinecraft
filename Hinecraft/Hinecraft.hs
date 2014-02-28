@@ -54,9 +54,9 @@ runHinecraft resouce@(glfwHdl,guiRes,wldRes) = do
         , drgdrpMd = Nothing
         , drgSta = Nothing
         , curPos = Nothing
-        , pallet = replicate 9 AirBlockID
+        , pallet = replicate 9 airBlockID
         }
-  wld <- genWorldData 
+      wld = genWorldData 
   sfl <- genSurfaceList wld
   dsps <- genWorldDispList wldRes sfl 
   _ <- getDeltTime glfwHdl
@@ -67,24 +67,25 @@ runHinecraft resouce@(glfwHdl,guiRes,wldRes) = do
       --threadDelay 10000
       dt <- getDeltTime glfwHdl
       exitflg' <- getExitReqGLFW glfwHdl
-      (ntmstat',nplstat',runMode',f'') <- mainProcess
+      (ntmstat',nplstat',runMode',f'',nw') <- mainProcess
                    resouce tmstat' plstat' w' runMode f' d' dt
       drawView (glfwHdl,guiRes,wldRes) ntmstat' nplstat' runMode' d' 
       unless (exitflg' || (isQuit ntmstat'))
-        $ mainLoop ntmstat' nplstat' runMode' (w',f'',d')
+        $ mainLoop ntmstat' nplstat' runMode' (nw',f'',d')
 
 mainProcess :: (GLFWHandle, GuiResource, WorldResource) -> TitleModeState 
             -> PlayModeState ->  WorldData ->RunMode
             -> SurfaceList -> WorldDispList 
             -> Double
-            -> IO (TitleModeState, PlayModeState, RunMode, SurfaceList)
+            -> IO ( TitleModeState, PlayModeState, RunMode
+                  , SurfaceList, WorldData)
 mainProcess (glfwHdl, guiRes, wldRes) tmstat plstat wld  runMode
             sufList dsps dt = do
   -- Common User input
   mous <- getButtonClick glfwHdl
   syskey <- getSystemKeyOpe glfwHdl
   -- 
-  (newMode,newPmstat,newTmstat,newSufList') <- case runMode of
+  (newMode,newPmstat,newTmstat,newSufList',nw') <- case runMode of
     TitleMode -> do
       let !((md,cEt),(exflg',eEt)) = guiProcess guiRes mous -- ### 2D ###
           !r' = (rotW tmstat) + (1.0 * dt)
@@ -94,17 +95,21 @@ mainProcess (glfwHdl, guiRes, wldRes) tmstat plstat wld  runMode
             , isExitBtnEntr = eEt
             , isQuit = exflg'
             }
-      return $! (md,plstat,ntstat,sufList)
+      return $! (md,plstat,ntstat,sufList,wld)
     PlayMode -> do
+      vm <- getCursorMotion glfwHdl
+      sm <- getScrollMotion glfwHdl 
+      mm <- getMoveKeyOpe glfwHdl
       let !u' = usrStat plstat
           !plt = pallet plstat
           !pos = calcCursorPos wld sufList u'
-      newStat <- playProcess glfwHdl wld u' dt
-      newSufList <- case setBlock wld newStat mous pos plt of
-        Just (pos,bid) -> do
-          setBlockID wld pos bid
-          updateDisplist wldRes wld dsps sufList pos
-        Nothing -> return sufList
+          !newStat = calcPlayerMotion wld u' vm mm sm dt
+      (w',newSufList) <- case setBlock newStat mous pos plt of
+        Just (pos',bid) -> do
+          let newWld = setBlockID wld pos' bid
+          s' <- updateDisplist wldRes newWld dsps sufList pos'
+          return (newWld,s')
+        Nothing -> return (wld,sufList)
       let !md = case syskey of
              (True,_) -> TitleMode
              (False,True) -> InventoryMode
@@ -116,7 +121,7 @@ mainProcess (glfwHdl, guiRes, wldRes) tmstat plstat wld  runMode
                        , curPos = pos
                        , pallet = plt
                        }
-      return $! (md,nplstat',tmstat, newSufList)
+      return $! (md,nplstat',tmstat, newSufList,w')
     InventoryMode -> do
       winSize <- getWindowSize glfwHdl
       let !md = case syskey of
@@ -133,7 +138,7 @@ mainProcess (glfwHdl, guiRes, wldRes) tmstat plstat wld  runMode
                        , curPos = Nothing
                        , pallet = nPlt'
                        }
-      return $! (md,nplstat',tmstat, sufList)
+      return $! (md,nplstat',tmstat, sufList,wld)
   when (runMode /= newMode) $ do
     if (newMode == InventoryMode)
       then setMouseBtnMode glfwHdl StateMode
@@ -141,11 +146,11 @@ mainProcess (glfwHdl, guiRes, wldRes) tmstat plstat wld  runMode
     setUIMode glfwHdl $ if newMode == PlayMode
       then Mode3D
       else Mode2D
-  return $! (newTmstat,newPmstat,newMode,newSufList')
+  return $! (newTmstat,newPmstat,newMode,newSufList',nw')
 
 
 invMouseOpe :: (Int,Int) -> (Double,Double,Bool,Bool,Bool) -> DragDropMode
-            -> [BlockID] -> (DragDropState, DragDropMode, [BlockID])
+            -> [BlockIDNum] -> (DragDropState, DragDropMode, [BlockIDNum])
 invMouseOpe (w,h) (x,y, btn, _, _) drgMd plt = 
     case drgMd of
       Just bid -> if btn
@@ -203,25 +208,25 @@ getInventoryIndex (w,h) (x,y) = case (flt (> x) xbordLst , yIdx ) of
 updateDisplist :: WorldResource -> WorldData -> WorldDispList
                -> SurfaceList -> WorldIndex -> IO SurfaceList
 updateDisplist wldRes wld dsps sufList pos = do 
-  clst <- calcReGenArea wld pos 
+  let !clst = calcReGenArea wld pos 
   dsps' <- readIORef dsps
   foldM (\ sflst (cNo',bNo') -> case lookup cNo' dsps' of
       Just d -> do
         let !(_,d') = d !! bNo'
-        sfs <- getSurface wld (cNo',bNo')
-        let !newSfs = setSurfaceList sflst (cNo',bNo') sfs  
+            !sfs = getSurface wld (cNo',bNo')
+            !newSfs = setSurfaceList sflst (cNo',bNo') sfs  
         genSufDispList wldRes sfs (Just d')
         return newSfs
       Nothing -> return sflst) sufList clst 
 
-setBlock :: WorldData -> UserStatus -> (Double,Double,Bool,Bool,Bool)
-         -> Maybe (WorldIndex,Surface) -> [BlockID]
-         -> Maybe (WorldIndex,BlockID)
-setBlock _ _ _ Nothing _ = Nothing
-setBlock _ _ (_,_,False,False,_) _ _ = Nothing
-setBlock wld ustat (_,_,lb,rb,_) (Just ((cx,cy,cz),fpos)) plt 
+setBlock :: UserStatus -> (Double,Double,Bool,Bool,Bool)
+         -> Maybe (WorldIndex,Surface) -> [BlockIDNum]
+         -> Maybe (WorldIndex,BlockIDNum)
+setBlock _ _ Nothing _ = Nothing
+setBlock _ (_,_,False,False,_) _ _ = Nothing
+setBlock ustat (_,_,lb,rb,_) (Just ((cx,cy,cz),fpos)) plt 
   | rb == True = Just (setPos,(plt !! idx))
-  | lb == True = Just ((cx,cy,cz),AirBlockID)
+  | lb == True = Just ((cx,cy,cz),airBlockID)
   | otherwise = Nothing
   where
     idx = palletIndex ustat 
@@ -233,35 +238,13 @@ setBlock wld ustat (_,_,lb,rb,_) (Just ((cx,cy,cz),fpos)) plt
       SFront  -> (cx,cy,cz - 1)
       SBack   -> (cx,cy,cz + 1)
 
-playProcess :: GLFWHandle -> WorldData -> UserStatus -> Double
-            -> IO UserStatus
-playProcess glfwHdl wld usrStat' dt = do
-  vm <- getCursorMotion glfwHdl
-  sm <- getScrollMotion glfwHdl 
-  mm <- getMoveKeyOpe glfwHdl
-  calcPlayerMotion wld usrStat' vm mm sm dt
 
 calcPlayerMotion :: WorldData -> UserStatus
                  -> (Double,Double) -> (Int,Int,Int,Int,Int) -> (Int,Int)
                  -> Double
-                 -> IO UserStatus
-calcPlayerMotion wld usrStat' (mx,my) (f,b,l,r,jmp) (_,sy) dt = do
-  let !(nrx,nry,nrz) = playerView dt ( realToFrac orx
-                                    , realToFrac ory
-                                    , realToFrac orz)
-                        ( my * 0.5, mx * 0.5, 0)
-      !(dx,dy,dz) = playerMotion dt nry ( fromIntegral (b - f)*4
-                                       , fromIntegral (r - l)*4
-                                       , w)                
-     
-      !idx = (palletIndex usrStat') - sy 
-      !w = if jmp == 2
-            then 5
-            else wo - (9.8 * dt)
-  (nx,ny,nz) <- movePlayer (ox,oy,oz) (realToFrac dx
-                                      ,realToFrac dy
-                                      ,realToFrac dz)
-  return $! UserStatus
+                 -> UserStatus
+calcPlayerMotion wld usrStat' (mx,my) (f,b,l,r,jmp) (_,sy) dt =
+  UserStatus
     { userPos = ( nx
                 , ny 
                 , nz)
@@ -273,40 +256,54 @@ calcPlayerMotion wld usrStat' (mx,my) (f,b,l,r,jmp) (_,sy) dt = do
     (ox,oy,oz) = userPos usrStat'
     (orx,ory,orz) = userRot usrStat'
     (_,wo,_) = userVel usrStat'
-    movePlayer (ox',oy',oz') (dx,dy,dz) = do
-      y' <- calYpos wld (ox',oy',oz') dy'
-      y'' <- calYpos wld (tx,y'+1,tz) (-1)
-      bid <- getBlockID wld (round' tx, round' oy' ,round' tz)
-      if bid == AirBlockID || chkHalf bid || y' + 0.6 > y''
-        then if dl < 1
-               then return (tx,y',tz)
-               else movePlayer (tx,y',tz) (dx - dx', dy - dy', dz - dz')
-        else return $! (ox',y',oz')
-      where 
-        !dl = sqrt (dx * dx + dz * dz + dy * dy)
-        !(dx',dy',dz') = if dl < 1
-              then (dx,dy,dz)
-              else (dx / dl, dy / dl, dz / dl)
-        !(tx,_,tz) = (ox' + dx', oy' + dy', oz' + dz')
+    !(nrx,nry,nrz) = playerView dt ( realToFrac orx
+                                   , realToFrac ory
+                                   , realToFrac orz)
+                        ( my * 0.5, mx * 0.5, 0)
+    !(dx,dy,dz) = playerMotion dt nry ( fromIntegral (b - f)*4
+                                      , fromIntegral (r - l)*4
+                                      , w)                
+    !idx = (palletIndex usrStat') - sy 
+    !w = if jmp == 2
+          then 5
+          else wo - (9.8 * dt)
+    !(nx,ny,nz) = movePlayer wld (ox,oy,oz) (realToFrac dx
+                                            ,realToFrac dy
+                                            ,realToFrac dz)
 
-calYpos :: WorldData -> (Double,Double,Double) -> Double
-        -> IO Double
-calYpos _   (_,y,_) 0 = return $! y
-calYpos wld (x,y,z) dy = do
-  t <- getBlockID wld (round' x, round' y, round' z) 
-  let !y0 = fromIntegral $ (round' y :: Int)
-      !ly = y - y0
-      !t' = if t == AirBlockID
-              then 0
-              else if chkHalf t == True then 2 else 1
-      !(ny,ndy,c) = calcPos' t' (ly,dy)
-      !y' =  y0 + fromIntegral c + (if c > 0
+movePlayer :: WorldData -> Pos' -> Pos' -> Pos'
+movePlayer wld (ox',oy',oz') (dx,dy,dz) =
+  if bid == airBlockID || chkHalf bid || y' + 0.6 > y''
+    then if dl < 1
+           then (tx,y',tz)
+           else movePlayer wld (tx,y',tz) (dx - dx', dy - dy', dz - dz')
+    else (ox',y',oz')
+  where 
+    !dl = sqrt (dx * dx + dz * dz + dy * dy)
+    !(dx',dy',dz') = if dl < 1
+          then (dx,dy,dz)
+          else (dx / dl, dy / dl, dz / dl)
+    !(tx,_,tz) = (ox' + dx', oy' + dy', oz' + dz')
+    !y' = calYpos wld (ox',oy',oz') dy'
+    !y'' = calYpos wld (tx,y'+1,tz) (-1)
+    Just bid = getBlockID wld (round' tx, round' oy' ,round' tz)
+
+calYpos :: WorldData -> (Double,Double,Double) -> Double -> Double
+calYpos _   (_,y,_) 0 = y
+calYpos wld (x,y,z) dy = if (abs ndy) < 0.001
+    then {-trace (show (y',y0,c,ly,dy,ndy)) -} y'
+    else {- trace (show (y',ndy)) $ -} calYpos wld (x,y',z) ndy
+  where
+    Just t = getBlockID wld (round' x, round' y, round' z) 
+    !y0 = fromIntegral $ (round' y :: Int)
+    !ly = y - y0
+    !t' = if t == airBlockID
+            then 0
+            else if chkHalf t == True then 2 else 1
+    !(ny,ndy,c) = calcPos' t' (ly,dy)
+    !y' =  y0 + fromIntegral c + (if c > 0
                                      then ny + 0.001
                                      else ny - 0.001)
-  if (abs ndy) < 0.001
-    then {-trace (show (y',y0,c,ly,dy,ndy)) -} return $! y'
-    else {- trace (show (y',ndy)) $ -} calYpos wld (x,y',z) ndy
-
 -- | 
 -- -0.5 < ly <= 0.5
 calcPos' :: Int -> (Double,Double) -> (Double,Double,Int)
@@ -324,7 +321,7 @@ calcPos' t (ly,dy)
   where
     !ny = ly + dy
 
-chkHalf :: BlockID -> Bool
+chkHalf :: BlockIDNum -> Bool
 chkHalf bid = case shape $ getBlockInfo bid of
                 Half _ -> True
                 _ -> False
