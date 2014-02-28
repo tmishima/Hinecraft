@@ -188,8 +188,8 @@ getCompliePosList wld (chNo,blkNo) =
 genWorldData :: WorldData
 genWorldData = WorldData 
     { chunkList = zip [0 ..] $ map genChunk 
-        [ (x,z) | x <- [-16,0 .. 16], z <- [-16,0 .. 16] ]
-        --  [ (x,z) | x <- [-32,-16 .. 32], z <- [-32,-16 .. 32] ]
+        --[ (x,z) | x <- [-16,0 .. 16], z <- [-16,0 .. 16] ]
+          [ (x,z) | x <- [-32,-16 .. 32], z <- [-32,-16 .. 32] ]
         --  [ (x,z) | x <- [-64,-48 .. 48], z <- [-64,-48 .. 48] ]
     }
     --initSunLight c

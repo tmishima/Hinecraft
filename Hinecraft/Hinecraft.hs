@@ -278,14 +278,16 @@ movePlayer wld (ox',oy',oz') (dx,dy,dz) =
       then if dl < 1
            then (tx,y',tz)
            else movePlayer wld (tx,y',tz) (dx - dx', dy - dy', dz - dz')
-      else if chkHalf bid'' && y' + 0.6 > y''
-         then if dl < 1
-           then (tx,y'',tz)
-           else movePlayer wld (tx,y'',tz) (dx - dx', dy - dy', dz - dz')
-         else (ox',y',oz')
+      else case bid'' of
+        Just bid' -> if chkHalf bid' && y' + 0.6 > y''
+          then if dl < 1
+            then (tx,y'',tz)
+            else movePlayer wld (tx,y'',tz) (dx - dx', dy - dy', dz - dz')
+          else (ox',y',oz')
+        Nothing -> (ox',y',oz')
     Nothing -> (ox',oy',oz') 
   where 
-    Just bid'' = getBlockID wld (round' ox', round' oy' ,round' oz')
+    bid'' = getBlockID wld (round' ox', round' oy' ,round' oz')
     !dl = sqrt (dx * dx + dz * dz + dy * dy)
     !(dx',dy',dz') = if dl < 1
           then (dx,dy,dz)
@@ -300,12 +302,13 @@ calYpos wld (x,y,z) dy = if (abs ndy) < 0.001
     then {-trace (show (y',y0,c,ly,dy,ndy)) -} y'
     else {- trace (show (y',ndy)) $ -} calYpos wld (x,y',z) ndy
   where
-    Just t = getBlockID wld (round' x, round' y, round' z) 
     !y0 = fromIntegral $ (round' y :: Int)
     !ly = y - y0
-    !t' = if t == airBlockID
+    !t' = case getBlockID wld (round' x, round' y, round' z) of
+      Just t -> if t == airBlockID
             then 0
             else if chkHalf t == True then 2 else 1
+      Nothing -> 0
     !(ny,ndy,c) = calcPos' t' (ly,dy)
     !y' =  y0 + fromIntegral c + (if c > 0
                                      then ny + 0.001
