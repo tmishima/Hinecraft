@@ -4,7 +4,7 @@ module Main (main) where
 import Data.IORef
 import Debug.Trace as Dbg
 import Control.Exception ( bracket )
-import Control.Monad ( unless,when,forM,forM_ {-void,filterM-} )
+import Control.Monad ( unless,when,forM,forM,foldM {-void,filterM-} )
 --import Data.Maybe ( fromJust,isJust ) --,catMaybes )
 import System.Directory ( getHomeDirectory )
 --import Control.Concurrent
@@ -67,24 +67,24 @@ runHinecraft resouce@(glfwHdl,guiRes,wldRes) = do
       --threadDelay 10000
       dt <- getDeltTime glfwHdl
       exitflg' <- getExitReqGLFW glfwHdl
-      (ntmstat',nplstat',runMode') <- mainProcess
+      (ntmstat',nplstat',runMode',f'') <- mainProcess
                    resouce tmstat' plstat' w' runMode f' d' dt
       drawView (glfwHdl,guiRes,wldRes) ntmstat' nplstat' runMode' d' 
       unless (exitflg' || (isQuit ntmstat'))
-        $ mainLoop ntmstat' nplstat' runMode' (w',f',d')
+        $ mainLoop ntmstat' nplstat' runMode' (w',f'',d')
 
 mainProcess :: (GLFWHandle, GuiResource, WorldResource) -> TitleModeState 
             -> PlayModeState ->  WorldData ->RunMode
             -> SurfaceList -> WorldDispList 
             -> Double
-            -> IO (TitleModeState, PlayModeState, RunMode)
+            -> IO (TitleModeState, PlayModeState, RunMode, SurfaceList)
 mainProcess (glfwHdl, guiRes, wldRes) tmstat plstat wld  runMode
             sufList dsps dt = do
   -- Common User input
   mous <- getButtonClick glfwHdl
   syskey <- getSystemKeyOpe glfwHdl
   -- 
-  (newMode,newPmstat,newTmstat) <- case runMode of
+  (newMode,newPmstat,newTmstat,newSufList') <- case runMode of
     TitleMode -> do
       let !((md,cEt),(exflg',eEt)) = guiProcess guiRes mous -- ### 2D ###
           !r' = (rotW tmstat) + (1.0 * dt)
@@ -94,14 +94,17 @@ mainProcess (glfwHdl, guiRes, wldRes) tmstat plstat wld  runMode
             , isExitBtnEntr = eEt
             , isQuit = exflg'
             }
-      return $! (md,plstat,ntstat)
+      return $! (md,plstat,ntstat,sufList)
     PlayMode -> do
       let !u' = usrStat plstat
           !plt = pallet plstat
+          !pos = calcCursorPos wld sufList u'
       newStat <- playProcess glfwHdl wld u' dt
-      pos <- calcCursorPos wld sufList u'
-      mouseOpe wld newStat mous pos plt
-        (updateDisplist wldRes wld dsps sufList)
+      newSufList <- case setBlock wld newStat mous pos plt of
+        Just (pos,bid) -> do
+          setBlockID wld pos bid
+          updateDisplist wldRes wld dsps sufList pos
+        Nothing -> return sufList
       let !md = case syskey of
              (True,_) -> TitleMode
              (False,True) -> InventoryMode
@@ -113,7 +116,7 @@ mainProcess (glfwHdl, guiRes, wldRes) tmstat plstat wld  runMode
                        , curPos = pos
                        , pallet = plt
                        }
-      return $! (md,nplstat',tmstat)
+      return $! (md,nplstat',tmstat, newSufList)
     InventoryMode -> do
       winSize <- getWindowSize glfwHdl
       let !md = case syskey of
@@ -130,7 +133,7 @@ mainProcess (glfwHdl, guiRes, wldRes) tmstat plstat wld  runMode
                        , curPos = Nothing
                        , pallet = nPlt'
                        }
-      return $! (md,nplstat',tmstat)
+      return $! (md,nplstat',tmstat, sufList)
   when (runMode /= newMode) $ do
     if (newMode == InventoryMode)
       then setMouseBtnMode glfwHdl StateMode
@@ -138,7 +141,7 @@ mainProcess (glfwHdl, guiRes, wldRes) tmstat plstat wld  runMode
     setUIMode glfwHdl $ if newMode == PlayMode
       then Mode3D
       else Mode2D
-  return $! (newTmstat,newPmstat,newMode)
+  return $! (newTmstat,newPmstat,newMode,newSufList')
 
 
 invMouseOpe :: (Int,Int) -> (Double,Double,Bool,Bool,Bool) -> DragDropMode
@@ -198,33 +201,28 @@ getInventoryIndex (w,h) (x,y) = case (flt (> x) xbordLst , yIdx ) of
              Nothing -> if chkPltY y then Just 5 else Nothing
 
 updateDisplist :: WorldResource -> WorldData -> WorldDispList
-               -> SurfaceList -> WorldIndex -> IO ()
+               -> SurfaceList -> WorldIndex -> IO SurfaceList
 updateDisplist wldRes wld dsps sufList pos = do 
   clst <- calcReGenArea wld pos 
   dsps' <- readIORef dsps
-  forM_ clst $ \ (cNo',bNo') -> case lookup cNo' dsps' of
+  foldM (\ sflst (cNo',bNo') -> case lookup cNo' dsps' of
       Just d -> do
         let !(_,d') = d !! bNo'
         sfs <- getSurface wld (cNo',bNo')
-        setSurfaceList sufList (cNo',bNo') sfs  
+        let !newSfs = setSurfaceList sflst (cNo',bNo') sfs  
         genSufDispList wldRes sfs (Just d')
-        return ()
-      Nothing -> return ()
+        return newSfs
+      Nothing -> return sflst) sufList clst 
 
-mouseOpe :: WorldData -> UserStatus -> (Double,Double,Bool,Bool,Bool)
+setBlock :: WorldData -> UserStatus -> (Double,Double,Bool,Bool,Bool)
          -> Maybe (WorldIndex,Surface) -> [BlockID]
-         -> (WorldIndex -> IO ())
-         -> IO ()
-mouseOpe _ _ _ Nothing _ _ = return ()
-mouseOpe _ _ (_,_,False,False,_) _ _ _ = return ()
-mouseOpe wld ustat (_,_,lb,rb,_) (Just ((cx,cy,cz),fpos)) plt callback
-  | rb == True = do
-    setBlockID wld setPos (plt !! idx)
-    callback setPos
-  | lb == True = do
-    setBlockID wld (cx,cy,cz) AirBlockID 
-    callback (cx,cy,cz)
-  | otherwise = return ()
+         -> Maybe (WorldIndex,BlockID)
+setBlock _ _ _ Nothing _ = Nothing
+setBlock _ _ (_,_,False,False,_) _ _ = Nothing
+setBlock wld ustat (_,_,lb,rb,_) (Just ((cx,cy,cz),fpos)) plt 
+  | rb == True = Just (setPos,(plt !! idx))
+  | lb == True = Just ((cx,cy,cz),AirBlockID)
+  | otherwise = Nothing
   where
     idx = palletIndex ustat 
     setPos = case fpos of
@@ -393,11 +391,9 @@ drawView (glfwHdl, guiRes, wldRes) tmstat plstat runMode'
 
 genWorldDispList :: WorldResource -> SurfaceList -> IO WorldDispList
 genWorldDispList wldRes suf = do
-  suf' <- readIORef suf
-  forM suf' (\ (chNo,blks) -> do
+  forM suf (\ (chNo,blks) -> do
     sb <- forM blks (\ (bNo,sfs) -> do
-      sfs' <- readIORef sfs
-      d <- genSufDispList wldRes sfs' Nothing
+      d <- genSufDispList wldRes sfs Nothing
       return (bNo,d)) 
     return (chNo,sb)) 
       >>= newIORef
