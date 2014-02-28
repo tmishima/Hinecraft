@@ -74,12 +74,12 @@ runHinecraft resouce@(glfwHdl,guiRes,wldRes) = do
         $ mainLoop ntmstat' nplstat' runMode' (nw',f'',d')
 
 mainProcess :: (GLFWHandle, GuiResource, WorldResource) -> TitleModeState 
-            -> PlayModeState ->  WorldData ->RunMode
+            -> PlayModeState -> WorldData ->RunMode
             -> SurfaceList -> WorldDispList 
             -> Double
             -> IO ( TitleModeState, PlayModeState, RunMode
                   , SurfaceList, WorldData)
-mainProcess (glfwHdl, guiRes, wldRes) tmstat plstat wld  runMode
+mainProcess (glfwHdl, guiRes, wldRes) tmstat plstat wld runMode
             sufList dsps dt = do
   -- Common User input
   mous <- getButtonClick glfwHdl
@@ -273,20 +273,26 @@ calcPlayerMotion wld usrStat' (mx,my) (f,b,l,r,jmp) (_,sy) dt =
 
 movePlayer :: WorldData -> Pos' -> Pos' -> Pos'
 movePlayer wld (ox',oy',oz') (dx,dy,dz) =
-  if bid == airBlockID || chkHalf bid || y' + 0.6 > y''
-    then if dl < 1
+  case getBlockID wld (round' tx, round' y' ,round' tz) of
+    Just bid -> if bid == airBlockID || chkHalf bid 
+      then if dl < 1
            then (tx,y',tz)
            else movePlayer wld (tx,y',tz) (dx - dx', dy - dy', dz - dz')
-    else (ox',y',oz')
+      else if chkHalf bid'' && y' + 0.6 > y''
+         then if dl < 1
+           then (tx,y'',tz)
+           else movePlayer wld (tx,y'',tz) (dx - dx', dy - dy', dz - dz')
+         else (ox',y',oz')
+    Nothing -> (ox',oy',oz') 
   where 
+    Just bid'' = getBlockID wld (round' ox', round' oy' ,round' oz')
     !dl = sqrt (dx * dx + dz * dz + dy * dy)
     !(dx',dy',dz') = if dl < 1
           then (dx,dy,dz)
           else (dx / dl, dy / dl, dz / dl)
-    !(tx,_,tz) = (ox' + dx', oy' + dy', oz' + dz')
+    !(tx,tz) = (ox' + dx', oz' + dz')
     !y' = calYpos wld (ox',oy',oz') dy'
     !y'' = calYpos wld (tx,y'+1,tz) (-1)
-    Just bid = getBlockID wld (round' tx, round' oy' ,round' tz)
 
 calYpos :: WorldData -> (Double,Double,Double) -> Double -> Double
 calYpos _   (_,y,_) 0 = y
