@@ -1,4 +1,20 @@
 {-# LANGUAGE BangPatterns #-}
+{-
+   Copyright 2014 Tetsuya.Mishima
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-}
+
 module Main (main) where
 
 import Data.IORef
@@ -43,8 +59,8 @@ exitHinecraft (glfwHdl,_,_) = do
 
 runHinecraft :: (GLFWHandle, GuiResource, WorldResource) -> IO ()
 runHinecraft resouce@(glfwHdl,guiRes,wldRes) = do
-  let tmstat = TitleModeState (0::Double) False False False
-      plstat = PlayModeState
+  let !tmstat = TitleModeState (0::Double) False False False
+      !plstat = PlayModeState
         { usrStat = UserStatus
                      { userPos = (0.0,16 * 4 + 1,0.0)
                      , userRot = (0.0,0.0,0.0) 
@@ -56,8 +72,8 @@ runHinecraft resouce@(glfwHdl,guiRes,wldRes) = do
         , curPos = Nothing
         , pallet = replicate 9 airBlockID
         }
-      wld = genWorldData 
-  sfl <- genSurfaceList wld
+      !wld = genWorldData 
+      !sfl = genSurfaceList wld
   dsps <- genWorldDispList wldRes sfl 
   _ <- getDeltTime glfwHdl
   mainLoop tmstat plstat TitleMode (wld,sfl,dsps) 

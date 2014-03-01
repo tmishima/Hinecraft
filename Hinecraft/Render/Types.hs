@@ -1,3 +1,8 @@
+--{-# LANGUAGE BangPatterns #-}
+--
+-- Copyright : (c) T.Mishima 2014
+-- License : Apache-2.0
+--
 module Hinecraft.Render.Types where
 
 -- OpenGL

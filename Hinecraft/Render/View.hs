@@ -1,4 +1,8 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns, OverloadedStrings #-}
+--
+-- Copyright : (c) T.Mishima 2014
+-- License : Apache-2.0
+--
 module Hinecraft.Render.View
   ( ViewMode (..)
   , UserStatus (..)
@@ -29,6 +33,8 @@ import Graphics.Rendering.OpenGL.Raw
 import Debug.Trace as Dbg
 import Data.IORef
 import Control.Monad (  forM_ {-,when, unless,void,filterM-} )
+import qualified Data.ByteString as B
+
 import Hinecraft.Model
 import Hinecraft.Types
 import Hinecraft.Util
@@ -251,6 +257,54 @@ initGL = do
   --colorMaterial     $= Just (GL.Front, AmbientAndDiffuse)
 
   glHint gl_PERSPECTIVE_CORRECTION_HINT gl_NICEST
+  initShader
+
+initShader :: IO ()
+initShader = do
+  vsh <- createShader VertexShader
+  shaderSourceBS vsh $= vertSrc
+  compileShader vsh
+
+  fsh <- createShader FragmentShader 
+  shaderSourceBS fsh $= flgSrc
+  compileShader fsh
+
+  prg <- createProgram
+  attachShader prg vsh
+  attachShader prg fsh
+
+  linkProgram prg
+
+  validateProgram prg
+
+
+-- | GLSL Source code for a text vertex shader.
+vertSrc :: B.ByteString
+vertSrc = B.concat [ "#version 300\n"
+                   , "\n"
+                   , "in vec3 VertexPosition;\n"
+                   , "in vec3 VertexColor;\n"
+                   , "\n"
+                   , "out vec3 Color;\n"
+                   , "\n"
+                   , "void main () {\n"
+                   , " Color = VertexColor;\n"
+                   , " gl_Position = vec4(VertexPosition, 1.0);\n"
+                   , "}\n"
+                   ]
+
+-- | GLSL Source code for a text fragment shader.
+flgSrc :: B.ByteString
+flgSrc = B.concat  [ "#version 300\n"
+                   , "\n"
+                   , "in vec3 Color;\n"
+                   , "\n"
+                   , "out vec4 FragColor;\n"
+                   , "\n"
+                   , "void main () {\n"
+                   , " FragColor = vec4(color, 1.0);\n"
+                   , "}\n"
+                   ]
 
 genSufDispList :: WorldResource -> SurfacePos -> Maybe DisplayList
                -> IO DisplayList

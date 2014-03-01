@@ -1,3 +1,8 @@
+{-# LANGUAGE BangPatterns #-}
+--
+-- Copyright : (c) T.Mishima 2014
+-- License : Apache-2.0
+--
 module Hinecraft.Render.Util
   ( loadTextures
   , blockNodeVertex
@@ -42,7 +47,7 @@ loadTextures path = do
     glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAG_FILTER glNearest
     glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MIN_FILTER glNearest
 
-  return tex
+  return $! tex
   where
     showInfo n i = putStrLn $ unwords [n, show $ CdP.imageWidth i, show $ CdP.imageHeight i]
     getPtr i t = Just (CdP.imageWidth i

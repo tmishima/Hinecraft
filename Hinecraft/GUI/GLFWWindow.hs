@@ -1,3 +1,8 @@
+{-# LANGUAGE BangPatterns #-}
+--
+-- Copyright : (c) T.Mishima 2014
+-- License : Apache-2.0
+--
 module Hinecraft.GUI.GLFWWindow 
   ( GLFWHandle
   , UIMode (..)
@@ -46,7 +51,7 @@ initGLFW :: (Int,Int) -> IO GLFWHandle
 initGLFW (wWidth,wHight) = do
   True <- GLFW.init
   GLFW.defaultWindowHints
-  --GLFW.windowHint $ GLFW.WindowHint'ContextVersionMajor (3::Int)
+  GLFW.windowHint $ GLFW.WindowHint'ContextVersionMajor (3::Int)
   --GLFW.windowHint $ GLFW.WindowHint'RefreshRate (60::Int)
   win <- GLFW.createWindow wWidth wHight "Hinecraft" Nothing Nothing
   exitFlg' <- newIORef False
@@ -90,7 +95,7 @@ setUIMode glfwHdl mode = do
         GLFW.setCursorInputMode win GLFW.CursorInputMode'Hidden
     Nothing -> return ()
   where
-    ui' = uiMode glfwHdl
+    !ui' = uiMode glfwHdl
 
 togleUIMode :: GLFWHandle -> IO ()
 togleUIMode glfwHdl = 
@@ -109,7 +114,6 @@ togleUIMode glfwHdl =
   where
     ui' = uiMode glfwHdl
 
-
 pollGLFW :: IO ()
 pollGLFW = GLFW.pollEvents
 
@@ -126,7 +130,7 @@ getDeltTime glfwHdl = do
   Just newTime' <- GLFW.getTime  
   oldTime' <- readIORef $ oldTime glfwHdl 
   writeIORef (oldTime glfwHdl) newTime'
-  return $ newTime' - oldTime'
+  return $! newTime' - oldTime'
 
 getWindowSize :: GLFWHandle -> IO (Int,Int)
 getWindowSize glfwHdl = case win of

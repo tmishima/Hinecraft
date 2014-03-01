@@ -5,7 +5,7 @@ name:                Hinecraft
 version:             0.0.0.3
 -- synopsis:            
 description:         This is minecraft clone
-license:             BSD3
+license:             Apache-2.0
 license-file:        LICENSE
 author:              T.Mishima
 maintainer:          tetsuya.mishima@gmail.com

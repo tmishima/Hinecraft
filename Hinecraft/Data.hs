@@ -1,4 +1,8 @@
 {-# LANGUAGE BangPatterns #-}
+--
+-- Copyright : (c) T.Mishima 2014
+-- License : Apache-2.0
+--
 module Hinecraft.Data
   ( WorldData (..)
   , Chunk (..)
@@ -18,21 +22,16 @@ module Hinecraft.Data
   , calcCursorPos
   ) where
 
-import qualified Data.Vector.Storable as DVS
+import qualified Data.Vector.Unboxed as DVS
 import Data.Maybe ( fromJust , catMaybes ,isJust, mapMaybe )
 import Data.List
 import Data.Ord
 import Data.Tuple
-import Control.Monad (  forM {- unless,when, void,filterM replicateM,-} )
---import Control.Applicative
 import Hinecraft.Types
 import Hinecraft.Model
 import Hinecraft.Util
 import Hinecraft.Render.Util
 --import Debug.Trace as Dbg
-
---tem :: (Int,Int)
---tem = DVS.replicate 10 0
 
 type SurfaceList = [(ChunkNo, [(BlockIDNum,SurfacePos)])]
 
@@ -127,14 +126,14 @@ calcPointer (x,y,z) (rx,ry,_) r =
     d2r d = pi*d/180.0
 
 
-genSurfaceList :: WorldData -> IO SurfaceList
-genSurfaceList wld = mapM (\ (cNo,_) -> do
-    spos <- forM [0 .. bkNo] (\ b -> do
-      return (b,getSurface wld (cNo,b))) 
-    return (cNo,spos)) chl 
+genSurfaceList :: WorldData -> SurfaceList
+genSurfaceList wld = map (\ (cNo,_) ->
+  ( cNo
+  , map (\ b -> (b,getSurface wld (cNo,b))) [0 .. bkNo] 
+  )) chl 
   where
-    chl = chunkList wld 
-    bkNo = blockNum chunkParam - 1
+    !chl = chunkList wld 
+    !bkNo = blockNum chunkParam - 1
 
 setSurfaceList :: SurfaceList -> (Int,Int) -> SurfacePos -> SurfaceList
 setSurfaceList sufList (cNo,bNo) sfs = foldr repC [] sufList
