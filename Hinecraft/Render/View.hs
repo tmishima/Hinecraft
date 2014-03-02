@@ -10,6 +10,7 @@ module Hinecraft.Render.View
   , loadGuiResource
   , loadWorldResouce
   , initGL
+  , initShader
   , setPerspective
   , gen3dCursol
   , drawBackPlane
@@ -257,30 +258,54 @@ initGL = do
   --colorMaterial     $= Just (GL.Front, AmbientAndDiffuse)
 
   glHint gl_PERSPECTIVE_CORRECTION_HINT gl_NICEST
-  initShader
 
-initShader :: IO ()
-initShader = do
-  vsh <- createShader VertexShader
-  shaderSourceBS vsh $= vertSrc
-  compileShader vsh
+initShader :: FilePath -> IO ()
+initShader home = do
+  Dbg.traceIO "\nload basic.vert"
+  vertSrc <- B.readFile $ home ++ "/.Hinecraft/shader/basic.vert"
+  vsh <- compShader vertSrc VertexShader
 
-  fsh <- createShader FragmentShader 
-  shaderSourceBS fsh $= flgSrc
-  compileShader fsh
+  Dbg.traceIO "load basic.frag"
+  frgSrc <- B.readFile $ home ++ "/.Hinecraft/shader/basic.frag"
+  fsh <- compShader frgSrc FragmentShader 
 
   prg <- createProgram
   attachShader prg vsh
   attachShader prg fsh
 
   linkProgram prg
+  ls <- get $ linkStatus prg
+  if ls
+    then Dbg.traceIO "prg link ok"
+    else do
+      Dbg.traceIO "prg link error"
+      Dbg.traceIO =<< (get $ programInfoLog prg)  
 
   validateProgram prg
+  ps <- get $ validateStatus prg
+  if ps
+    then Dbg.traceIO "prg validate ok"
+    else do
+      Dbg.traceIO "prg link error"
+      Dbg.traceIO =<< (get $ programInfoLog prg)  
 
+  where
+    compShader src stype = do
+      sh <- createShader stype 
+      shaderSourceBS sh $= src 
+      compileShader sh
+      cs <- get $ compileStatus sh
+      if cs
+        then Dbg.traceIO $ "sh complie ok"
+        else do
+          Dbg.traceIO $ "sh complie error"
+          Dbg.traceIO =<< (get $ shaderInfoLog sh)
+      return $! sh
 
+{-
 -- | GLSL Source code for a text vertex shader.
 vertSrc :: B.ByteString
-vertSrc = B.concat [ "#version 300\n"
+vertSrc = B.concat [ "#version 130\n"
                    , "\n"
                    , "in vec3 VertexPosition;\n"
                    , "in vec3 VertexColor;\n"
@@ -295,16 +320,17 @@ vertSrc = B.concat [ "#version 300\n"
 
 -- | GLSL Source code for a text fragment shader.
 flgSrc :: B.ByteString
-flgSrc = B.concat  [ "#version 300\n"
+flgSrc = B.concat  [ "#version 130\n"
                    , "\n"
                    , "in vec3 Color;\n"
                    , "\n"
                    , "out vec4 FragColor;\n"
                    , "\n"
                    , "void main () {\n"
-                   , " FragColor = vec4(color, 1.0);\n"
+                   , " FragColor = vec4(Color, 1.0);\n"
                    , "}\n"
                    ]
+-}
 
 genSufDispList :: WorldResource -> SurfacePos -> Maybe DisplayList
                -> IO DisplayList
@@ -380,7 +406,8 @@ drawTitle (w,h) res stat = do
     glDisable gl_DEPTH_TEST
     depthMask $= Disabled
 
-    putTextLine font' (Just (1,1,1)) (Just 20) (10,10) "Hinecraft 0.0.3" 
+    putTextLine font' (Just (1,1,1)) (Just 20) (10,10)
+                      $ "Hinecraft " ++ version
 
     -- White
     drawBackPlane (0,0) (fromIntegral w, fromIntegral h) Nothing
@@ -398,16 +425,17 @@ drawTitle (w,h) res stat = do
                   (Just widTex)
                   (0,vm) (200/256,20/256) (1.0,1.0,1.0,1.0)
     putTextLine font' (Just (1,1,1)) (Just 30)
-      (590,768 - 410 + 20) "Single Player" 
+                  (590, yPlybtnPos + 20) "Single Player" 
     -- 
     let ve = slcBtnTexCrd $ isExitBtnEntr stat
     drawBackPlane (xExtbtnPos, yExtbtnPos) (wExtbtnSiz / 2, hExtbtnSiz)
                   (Just widTex)
                   (0,ve) (0.20,0.078) (1.0,1.0,1.0,1.0)
-    drawBackPlane (xExtbtnPos + wExtbtnSiz / 2, yExtbtnPos) (wExtbtnSiz / 2, hExtbtnSiz)
-                  (Just widTex)
+    drawBackPlane (xExtbtnPos + wExtbtnSiz / 2, yExtbtnPos)
+                  (wExtbtnSiz / 2, hExtbtnSiz) (Just widTex)
                   (0.58,ve) (0.20,0.078) (1.0,1.0,1.0,1.0)
-    putTextLine font' (Just (1,1,1)) (Just 30) (780,768 - 614 + 20) "Quit game" 
+    putTextLine font' (Just (1,1,1)) (Just 30)
+                  (780 ,yExtbtnPos + 20) "Quit game" 
 
     glPopAttrib 
     depthMask $= Enabled
@@ -447,8 +475,8 @@ loadWorldResouce home = do
     --skyPng = home ++ "/.Hinecraft/mcpatcher/sky/world0/cloud1.png"
     --starPng = home ++ "/.Hinecraft/mcpatcher/sky/world0/star1.png"
 
-loadGuiResource :: FilePath -> IO GuiResource
-loadGuiResource home = do
+loadGuiResource :: FilePath -> (Int,Int) -> IO GuiResource
+loadGuiResource home (w,h) = do
   tex' <- mapM (\ fn -> 
     Dbg.trace ("loadBackgroundPic : " ++ fn)
      $ loadTextures fn )
@@ -465,16 +493,17 @@ loadGuiResource home = do
     , backgroundTitleTexture = ttex'
     , widgetsTexture = wtex'
     , font = font'
-    , widgetPlayBtnPos = ((1366 - texBtnWd * rate) * 0.5 , 768 - 410)
+    , widgetPlayBtnPos = ((w' - texBtnWd * rate) * 0.5 , h' * 0.5)
     , widgetPlayBtnSiz = (texBtnWd * rate, texBtnHt * rate)
-    , widgetExitBtnPos = ( 1366 - (1366 - texBtnWd * rate) * 0.5
+    , widgetExitBtnPos = ( w' - (w' - texBtnWd * rate) * 0.5
                            - texBtnWd * hfrate
-                         , 768 - 614)
+                         , h' * 0.2)
     , widgetExitBtnSiz = (texBtnWd * hfrate , texBtnHt * rate)
     , invDlgTexture = itex'
     , invDlgTbTexture = ibtex'
     }
   where
+    (w',h') = (fromIntegral w, fromIntegral h)
     rate = 3.0
     hfrate = 1.4
     texBtnWd = 200

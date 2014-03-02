@@ -2,7 +2,7 @@
 -- 
 
 name:                Hinecraft
-version:             0.0.0.3
+version:             0.1.0.0
 -- synopsis:            
 description:         This is minecraft clone
 license:             Apache-2.0
@@ -17,10 +17,14 @@ cabal-version:       >=1.8
 executable Hinecraft
   main-is:           Hinecraft/Hinecraft.hs
   other-modules:     Hinecraft.Types,
-                     Hinecraft.Render.View,
                      Hinecraft.GUI.GLFWWindow
                      Hinecraft.Data
                      Hinecraft.Util
+                     Hinecraft.Model
+                     Hinecraft.Render.View,
+                     Hinecraft.Render.Types
+                     Hinecraft.Render.Util
+
   build-depends:       base ==4.6.*
                      , GLFW-b , OpenGL , mtl == 2.*
                      , bytestring == 0.10.*

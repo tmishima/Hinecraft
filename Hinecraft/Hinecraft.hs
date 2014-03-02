@@ -44,13 +44,16 @@ initHinecraft :: IO (GLFWHandle, GuiResource,WorldResource)
 initHinecraft = do
   home <- getHomeDirectory
   Dbg.traceIO "Hinecraft Start"
-  glfwHdl <- initGLFW (1366,768)
+  glfwHdl <- initGLFW winSize
 
-  guiRes <- loadGuiResource home
+  guiRes <- loadGuiResource home winSize
   wldRes <- loadWorldResouce home
   
   initGL
-  return (glfwHdl,guiRes,wldRes)
+  initShader home
+  return $! (glfwHdl,guiRes,wldRes)
+  where
+    winSize = (1366,768)
 
 exitHinecraft :: (GLFWHandle, GuiResource, WorldResource) -> IO ()
 exitHinecraft (glfwHdl,_,_) = do

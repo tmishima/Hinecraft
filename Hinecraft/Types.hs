@@ -5,6 +5,9 @@
 --
 module Hinecraft.Types where
 
+version :: String
+version = "0.1.0"
+
 type BlockIDNum = Int
 
 data Shape = Cube | Half Bool | Stairs
