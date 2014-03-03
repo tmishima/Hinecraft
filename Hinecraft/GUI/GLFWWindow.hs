@@ -52,6 +52,8 @@ initGLFW (wWidth,wHight) = do
   True <- GLFW.init
   GLFW.defaultWindowHints
   GLFW.windowHint $ GLFW.WindowHint'ContextVersionMajor (3::Int)
+  --GLFW.windowHint $ GLFW.WindowHint'ContextVersionMinor (3::Int)
+  --GLFW.windowHint $ GLFW.WindowHint'OpenGLProfile GLFW.OpenGLProfile'Compat
   --GLFW.windowHint $ GLFW.WindowHint'RefreshRate (60::Int)
   win <- GLFW.createWindow wWidth wHight "Hinecraft" Nothing Nothing
   exitFlg' <- newIORef False

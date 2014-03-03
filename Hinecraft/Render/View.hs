@@ -6,6 +6,7 @@
 module Hinecraft.Render.View
   ( ViewMode (..)
   , UserStatus (..)
+  , ShaderParam
   , WorldDispList
   , loadGuiResource
   , loadWorldResouce
@@ -44,6 +45,9 @@ import Hinecraft.Render.Types
 import Hinecraft.Render.Util
 -- Define
 
+data ShaderParam = ShaderParam
+  { shdprg :: Program
+  }
 
 -- ##################### OpenGL ###########################
 data ViewMode = V2DMode | V3DTitleMode | V3DMode
@@ -76,10 +80,11 @@ renderCurFace objPos =
 drawPlay :: (Int,Int) -> GuiResource -> WorldResource
          -> UserStatus -> WorldDispList
          -> Maybe (WorldIndex,Surface)
-         -> [BlockIDNum] -> Bool -> DragDropState 
+         -> [BlockIDNum] -> Bool -> DragDropState -> ShaderParam
          -> IO ()
 drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
-         invSw dragDrop = do
+         invSw dragDrop shprg = do
+
   -- World
   preservingMatrix $ do
     setPerspective V3DMode w h
@@ -101,6 +106,11 @@ drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
     color $ Color3 0.0 1.0 (0.0::GLfloat)
     readIORef worldDispList
       >>= mapM_ (\ (_,b) -> mapM_ (\ (_,d) -> callList d) b)  
+
+  preservingMatrix $ do
+    currentProgram $= Just (shdprg shprg)
+    -- shader ....
+    currentProgram $= Nothing
 
   -- HUD
   renderHUD (w,h) guiRes wldRes pIndex invSw plt dragDrop
@@ -259,7 +269,7 @@ initGL = do
 
   glHint gl_PERSPECTIVE_CORRECTION_HINT gl_NICEST
 
-initShader :: FilePath -> IO ()
+initShader :: FilePath -> IO ShaderParam
 initShader home = do
   Dbg.traceIO "\nload basic.vert"
   vertSrc <- B.readFile $ home ++ "/.Hinecraft/shader/basic.vert"
@@ -273,6 +283,10 @@ initShader home = do
   attachShader prg vsh
   attachShader prg fsh
 
+  attribLocation prg "VertexPosition" $= AttribLocation 0
+  attribLocation prg "VertexColor" $= AttribLocation 1
+  bindFragDataLocation prg "FragColor" $= 0
+
   linkProgram prg
   ls <- get $ linkStatus prg
   if ls
@@ -280,8 +294,12 @@ initShader home = do
     else do
       Dbg.traceIO "prg link error"
       Dbg.traceIO =<< (get $ programInfoLog prg)  
+  -- 
+  releaseShaderCompiler
+  --
 
   validateProgram prg
+  --currentProgram $= Just prg
   ps <- get $ validateStatus prg
   if ps
     then Dbg.traceIO "prg validate ok"
@@ -289,6 +307,7 @@ initShader home = do
       Dbg.traceIO "prg link error"
       Dbg.traceIO =<< (get $ programInfoLog prg)  
 
+  return ShaderParam { shdprg = prg }
   where
     compShader src stype = do
       sh <- createShader stype 
@@ -301,36 +320,6 @@ initShader home = do
           Dbg.traceIO $ "sh complie error"
           Dbg.traceIO =<< (get $ shaderInfoLog sh)
       return $! sh
-
-{-
--- | GLSL Source code for a text vertex shader.
-vertSrc :: B.ByteString
-vertSrc = B.concat [ "#version 130\n"
-                   , "\n"
-                   , "in vec3 VertexPosition;\n"
-                   , "in vec3 VertexColor;\n"
-                   , "\n"
-                   , "out vec3 Color;\n"
-                   , "\n"
-                   , "void main () {\n"
-                   , " Color = VertexColor;\n"
-                   , " gl_Position = vec4(VertexPosition, 1.0);\n"
-                   , "}\n"
-                   ]
-
--- | GLSL Source code for a text fragment shader.
-flgSrc :: B.ByteString
-flgSrc = B.concat  [ "#version 130\n"
-                   , "\n"
-                   , "in vec3 Color;\n"
-                   , "\n"
-                   , "out vec4 FragColor;\n"
-                   , "\n"
-                   , "void main () {\n"
-                   , " FragColor = vec4(Color, 1.0);\n"
-                   , "}\n"
-                   ]
--}
 
 genSufDispList :: WorldResource -> SurfacePos -> Maybe DisplayList
                -> IO DisplayList
