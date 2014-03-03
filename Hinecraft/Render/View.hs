@@ -295,6 +295,8 @@ initShader home = do
       Dbg.traceIO "prg link error"
       Dbg.traceIO =<< (get $ programInfoLog prg)  
   -- 
+  --detachShader prg vsh
+  --detachShader prg fsh
   releaseShaderCompiler
   --
 

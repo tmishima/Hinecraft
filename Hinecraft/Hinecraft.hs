@@ -55,7 +55,7 @@ initHinecraft = do
   where
     winSize = (1366,768)
 
-exitHinecraft :: (GLFWHandle, a, b, ShaderParam) -> IO ()
+exitHinecraft :: (GLFWHandle, a, b, c) -> IO ()
 exitHinecraft (glfwHdl,_,_,_) = do
   exitGLFW glfwHdl
   Dbg.traceIO "Hinecraft End"
