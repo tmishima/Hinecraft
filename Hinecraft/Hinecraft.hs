@@ -17,11 +17,13 @@
 
 module Main (main) where
 
-import Data.IORef
+import qualified Data.Map as M
+import Data.Maybe
 import Debug.Trace as Dbg
 import Control.Exception ( bracket )
-import Control.Monad ( unless,when,forM,forM,foldM {-void,filterM-} )
+import Control.Monad ( unless,when,forM,forM {-,foldMvoid,filterM-} )
 --import Data.Maybe ( fromJust,isJust ) --,catMaybes )
+import Control.Applicative
 import System.Directory ( getHomeDirectory )
 --import Control.Concurrent
 
@@ -120,28 +122,27 @@ mainProcess (glfwHdl, guiRes, wldRes,_) tmstat plstat wld runMode
       vm <- getCursorMotion glfwHdl
       sm <- getScrollMotion glfwHdl 
       mm <- getMoveKeyOpe glfwHdl
-      let !u' = usrStat plstat
-          !plt = pallet plstat
-          !pos = calcCursorPos wld sufList u'
-          !newStat = calcPlayerMotion wld u' vm mm sm dt
-      (w',newSufList) <- case setBlock newStat mous pos plt of
-        Just (pos',bid) -> do
-          let newWld = setBlockID wld pos' bid
-          s' <- updateDisplist wldRes newWld dsps sufList pos'
-          return (newWld,s')
-        Nothing -> return (wld,sufList)
       let !md = case syskey of
              (True,_) -> TitleMode
              (False,True) -> InventoryMode
              _ ->  PlayMode
-          !nplstat' = PlayModeState
-                       { usrStat = newStat
-                       , drgdrpMd = Nothing
-                       , drgSta = Nothing
-                       , curPos = pos
-                       , pallet = plt
+          !u' = usrStat plstat
+          !plt = pallet plstat
+          !newStat = calcPlayerMotion wld u' vm mm sm dt
+          !pos = calcCursorPos sufList u'
+      (w',newSufList) <- case setBlock u' mous pos plt of
+        Just (pos',bid) -> do
+          let !newWld = setBlockID wld pos' bid
+              !newSuf = updateSufList newWld sufList pos'
+          updateDisplist wldRes dsps newSuf pos'
+          return $! (newWld,newSuf)
+        Nothing -> return (wld,sufList)
+      return $! ( md
+                , PlayModeState
+                       { usrStat = newStat , drgdrpMd = Nothing
+                       , drgSta = Nothing , curPos = pos , pallet = plt
                        }
-      return $! (md,nplstat',tmstat, newSufList,w')
+                , tmstat, newSufList,w')
     InventoryMode -> do
       winSize <- getWindowSize glfwHdl
       let !md = case syskey of
@@ -225,19 +226,23 @@ getInventoryIndex (w,h) (x,y) = case (flt (> x) xbordLst , yIdx ) of
              Just a -> Just a
              Nothing -> if chkPltY y then Just 5 else Nothing
 
-updateDisplist :: WorldResource -> WorldData -> WorldDispList
-               -> SurfaceList -> WorldIndex -> IO SurfaceList
-updateDisplist wldRes wld dsps sufList pos = do 
-  let !clst = calcReGenArea wld pos 
-  dsps' <- readIORef dsps
-  foldM (\ sflst (cNo',bNo') -> case lookup cNo' dsps' of
-      Just d -> do
-        let !(_,d') = d !! bNo'
-            !sfs = getSurface wld (cNo',bNo')
-            !newSfs = setSurfaceList sflst (cNo',bNo') sfs  
-        genSufDispList wldRes sfs (Just d')
-        return newSfs
-      Nothing -> return sflst) sufList clst 
+updateSufList :: WorldData -> SurfaceList -> WorldIndex -> SurfaceList
+updateSufList wld sufList pos = foldr (\ (i,b) sfl
+   -> setSurfaceList sfl (i,b)
+     $ fromJust $ getSurface wld (i,b)) sufList clst 
+  where
+    !clst = calcReGenArea pos 
+
+updateDisplist :: WorldResource -> WorldDispList
+               -> SurfaceList -> WorldIndex -> IO () 
+updateDisplist wldRes dsps sufList pos =  
+  mapM_ (\ (ij,bNo') -> do
+    let !sfs = fromJust $ getSurfaceList sufList (ij,bNo')
+        Just d = M.lookup ij dsps
+    genSufDispList wldRes sfs $ Just $ d !! bNo' 
+    return ()) clst 
+  where
+    !clst = calcReGenArea pos
 
 setBlock :: UserStatus -> (Double,Double,Bool,Bool,Bool)
          -> Maybe (WorldIndex,Surface) -> [BlockIDNum]
@@ -245,8 +250,8 @@ setBlock :: UserStatus -> (Double,Double,Bool,Bool,Bool)
 setBlock _ _ Nothing _ = Nothing
 setBlock _ (_,_,False,False,_) _ _ = Nothing
 setBlock ustat (_,_,lb,rb,_) (Just ((cx,cy,cz),fpos)) plt 
-  | rb == True = Just (setPos,(plt !! idx))
-  | lb == True = Just ((cx,cy,cz),airBlockID)
+  | rb = Just (setPos,(plt !! idx))
+  | lb = Just ((cx,cy,cz),airBlockID)
   | otherwise = Nothing
   where
     idx = palletIndex ustat 
@@ -416,14 +421,13 @@ drawView (glfwHdl, guiRes, wldRes,shprg) tmstat plstat runMode'
 --
 
 genWorldDispList :: WorldResource -> SurfaceList -> IO WorldDispList
-genWorldDispList wldRes suf = do
-  forM suf (\ (chNo,blks) -> do
-    sb <- forM blks (\ (bNo,sfs) -> do
-      d <- genSufDispList wldRes sfs Nothing
-      return (bNo,d)) 
-    return (chNo,sb)) 
-      >>= newIORef
-
+genWorldDispList wldRes suf = M.fromList <$>
+  mapM (\ (ij,slst) -> do
+    ds <- forM slst (\ sfs -> genSufDispList wldRes sfs Nothing)
+    return (ij,ds)
+    ) suflst
+  where
+    !suflst = M.toList suf
 -- 
 
 

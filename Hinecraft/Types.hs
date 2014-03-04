@@ -6,7 +6,7 @@
 module Hinecraft.Types where
 
 version :: String
-version = "0.1.0"
+version = "0.1.1"
 
 type BlockIDNum = Int
 
@@ -79,7 +79,7 @@ type Pos' = (Double,Double,Double)
 type Rot' = Pos'
 type Vel' = Pos'
 
-type SurfacePos = [(WorldIndex,BlockIDNum,[(Surface,Bright)])]
+type SurfacePos = [(WorldIndex,BlockIDNum,[Surface])]
 data Surface = STop | SBottom | SRight | SLeft | SFront | SBack 
   deriving (Ord,Show,Eq)
 

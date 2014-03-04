@@ -33,13 +33,12 @@ import Graphics.Rendering.OpenGL.Raw
 
 -- Common
 import Debug.Trace as Dbg
-import Data.IORef
 import Control.Monad (  forM_ {-,when, unless,void,filterM-} )
 import qualified Data.ByteString as B
+import qualified Data.Map as M
 
 import Hinecraft.Model
 import Hinecraft.Types
-import Hinecraft.Util
 
 import Hinecraft.Render.Types
 import Hinecraft.Render.Util
@@ -53,7 +52,7 @@ data ShaderParam = ShaderParam
 data ViewMode = V2DMode | V3DTitleMode | V3DMode
   deriving (Eq,Show)
 
-type WorldDispList = IORef [(ChunkNo, [(BlockNo,DisplayList)])]
+type WorldDispList = M.Map (Int,Int) [DisplayList]
 
 renderCurFace :: Maybe (WorldIndex,Surface) -> IO ()
 renderCurFace objPos = 
@@ -104,8 +103,8 @@ drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
     renderCurFace  pos
 
     color $ Color3 0.0 1.0 (0.0::GLfloat)
-    readIORef worldDispList
-      >>= mapM_ (\ (_,b) -> mapM_ (\ (_,d) -> callList d) b)  
+    
+    mapM_ (\ (_,b) -> mapM_ callList b) $ M.toList worldDispList
 
   preservingMatrix $ do
     currentProgram $= Just (shdprg shprg)
@@ -118,7 +117,7 @@ drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
   where
     d2f (a,b,c) = (realToFrac a, realToFrac b, realToFrac c)
     (ux,uy,uz) = d2f $ userPos usrStat'
-    (urx,ury,_) = d2f $ userRot usrStat'
+    (urx,ury,_) = d2f $ userRot usrStat' :: (GLfloat,GLfloat,GLfloat)
     pIndex =  palletIndex usrStat'
     drawBackGroundBox' = preservingMatrix $ do
       color $ Color4 (180/255) (226/255) (255/255) (1.0::GLfloat)
@@ -293,7 +292,7 @@ initShader home = do
     then Dbg.traceIO "prg link ok"
     else do
       Dbg.traceIO "prg link error"
-      Dbg.traceIO =<< (get $ programInfoLog prg)  
+      Dbg.traceIO =<< get (programInfoLog prg)  
   -- 
   --detachShader prg vsh
   --detachShader prg fsh
@@ -307,7 +306,7 @@ initShader home = do
     then Dbg.traceIO "prg validate ok"
     else do
       Dbg.traceIO "prg link error"
-      Dbg.traceIO =<< (get $ programInfoLog prg)  
+      Dbg.traceIO =<< get (programInfoLog prg)  
 
   return ShaderParam { shdprg = prg }
   where
@@ -317,10 +316,10 @@ initShader home = do
       compileShader sh
       cs <- get $ compileStatus sh
       if cs
-        then Dbg.traceIO $ "sh complie ok"
+        then Dbg.traceIO "sh complie ok"
         else do
-          Dbg.traceIO $ "sh complie error"
-          Dbg.traceIO =<< (get $ shaderInfoLog sh)
+          Dbg.traceIO "sh complie error"
+          Dbg.traceIO =<< get (shaderInfoLog sh)
       return $! sh
 
 genSufDispList :: WorldResource -> SurfacePos -> Maybe DisplayList
@@ -341,25 +340,24 @@ genSufDispList wldRes bsf dsp = case dsp of
           ![tt',tb',tr',tl',tf',tba'] = if null texIdx 
                                   then replicate 6 (0,0)
                                   else texIdx
-      mapM_ (\ (f,l) -> case f of
-         STop -> genSuf (0,-1,0) (setColor 0 l)
+      mapM_ (\ f -> case f of
+         STop -> genSuf (0,-1,0) (setColor 0)
            $ map (calcUV tt') (getVertexList sp STop)
-         SBottom -> genSuf (0,-1,0) (setColor 1 l)
+         SBottom -> genSuf (0,-1,0) (setColor 1)
            $ map (calcUV tb') (getVertexList sp SBottom)
-         SRight -> genSuf (1,0,0) (setColor 2 l) 
+         SRight -> genSuf (1,0,0) (setColor 2) 
            $ map (calcUV tf') (getVertexList sp SRight)
-         SLeft -> genSuf (-1,0,0) (setColor 3 l) 
+         SLeft -> genSuf (-1,0,0) (setColor 3) 
            $ map (calcUV tba') (getVertexList sp SLeft)
-         SFront -> genSuf (0,0,-1) (setColor 4 l)
+         SFront -> genSuf (0,0,-1) (setColor 4)
            $ map (calcUV tr') (getVertexList sp SFront)
-         SBack -> genSuf (0,0,1) (setColor 5 l)
+         SBack -> genSuf (0,0,1) (setColor 5)
            $ map (calcUV tl') (getVertexList sp SBack)
          ) fs
       where
         d2fv3 :: (Double,Double,Double) -> VrtxPos3D 
         d2fv3 (a,b,c) = ( realToFrac a, realToFrac b, realToFrac c)
-        setColor i l = (d2fv3 $ (bcolor $ getBlockInfo bid) !! i)
-                       ..*. ((fromIntegral l) / 16.0) 
+        setColor i = d2fv3 $ bcolor (getBlockInfo bid) !! i
         genSuf :: (GLfloat,GLfloat,GLfloat)
                -> (GLfloat,GLfloat,GLfloat)
                -> [((GLfloat,GLfloat)
