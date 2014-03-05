@@ -8,16 +8,16 @@ module Hinecraft.Data
   , SurfaceList
   , SurfacePos
   , getSurface
-  , genSurfaceList
+  -- , genSurfaceList
   , setSurfaceList
   , getSurfaceList
-  , genWorldData
+  , loadWorldData
   , getBlockID
   , setBlockID
   , calcReGenArea
-  --, calcSunLight
-  --, getSunLightEffect
-  --, initSunLight
+  , saveWorldData
+  , saveSurfaceList
+  , loadSurfaceList
   , calcCursorPos
   ) where
 
@@ -32,8 +32,9 @@ import Hinecraft.Types
 import Hinecraft.Model
 import Hinecraft.Util
 import Hinecraft.Render.Util
---import Debug.Trace as Dbg
+import Debug.Trace as Dbg
 import qualified Data.Map as M
+import System.Directory
 
 type SurfaceList = M.Map (Int,Int) [SurfacePos]
 
@@ -121,7 +122,6 @@ calcPointer (x,y,z) (rx,ry,_) r =
   , z + r * cos (d2r (ry + 180)) * cos (d2r rx))
   where
     d2r d = pi*d/180.0
-
 
 genSurfaceList :: WorldData -> SurfaceList
 genSurfaceList wld = M.mapWithKey f $ chunkList wld
@@ -243,12 +243,98 @@ chkSuf'' vec (tag1,tag2) (itr1,itr2) clbk (x,y,z) = concat
     fill2' = (\ v -> (v,v == airBlockID))
                <$> (vec DVS.!? ((pos2i . itr2) (x,y,z))) 
 
-genWorldData :: WorldData
-genWorldData = WorldData 
-    { chunkList = M.fromList $ map (\ (x,z) -> ((x,z),genChunk))
-          [ (x,z) | x <- [-2,-1 .. 2], z <- [-2,-1 .. 2] ]
+chunkArea :: [(Int,Int)]
+chunkArea = [ (x,z) | x <- [-2,-1 .. 2], z <- [-2,-1 .. 2] ]
         --  [ (x,z) | x <- [-4,-3 .. 4], z <- [-4,-3 .. 4] ]
-    }
+        
+saveWorldData :: WorldData -> FilePath -> IO ()
+saveWorldData wld home = 
+  mapM_ (\ (k,c) -> writeChunkData k c path) chLst
+  where
+    chLst = M.toList $ chunkList wld
+    path = home ++ "/.Hinecraft/userdata/wld0"
+
+loadWorldData :: FilePath -> IO WorldData
+loadWorldData home = do
+  chLst <- mapM (\ (i,j) -> do
+    c <- readChunkData (i,j) path
+    return ((i,j), case c of 
+                     Just c' -> c'
+                     Nothing -> genChunk)
+    ) chunkArea
+  Dbg.traceIO "loadWorldData"
+  return $! WorldData { chunkList = M.fromList chLst }
+  where
+    path = home ++ "/.Hinecraft/userdata/wld0"
+
+loadSurfaceList :: WorldData -> FilePath -> IO SurfaceList
+loadSurfaceList wld home = do
+  suLst <- mapM (\ (i,j) -> do
+    s <- readSurfData (i,j) path
+    return ( (i,j)
+           , if null s 
+               then
+                 let c = case getChunk' (chunkList wld) (i,j) of
+                           Just c' -> c'
+                           Nothing -> genChunk
+                 in
+                 map (\ bn -> getSurface' wld c ((i,j),bn)) [0 .. bkNo]
+               else s
+           )
+    ) chunkArea
+  Dbg.traceIO "loadSurfaceList"
+  return $! M.fromList suLst
+  where
+    path = home ++ "/.Hinecraft/userdata/wld0"
+    !bkNo = blockNum chunkParam - 1
+
+readSurfData :: (Int,Int) -> FilePath -> IO [SurfacePos]
+readSurfData (i,j) path = do
+  f <- doesDirectoryExist dpath
+  if f
+    then read <$> readFile (dpath ++ "/suf") 
+    else return []
+  where
+    dpath = path ++ "/cuk" ++ show i ++ "_" ++ show j
+
+saveSurfaceList :: SurfaceList -> FilePath -> IO () 
+saveSurfaceList suflst home =
+  mapM_ (\ (k,s) -> writeSurfListData k s path) suLst
+  where
+    suLst = M.toList suflst 
+    path = home ++ "/.Hinecraft/userdata/wld0"
+
+writeSurfListData :: (Int,Int) -> [SurfacePos] -> FilePath -> IO ()
+writeSurfListData (i,j) s path = do
+  createDirWithChk dpath
+  writeFile (dpath ++ "/suf") $ show s 
+  where
+    dpath = path ++ "/cuk" ++ show i ++ "_" ++ show j
+
+writeChunkData :: (Int,Int) -> Chunk -> FilePath -> IO ()
+writeChunkData (i,j) ch path = do
+  createDirWithChk dpath
+  writeFile (dpath ++ "/blk") $ show ch 
+  where
+    dpath = path ++ "/cuk" ++ show i ++ "_" ++ show j
+
+readChunkData :: (Int,Int) -> FilePath -> IO (Maybe Chunk)
+readChunkData (i,j) path = do
+  f <- doesDirectoryExist dpath
+  if f
+    then do
+      ch <- read <$> readFile (dpath ++ "/blk") 
+      return $! Just ch 
+    else return Nothing
+  where
+    dpath = path ++ "/cuk" ++ show i ++ "_" ++ show j
+
+createDirWithChk :: FilePath -> IO Bool
+createDirWithChk path = do
+  f <- doesDirectoryExist path
+  if f 
+    then return False
+    else createDirectory path >> return True
 
 setBlockID :: WorldData -> WorldIndex -> BlockIDNum -> WorldData
 setBlockID wld (x,y,z) bid = WorldData

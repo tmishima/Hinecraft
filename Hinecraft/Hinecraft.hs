@@ -21,7 +21,7 @@ import qualified Data.Map as M
 import Data.Maybe
 import Debug.Trace as Dbg
 import Control.Exception ( bracket )
-import Control.Monad ( unless,when,forM,forM {-,foldMvoid,filterM-} )
+import Control.Monad ( when,forM,forM {-unless,,foldMvoid,filterM-} )
 --import Data.Maybe ( fromJust,isJust ) --,catMaybes )
 import Control.Applicative
 import System.Directory ( getHomeDirectory )
@@ -65,6 +65,8 @@ exitHinecraft (glfwHdl,_,_,_) = do
 runHinecraft :: (GLFWHandle, GuiResource, WorldResource, ShaderParam)
              -> IO ()
 runHinecraft resouce@(glfwHdl,_,wldRes,shprg) = do
+  !wld <- loadWorldData =<< getHomeDirectory 
+  !sfl <- loadSurfaceList wld =<< getHomeDirectory
   let !tmstat = TitleModeState (0::Double) False False False
       !plstat = PlayModeState
         { usrStat = UserStatus
@@ -78,8 +80,6 @@ runHinecraft resouce@(glfwHdl,_,wldRes,shprg) = do
         , curPos = Nothing
         , pallet = replicate 9 airBlockID
         }
-      !wld = genWorldData 
-      !sfl = genSurfaceList wld
   dsps <- genWorldDispList wldRes sfl 
   _ <- getDeltTime glfwHdl
   mainLoop tmstat plstat TitleMode (wld,sfl,dsps,shprg) 
@@ -92,8 +92,12 @@ runHinecraft resouce@(glfwHdl,_,wldRes,shprg) = do
       (ntmstat',nplstat',runMode',f'',nw') <- mainProcess
                    resouce tmstat' plstat' w' runMode f' d' dt
       drawView resouce ntmstat' nplstat' runMode' d' 
-      unless (exitflg' || (isQuit ntmstat'))
-        $ mainLoop ntmstat' nplstat' runMode' (nw',f'',d',s')
+      if exitflg' || isQuit ntmstat'
+        then do
+          home <- getHomeDirectory
+          saveWorldData nw' home  
+          saveSurfaceList f'' home
+        else mainLoop ntmstat' nplstat' runMode' (nw',f'',d',s')
 
 mainProcess :: (GLFWHandle, GuiResource, WorldResource,a)
             -> TitleModeState -> PlayModeState -> WorldData
@@ -137,6 +141,7 @@ mainProcess (glfwHdl, guiRes, wldRes,_) tmstat plstat wld runMode
           updateDisplist wldRes dsps newSuf pos'
           return $! (newWld,newSuf)
         Nothing -> return (wld,sufList)
+
       return $! ( md
                 , PlayModeState
                        { usrStat = newStat , drgdrpMd = Nothing

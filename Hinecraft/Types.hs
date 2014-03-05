@@ -81,7 +81,7 @@ type Vel' = Pos'
 
 type SurfacePos = [(WorldIndex,BlockIDNum,[Surface])]
 data Surface = STop | SBottom | SRight | SLeft | SFront | SBack 
-  deriving (Ord,Show,Eq)
+  deriving (Ord,Show,Eq,Read)
 
 type BlockNo = Int
 type ChunkNo = Int
