@@ -248,7 +248,10 @@ chunkArea = [ (x,z) | x <- [-2,-1 .. 2], z <- [-2,-1 .. 2] ]
         --  [ (x,z) | x <- [-4,-3 .. 4], z <- [-4,-3 .. 4] ]
         
 saveWorldData :: WorldData -> FilePath -> IO ()
-saveWorldData wld home = 
+saveWorldData wld home = do
+  --tmp <- getTemporaryDirectory
+  --let tpath = tmp ++ "/wld0"
+  --createDirWithChk tpath 
   mapM_ (\ (k,c) -> writeChunkData k c path) chLst
   where
     chLst = M.toList $ chunkList wld
@@ -323,7 +326,7 @@ readChunkData (i,j) path = do
   f <- doesDirectoryExist dpath
   if f
     then do
-      ch <- read <$> readFile (dpath ++ "/blk") 
+      !ch <- read <$> readFile (dpath ++ "/blk") 
       return $! Just ch 
     else return Nothing
   where
