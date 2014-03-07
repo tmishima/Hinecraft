@@ -12,7 +12,6 @@ module Hinecraft.Render.View
   , loadGuiResource
   , loadWorldResouce
   , initGL
-  , initShader
   , setPerspective
   , gen3dCursol
   , drawBackPlane
@@ -24,6 +23,7 @@ module Hinecraft.Render.View
   , drawPlay
   , genSufDispList
   --
+  , initShaderProg
   , setSun
   , drawSun 
   ) where
@@ -50,17 +50,28 @@ import Hinecraft.Types
 
 import Hinecraft.Render.Types
 import Hinecraft.Render.Util
+import Hinecraft.Render.Shader
 -- Define
-
-data ShaderParam = ShaderParam
-  { shdprg :: Program
-  }
 
 -- ##################### OpenGL ###########################
 data ViewMode = V2DMode | V3DTitleMode | V3DMode
   deriving (Eq,Show)
 
 type WorldDispList = M.Map (Int,Int) [DisplayList]
+
+
+initShaderProg home = do
+  prg <- genShaderProg sps
+  return prg
+  where
+    sps = ShaderPrgSrc
+      { vSrc = home ++ "/.Hinecraft/shader/basic.vert"
+      , fSrc = home ++ "/.Hinecraft/shader/basic.frag"
+      , vattrLoc = ["VertexPosition","VertexColor"]
+      , fattrLoc = ["FragColor"]
+      }
+
+
 type VBo = VertexArrayObject
 setSun :: IO VertexArrayObject
 setSun = do
@@ -115,7 +126,6 @@ setSun = do
 
 offset a = plusPtr nullPtr a
 
-
 drawSun shprg vbo = do
   --preservingMatrix $ do
       --setPerspective V3DMode w h
@@ -130,7 +140,6 @@ drawSun shprg vbo = do
       bindBuffer ArrayBuffer $= Nothing
 
       currentProgram $= Nothing
-
 
 renderCurFace :: Maybe (WorldIndex,Surface) -> IO ()
 renderCurFace objPos = 
@@ -342,59 +351,6 @@ initGL = do
   --colorMaterial     $= Just (GL.Front, AmbientAndDiffuse)
 
   glHint gl_PERSPECTIVE_CORRECTION_HINT gl_NICEST
-
-initShader :: FilePath -> IO ShaderParam
-initShader home = do
-  Dbg.traceIO "\nload basic.vert"
-  vertSrc <- B.readFile $ home ++ "/.Hinecraft/shader/basic.vert"
-  vsh <- compShader vertSrc VertexShader
-
-  Dbg.traceIO "load basic.frag"
-  frgSrc <- B.readFile $ home ++ "/.Hinecraft/shader/basic.frag"
-  fsh <- compShader frgSrc FragmentShader 
-
-  prg <- createProgram
-  attachShader prg vsh
-  attachShader prg fsh
-
-  attribLocation prg "VertexPosition" $= AttribLocation 0
-  attribLocation prg "VertexColor" $= AttribLocation 1
-  bindFragDataLocation prg "FragColor" $= 0
-
-  linkProgram prg
-  ls <- get $ linkStatus prg
-  if ls
-    then Dbg.traceIO "prg link ok"
-    else do
-      Dbg.traceIO "prg link error"
-      Dbg.traceIO =<< get (programInfoLog prg)  
-  -- 
-  --detachShader prg vsh
-  --detachShader prg fsh
-  releaseShaderCompiler
-  --
-  validateProgram prg
-  --currentProgram $= Just prg
-  ps <- get $ validateStatus prg
-  if ps
-    then Dbg.traceIO "prg validate ok"
-    else do
-      Dbg.traceIO "prg link error"
-      Dbg.traceIO =<< get (programInfoLog prg)  
-
-  return ShaderParam { shdprg = prg }
-  where
-    compShader src stype = do
-      sh <- createShader stype 
-      shaderSourceBS sh $= src 
-      compileShader sh
-      cs <- get $ compileStatus sh
-      if cs
-        then Dbg.traceIO "sh complie ok"
-        else do
-          Dbg.traceIO "sh complie error"
-          Dbg.traceIO =<< get (shaderInfoLog sh)
-      return $! sh
 
 genSufDispList :: WorldResource -> SurfacePos -> Maybe DisplayList
                -> IO DisplayList

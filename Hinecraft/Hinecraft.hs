@@ -49,7 +49,7 @@ initHinecraft = do
   glfwHdl <- initGLFW winSize
 
   initGL
-  prg <- initShader home
+  prg <- initShaderProg home
 
   guiRes <- loadGuiResource home winSize
   wldRes <- loadWorldResouce home
