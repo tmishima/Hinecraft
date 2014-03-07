@@ -48,11 +48,12 @@ initHinecraft = do
   Dbg.traceIO "Hinecraft Start"
   glfwHdl <- initGLFW winSize
 
+  initGL
+  prg <- initShader home
+
   guiRes <- loadGuiResource home winSize
   wldRes <- loadWorldResouce home
   
-  initGL
-  prg <- initShader home
   return $! (glfwHdl,guiRes,wldRes,prg)
   where
     winSize = (1366,768)
@@ -80,24 +81,26 @@ runHinecraft resouce@(glfwHdl,_,wldRes,shprg) = do
         , curPos = Nothing
         , pallet = replicate 9 airBlockID
         }
+  sun <- setSun
   dsps <- genWorldDispList wldRes sfl 
   _ <- getDeltTime glfwHdl
-  mainLoop tmstat plstat TitleMode (wld,sfl,dsps,shprg) 
+  mainLoop tmstat plstat TitleMode (wld,sfl,dsps,shprg,sun) 
   where
-    mainLoop tmstat' plstat' runMode (w',f',d',s') = do
+    mainLoop tmstat' plstat' runMode (w',f',d',s',sun') = do
       pollGLFW
       --threadDelay 10000
       dt <- getDeltTime glfwHdl
       exitflg' <- getExitReqGLFW glfwHdl
       (ntmstat',nplstat',runMode',f'',nw') <- mainProcess
                    resouce tmstat' plstat' w' runMode f' d' dt
-      drawView resouce ntmstat' nplstat' runMode' d' 
+      drawView resouce ntmstat' nplstat' runMode' d' sun' 
+      swapBuff glfwHdl
       if exitflg' || isQuit ntmstat'
-        then do
-          home <- getHomeDirectory
-          saveWorldData nw' home  
-          saveSurfaceList f'' home
-        else mainLoop ntmstat' nplstat' runMode' (nw',f'',d',s')
+        then return () -- do
+          --home <- getHomeDirectory
+          --saveWorldData nw' home  
+          --saveSurfaceList f'' home
+        else mainLoop ntmstat' nplstat' runMode' (nw',f'',d',s',sun')
 
 mainProcess :: (GLFWHandle, GuiResource, WorldResource,a)
             -> TitleModeState -> PlayModeState -> WorldData
@@ -405,10 +408,10 @@ guiProcess res (x,y,btn1,_,_) = (chkModeChg,chkExit)
 
 drawView :: ( GLFWHandle, GuiResource, WorldResource,ShaderParam)
          -> TitleModeState -> PlayModeState -> RunMode
-         -> WorldDispList  
+         -> WorldDispList -> VBo
          -> IO ()
 drawView (glfwHdl, guiRes, wldRes,shprg) tmstat plstat runMode'
-         worldDispList = do
+         worldDispList sun' = do
   winSize <- getWindowSize glfwHdl
   updateDisplay $
     if runMode' == TitleMode
@@ -416,7 +419,7 @@ drawView (glfwHdl, guiRes, wldRes,shprg) tmstat plstat runMode'
         drawTitle winSize guiRes tmstat
       else  
         drawPlay winSize guiRes wldRes usrStat' worldDispList pos plt
-                 (runMode' == InventoryMode) drgSta' shprg
+                 (runMode' == InventoryMode) drgSta' shprg sun'
   swapBuff glfwHdl
   where
     usrStat' = usrStat plstat

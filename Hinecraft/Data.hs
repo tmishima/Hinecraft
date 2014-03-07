@@ -326,7 +326,7 @@ readChunkData (i,j) path = do
   f <- doesDirectoryExist dpath
   if f
     then do
-      !ch <- read <$> readFile (dpath ++ "/blk") 
+      ch <- read <$> readFile (dpath ++ "/blk") 
       return $! Just ch 
     else return Nothing
   where

@@ -6,6 +6,7 @@
 module Hinecraft.Render.View
   ( ViewMode (..)
   , UserStatus (..)
+  , VBo
   , ShaderParam
   , WorldDispList
   , loadGuiResource
@@ -22,13 +23,16 @@ module Hinecraft.Render.View
   , drawTitle
   , drawPlay
   , genSufDispList
+  --
+  , setSun
+  , drawSun 
   ) where
 
 -- Font
 import Graphics.Rendering.FTGL as Ft
 
 -- OpenGL
-import Graphics.Rendering.OpenGL
+import Graphics.Rendering.OpenGL as GL
 import Graphics.Rendering.OpenGL.Raw
 
 -- Common
@@ -36,6 +40,10 @@ import Debug.Trace as Dbg
 import Control.Monad (  forM_ {-,when, unless,void,filterM-} )
 import qualified Data.ByteString as B
 import qualified Data.Map as M
+import qualified Data.Array.Storable as SA
+import qualified Foreign.Marshal.Array as MA
+import qualified Foreign.Storable as FS
+import Foreign.Ptr 
 
 import Hinecraft.Model
 import Hinecraft.Types
@@ -53,6 +61,76 @@ data ViewMode = V2DMode | V3DTitleMode | V3DMode
   deriving (Eq,Show)
 
 type WorldDispList = M.Map (Int,Int) [DisplayList]
+type VBo = VertexArrayObject
+setSun :: IO VertexArrayObject
+setSun = do
+  [varray,carray] <- genObjectNames 2
+
+  varr <- SA.newListArray (0, vlen - 1) vert
+
+  bindBuffer ArrayBuffer $= Just varray
+  SA.withStorableArray varr $ \ ptr ->
+    bufferData ArrayBuffer $= (toEnum vlen, ptr, StaticDraw)
+
+  bindBuffer ArrayBuffer $= Just carray
+  MA.withArray clr $ \ ptr -> do
+    let size = fromIntegral (length clr * FS.sizeOf (head clr))
+    bufferData ArrayBuffer $= (size, ptr, StaticDraw)
+
+  vbo <- genObjectName
+  bindVertexArrayObject $= Just vbo
+
+  bindBuffer ArrayBuffer $= Just varray
+  vertexAttribPointer (AttribLocation 0) $=
+        (ToFloat, VertexArrayDescriptor 4 Float 0 (offset 0))
+
+  vertexAttribArray (AttribLocation 0) $= Enabled
+
+  bindBuffer ArrayBuffer $= Just carray
+  vertexAttribPointer (AttribLocation 1) $=
+        (ToFloat, VertexArrayDescriptor 4 Float 0 (offset 0))
+
+  vertexAttribArray (AttribLocation 1) $= Enabled
+
+  bindBuffer ArrayBuffer $= Nothing
+  bindVertexArrayObject $= Nothing
+
+  return vbo
+  where
+    vlen = 4 * length vert
+    vert :: [GLfloat] 
+    vert  =
+{-      [ 0.0, 100.0, -50,0
+      , 00.0, 50.0, -50.0
+      , 50.0, 50.0, -50.0
+--      , 0.0, 70.0, 50.0 -}
+      [ -1.0, -1.0,  0.0, 1.0
+      ,  1.0, -1.0,  0.0, 1.0
+      ,  0.0,  1.0,  0.0, 1.0
+      ]
+    clr :: [Color4 GLfloat] 
+    clr = [GL.Color4 (1.0) 0.0 0.0 1.0,
+           GL.Color4 (0.0) (1.0) 0.0 1.0,
+           GL.Color4 0.0 (0.0) 1.0 1.0] :: [Color4 GLfloat]
+
+offset a = plusPtr nullPtr a
+
+
+drawSun shprg vbo = do
+  --preservingMatrix $ do
+      --setPerspective V3DMode w h
+      --texture Texture2D $= Disabled 
+      currentProgram $= Just (shdprg shprg)
+
+      -- shader ....
+      --clientState VertexArray $= Enabled
+
+      bindVertexArrayObject $= Just vbo
+      drawArrays Triangles 0 $ fromIntegral (3::Int)
+      bindBuffer ArrayBuffer $= Nothing
+
+      currentProgram $= Nothing
+
 
 renderCurFace :: Maybe (WorldIndex,Surface) -> IO ()
 renderCurFace objPos = 
@@ -80,9 +158,10 @@ drawPlay :: (Int,Int) -> GuiResource -> WorldResource
          -> UserStatus -> WorldDispList
          -> Maybe (WorldIndex,Surface)
          -> [BlockIDNum] -> Bool -> DragDropState -> ShaderParam
+         -> VertexArrayObject 
          -> IO ()
 drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
-         invSw dragDrop shprg = do
+         invSw dragDrop shprg vbo = do
 
   -- World
   preservingMatrix $ do
@@ -93,7 +172,7 @@ drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
     rotate (-ury :: GLfloat) $ Vector3 0.0 1.0 (0.0::GLfloat) -- z軸
  
     preservingMatrix $ do
-      scale 100.0 100.0 (100.0::GLfloat)
+      scale 200.0 200.0 (200.0::GLfloat)
       drawBackGroundBox' 
 
     -- カメラ位置
@@ -103,17 +182,12 @@ drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
     renderCurFace  pos
 
     color $ Color3 0.0 1.0 (0.0::GLfloat)
-    
     mapM_ (\ (_,b) -> mapM_ callList b) $ M.toList worldDispList
 
-  preservingMatrix $ do
-    currentProgram $= Just (shdprg shprg)
-    -- shader ....
-    currentProgram $= Nothing
+  drawSun shprg vbo 
 
   -- HUD
   renderHUD (w,h) guiRes wldRes pIndex invSw plt dragDrop
-
   where
     d2f (a,b,c) = (realToFrac a, realToFrac b, realToFrac c)
     (ux,uy,uz) = d2f $ userPos usrStat'
@@ -243,6 +317,7 @@ initGL = do
   tu <- get maxTextureUnit
   tm <- get maxTextureSize
   lt <- get maxLights
+  _ <- get bindVertexArrayObject
   Dbg.traceIO $ unwords [ "\n max texutere unit =", show tu
                         , "\n max texture size =", show tm
                         , "\n max lights =" , show lt
@@ -298,7 +373,6 @@ initShader home = do
   --detachShader prg fsh
   releaseShaderCompiler
   --
-
   validateProgram prg
   --currentProgram $= Just prg
   ps <- get $ validateStatus prg
