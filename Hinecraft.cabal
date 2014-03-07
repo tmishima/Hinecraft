@@ -30,7 +30,7 @@ executable Hinecraft
                      , bytestring == 0.10.*
                      , array , vector , directory , process
                      , OpenGLRaw , cereal , JuicyPixels , FTGL 
-                     , containers
+                     , containers , GLUtil
   -- hs-source-dirs:    Hinecraft
   -- ghc-options:         -Wall -threaded
   -- ghc-options:         -Wall -O2 -prof -auto-all -caf-all -fforce-recomp -rtsopts

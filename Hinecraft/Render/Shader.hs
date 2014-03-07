@@ -4,19 +4,16 @@
 -- License : Apache-2.0
 --
 module Hinecraft.Render.Shader
-  ( ShaderParam (..)
-  , ShaderPrgSrc (..)
+  ( ShaderPrgSrc (..)
+  , setSun
   , genShaderProg
   )
   where
 
+import Graphics.GLUtil
 import Graphics.Rendering.OpenGL as GL
-import qualified Data.ByteString as B
-import Debug.Trace as Dbg
-
-data ShaderParam = ShaderParam
-  { shdprg :: Program
-  }
+--import qualified Data.ByteString as B
+--import Debug.Trace as Dbg
 
 data ShaderPrgSrc = ShaderPrgSrc
   { vSrc :: FilePath 
@@ -25,62 +22,51 @@ data ShaderPrgSrc = ShaderPrgSrc
   , fattrLoc :: [String]
   }
 
+genShaderProg :: ShaderPrgSrc -> IO ShaderProgram
+genShaderProg sps = 
+  simpleShaderExplicit (vSrc sps) (fSrc sps)
+    (vattrLoc sps,[])
+   -- (vattrLoc sps,["RotationMatrix"])
 
-genShaderProg :: ShaderPrgSrc -> IO ShaderParam
-genShaderProg sps = do
-  Dbg.traceIO "\nload vert shader"
-  vertSrc <- B.readFile $ vSrc sps
-  vsh <- compShader vertSrc VertexShader
 
-  Dbg.traceIO "load frag shader"
-  frgSrc <- B.readFile $ fSrc sps
-  fsh <- compShader frgSrc FragmentShader 
 
-  prg <- createProgram
-  attachShader prg vsh
-  attachShader prg fsh
+setSun :: IO VertexArrayObject
+setSun = do
+  varray <- makeBuffer ArrayBuffer vert
+  carray <- makeBuffer ArrayBuffer clr
 
-  mapM_ (\ (attr,idx) -> 
-    attribLocation prg attr $= AttribLocation idx)
-    $ zip (vattrLoc sps) [0 .. ]
+  vbo <- makeVAO $ do
+      bindBuffer ArrayBuffer $= Just varray
+      vertexAttribPointer (AttribLocation 0) $=
+            (ToFloat, VertexArrayDescriptor 4 Float 0 offset0)
+    
+      vertexAttribArray (AttribLocation 0) $= Enabled
+    
+      bindBuffer ArrayBuffer $= Just carray
+      vertexAttribPointer (AttribLocation 1) $=
+            (ToFloat, VertexArrayDescriptor 4 Float 0 offset0)
+    
+      vertexAttribArray (AttribLocation 1) $= Enabled
 
-  mapM_ (\ (attr,idx) ->
-    bindFragDataLocation prg attr $= idx)
-    $ zip (fattrLoc sps) [0 .. ]
+      bindBuffer ArrayBuffer $= Nothing
+      bindVertexArrayObject $= Nothing
 
-  linkProgram prg
-  ls <- get $ linkStatus prg
-  if ls
-    then Dbg.traceIO "prg link ok"
-    else do
-      Dbg.traceIO "prg link error"
-      Dbg.traceIO =<< get (programInfoLog prg)  
-  -- 
-  --detachShader prg vsh
-  --detachShader prg fsh
-  releaseShaderCompiler
-  --
-  validateProgram prg
-  --currentProgram $= Just prg
-  ps <- get $ validateStatus prg
-  if ps
-    then Dbg.traceIO "prg validate ok"
-    else do
-      Dbg.traceIO "prg link error"
-      Dbg.traceIO =<< get (programInfoLog prg)  
-
-  return ShaderParam { shdprg = prg }
+  return vbo
   where
-    compShader src stype = do
-      sh <- createShader stype 
-      shaderSourceBS sh $= src 
-      compileShader sh
-      cs <- get $ compileStatus sh
-      if cs
-        then Dbg.traceIO "sh complie ok"
-        else do
-          Dbg.traceIO "sh complie error"
-          Dbg.traceIO =<< get (shaderInfoLog sh)
-      return $! sh
+    vert :: [GLfloat] 
+    vert  =
+{-      [ 0.0, 100.0, -50,0
+      , 00.0, 50.0, -50.0
+      , 50.0, 50.0, -50.0
+--      , 0.0, 70.0, 50.0 -}
+      [ -1.0, -1.0,  0.0, 1.0
+      ,  1.0, -1.0,  0.0, 1.0
+      ,  0.0,  1.0,  0.0, 1.0
+      ]
+    clr :: [Color4 GLfloat] 
+    clr = [GL.Color4 1.0 0.0 0.0 1.0,
+           GL.Color4 0.0 1.0 0.0 1.0,
+           GL.Color4 0.0 0.0 1.0 1.0] :: [Color4 GLfloat]
+
 
 

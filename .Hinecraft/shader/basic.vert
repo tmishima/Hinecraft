@@ -9,8 +9,8 @@ uniform mat4 RotationMatrix;
 
 void main () {
   Color = VertexColor;
-  gl_Position = RotationMatrix * VertexPosition;
-  //gl_Position = VertexPosition;
+  //gl_Position = RotationMatrix * VertexPosition;
+  gl_Position = VertexPosition;
   //gl_Position = ftransform();
 }
 

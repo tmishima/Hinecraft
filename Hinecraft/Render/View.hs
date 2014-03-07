@@ -6,8 +6,6 @@
 module Hinecraft.Render.View
   ( ViewMode (..)
   , UserStatus (..)
-  , VBo
-  , ShaderParam
   , WorldDispList
   , loadGuiResource
   , loadWorldResouce
@@ -35,15 +33,12 @@ import Graphics.Rendering.FTGL as Ft
 import Graphics.Rendering.OpenGL as GL
 import Graphics.Rendering.OpenGL.Raw
 
+import Graphics.GLUtil
+
 -- Common
 import Debug.Trace as Dbg
 import Control.Monad (  forM_ {-,when, unless,void,filterM-} )
-import qualified Data.ByteString as B
 import qualified Data.Map as M
-import qualified Data.Array.Storable as SA
-import qualified Foreign.Marshal.Array as MA
-import qualified Foreign.Storable as FS
-import Foreign.Ptr 
 
 import Hinecraft.Model
 import Hinecraft.Types
@@ -59,7 +54,6 @@ data ViewMode = V2DMode | V3DTitleMode | V3DMode
 
 type WorldDispList = M.Map (Int,Int) [DisplayList]
 
-
 initShaderProg home = do
   prg <- genShaderProg sps
   return prg
@@ -71,66 +65,11 @@ initShaderProg home = do
       , fattrLoc = ["FragColor"]
       }
 
-
-type VBo = VertexArrayObject
-setSun :: IO VertexArrayObject
-setSun = do
-  [varray,carray] <- genObjectNames 2
-
-  varr <- SA.newListArray (0, vlen - 1) vert
-
-  bindBuffer ArrayBuffer $= Just varray
-  SA.withStorableArray varr $ \ ptr ->
-    bufferData ArrayBuffer $= (toEnum vlen, ptr, StaticDraw)
-
-  bindBuffer ArrayBuffer $= Just carray
-  MA.withArray clr $ \ ptr -> do
-    let size = fromIntegral (length clr * FS.sizeOf (head clr))
-    bufferData ArrayBuffer $= (size, ptr, StaticDraw)
-
-  vbo <- genObjectName
-  bindVertexArrayObject $= Just vbo
-
-  bindBuffer ArrayBuffer $= Just varray
-  vertexAttribPointer (AttribLocation 0) $=
-        (ToFloat, VertexArrayDescriptor 4 Float 0 (offset 0))
-
-  vertexAttribArray (AttribLocation 0) $= Enabled
-
-  bindBuffer ArrayBuffer $= Just carray
-  vertexAttribPointer (AttribLocation 1) $=
-        (ToFloat, VertexArrayDescriptor 4 Float 0 (offset 0))
-
-  vertexAttribArray (AttribLocation 1) $= Enabled
-
-  bindBuffer ArrayBuffer $= Nothing
-  bindVertexArrayObject $= Nothing
-
-  return vbo
-  where
-    vlen = 4 * length vert
-    vert :: [GLfloat] 
-    vert  =
-{-      [ 0.0, 100.0, -50,0
-      , 00.0, 50.0, -50.0
-      , 50.0, 50.0, -50.0
---      , 0.0, 70.0, 50.0 -}
-      [ -1.0, -1.0,  0.0, 1.0
-      ,  1.0, -1.0,  0.0, 1.0
-      ,  0.0,  1.0,  0.0, 1.0
-      ]
-    clr :: [Color4 GLfloat] 
-    clr = [GL.Color4 (1.0) 0.0 0.0 1.0,
-           GL.Color4 (0.0) (1.0) 0.0 1.0,
-           GL.Color4 0.0 (0.0) 1.0 1.0] :: [Color4 GLfloat]
-
-offset a = plusPtr nullPtr a
-
 drawSun shprg vbo = do
   --preservingMatrix $ do
       --setPerspective V3DMode w h
       --texture Texture2D $= Disabled 
-      currentProgram $= Just (shdprg shprg)
+      currentProgram $= Just (program shprg)
 
       -- shader ....
       --clientState VertexArray $= Enabled
@@ -166,7 +105,7 @@ renderCurFace objPos =
 drawPlay :: (Int,Int) -> GuiResource -> WorldResource
          -> UserStatus -> WorldDispList
          -> Maybe (WorldIndex,Surface)
-         -> [BlockIDNum] -> Bool -> DragDropState -> ShaderParam
+         -> [BlockIDNum] -> Bool -> DragDropState -> ShaderProgram
          -> VertexArrayObject 
          -> IO ()
 drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt

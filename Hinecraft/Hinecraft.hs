@@ -26,6 +26,8 @@ import Control.Monad ( when,forM,forM {-unless,,foldMvoid,filterM-} )
 import Control.Applicative
 import System.Directory ( getHomeDirectory )
 --import Control.Concurrent
+import Graphics.Rendering.OpenGL
+
 
 import Hinecraft.Render.View
 import Hinecraft.Render.Types
@@ -34,6 +36,7 @@ import Hinecraft.Util
 import Hinecraft.Types
 import Hinecraft.Data
 import Hinecraft.GUI.GLFWWindow 
+import Graphics.GLUtil
 
 main :: IO ()
 main = bracket initHinecraft exitHinecraft runHinecraft
@@ -42,7 +45,7 @@ data RunMode = TitleMode | PlayMode | InventoryMode
   deriving (Eq,Show)
 
 
-initHinecraft :: IO (GLFWHandle, GuiResource,WorldResource,ShaderParam)
+initHinecraft :: IO (GLFWHandle, GuiResource,WorldResource,ShaderProgram)
 initHinecraft = do
   home <- getHomeDirectory
   Dbg.traceIO "Hinecraft Start"
@@ -63,7 +66,7 @@ exitHinecraft (glfwHdl,_,_,_) = do
   exitGLFW glfwHdl
   Dbg.traceIO "Hinecraft End"
 
-runHinecraft :: (GLFWHandle, GuiResource, WorldResource, ShaderParam)
+runHinecraft :: (GLFWHandle, GuiResource, WorldResource,ShaderProgram)
              -> IO ()
 runHinecraft resouce@(glfwHdl,_,wldRes,shprg) = do
   !wld <- loadWorldData =<< getHomeDirectory 
@@ -406,9 +409,9 @@ guiProcess res (x,y,btn1,_,_) = (chkModeChg,chkExit)
     isExtBtnEntr = chkEntrBtn (f2d extbtnPosOrgn) (f2d extbtnSize)
     chkExit = ( isExtBtnEntr && btn1 , isExtBtnEntr) 
 
-drawView :: ( GLFWHandle, GuiResource, WorldResource,ShaderParam)
+drawView :: ( GLFWHandle, GuiResource, WorldResource,ShaderProgram)
          -> TitleModeState -> PlayModeState -> RunMode
-         -> WorldDispList -> VBo
+         -> WorldDispList -> VertexArrayObject 
          -> IO ()
 drawView (glfwHdl, guiRes, wldRes,shprg) tmstat plstat runMode'
          worldDispList sun' = do
