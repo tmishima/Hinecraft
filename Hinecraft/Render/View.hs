@@ -54,17 +54,6 @@ data ViewMode = V2DMode | V3DTitleMode | V3DMode
 
 type WorldDispList = M.Map (Int,Int) [DisplayList]
 
-initShaderProg home = do
-  prg <- genShaderProg sps
-  return prg
-  where
-    sps = ShaderPrgSrc
-      { vSrc = home ++ "/.Hinecraft/shader/basic.vert"
-      , fSrc = home ++ "/.Hinecraft/shader/basic.frag"
-      , vattrLoc = ["VertexPosition","VertexColor"]
-      , fattrLoc = ["FragColor"]
-      }
-
 drawSun shprg vbo = do
   --preservingMatrix $ do
       --setPerspective V3DMode w h
@@ -73,6 +62,9 @@ drawSun shprg vbo = do
 
       -- shader ....
       --clientState VertexArray $= Enabled
+
+      uniformMat (getUniform shprg "RotationMatrix")
+          $= [[1,0,0,0],[1,1,0,0] ,[1,0,1,0],[1,0,0,1]]
 
       bindVertexArrayObject $= Just vbo
       drawArrays Triangles 0 $ fromIntegral (3::Int)

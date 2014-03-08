@@ -84,7 +84,7 @@ runHinecraft resouce@(glfwHdl,_,wldRes,shprg) = do
         , curPos = Nothing
         , pallet = replicate 9 airBlockID
         }
-  sun <- setSun
+  sun <- setSun shprg
   dsps <- genWorldDispList wldRes sfl 
   _ <- getDeltTime glfwHdl
   mainLoop tmstat plstat TitleMode (wld,sfl,dsps,shprg,sun) 
