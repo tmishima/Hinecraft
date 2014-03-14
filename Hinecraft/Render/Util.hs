@@ -4,22 +4,22 @@
 -- License : Apache-2.0
 --
 module Hinecraft.Render.Util
-  ( loadTextures
-  , blockNodeVertex
+  ( blockNodeVertex
   , getVertexList
   , drawBackPlane
   , putTextLine
   , drawIcon
+  , loadTexture'
   )
   where
 
 import Graphics.Rendering.OpenGL 
 import Graphics.Rendering.OpenGL.Raw
 import Control.Monad ( void )
-import Foreign ( withForeignPtr, plusPtr, alloca, peek )
-import qualified Codec.Picture as CdP
-import qualified Data.Vector.Storable as Vct
-import Debug.Trace as Dbg
+--import qualified Data.Vector.Storable as Vct
+--import Debug.Trace as Dbg
+
+import Graphics.GLUtil as GU
 
 -- Font
 import Graphics.Rendering.FTGL as Ft
@@ -27,51 +27,6 @@ import Graphics.Rendering.FTGL as Ft
 import Hinecraft.Render.Types
 import Hinecraft.Types
 import Hinecraft.Model
-
-loadTextures :: FilePath -> IO GLuint
-loadTextures path = do
-  Dbg.traceIO path
-  Just (w,h,(ptr,off,_),t) <- rdImg
-  Dbg.traceIO $ unwords ["Image w = ", show w, "Image h = ", show h]
-  tex <- alloca $ \p -> do
-            glGenTextures 1 p
-            peek p
-  _ <- withForeignPtr ptr $ \p -> do
-    let p' = p `plusPtr` off
-        glNearest  = fromIntegral gl_NEAREST
-    -- create linear filtered texture
-    glBindTexture gl_TEXTURE_2D tex
-    glTexImage2D gl_TEXTURE_2D 0 4
-      (fromIntegral w) (fromIntegral h)
-      0 t gl_UNSIGNED_BYTE p'
-    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAG_FILTER glNearest
-    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MIN_FILTER glNearest
-
-  return $! tex
-  where
-    showInfo n i = putStrLn $ unwords [n, show $ CdP.imageWidth i, show $ CdP.imageHeight i]
-    getPtr i t = Just (CdP.imageWidth i
-                     , CdP.imageHeight i
-                     , Vct.unsafeToForeignPtr $ CdP.imageData i
-                     , t )
-    rdImg = do
-      Right img <- CdP.readImage path
-      case img of
-        CdP.ImageY8     i -> showInfo "Y8"     i >> return Nothing
-        CdP.ImageY16    i -> showInfo "Y16"    i >> return Nothing
-        CdP.ImageYF     i -> showInfo "YF"     i >> return Nothing
-        CdP.ImageYA8    i -> showInfo "YA8"    i >> return Nothing
-        CdP.ImageYA16   i -> showInfo "YA16"   i >> return Nothing
-        CdP.ImageRGB8   i -> showInfo "RGB8"   i
-          >> return (getPtr i gl_RGB)
-        CdP.ImageRGB16  i -> showInfo "RGB16"  i >> return Nothing
-        CdP.ImageRGBF   i -> showInfo "RGBF"   i >> return Nothing
-        CdP.ImageRGBA8  i -> showInfo "RGBA8"  i
-          >> return (getPtr i gl_RGBA)
-        CdP.ImageRGBA16 i -> showInfo "RGBA16" i >> return Nothing
-        CdP.ImageYCbCr8 i -> showInfo "YCbCr8" i >> return Nothing
-        CdP.ImageCMYK8  i -> showInfo "CMYK8"  i >> return Nothing
-        CdP.ImageCMYK16 i -> showInfo "CMYK16" i >> return Nothing
 
 blockNodeVertex :: [VrtxPos3D]
 blockNodeVertex = 
@@ -89,6 +44,16 @@ blockNodeVertex =
   , (  0.5,  0.0, -0.5) -- P11
   ]
 
+loadTexture' :: FilePath -> IO TextureObject
+loadTexture' fn = do
+  t <- GU.readTexture fn
+  case t of
+    Right t' -> do
+      textureFilter Texture2D $= ((Nearest, Nothing), Nearest)
+        >> texture2DWrap $= (Repeated, ClampToEdge)
+      return t'
+    Left e -> error e
+
 getVertexList :: Shape -> Surface
               -> [(VrtxPos3D,(GLfloat,GLfloat))]
 getVertexList Cube f = case f of
@@ -100,11 +65,11 @@ getVertexList Cube f = case f of
   SLeft   -> zip [p5,p6,p0,p3] uvLst
   where
     (p0:p1:p2:p3:p4:p5:p6:p7:_) = blockNodeVertex
-    uvLst = [ (0.0,0.0)
-            , (1.0,0.0)
-            , (1.0,1.0)
-            , (0.0,1.0)
-            ]
+    !uvLst = [ (0.0,0.0)
+             , (1.0,0.0)
+             , (1.0,1.0)
+             , (0.0,1.0)
+             ]
 getVertexList (Half b) f 
   | not b = case f of -- False
     STop    -> zip [p11,p10,p9,p8] uvLstD
@@ -121,10 +86,10 @@ getVertexList (Half b) f
     SRight  -> zip [p7,p4,p8,p11] uvLstU
     SLeft   -> zip [p5,p6,p10,p9] uvLstU
   where
-    (p0:p1:p2:p3:p4:p5:p6:p7:p8:p9:p10:p11:_) = blockNodeVertex
-    uvLstU = [uv0,uv1,uv2,uv3]
-    uvLstD = [uv3,uv2,uv4,uv5]
-    (uv0,uv1,uv2,uv3,uv4,uv5)
+    !(p0:p1:p2:p3:p4:p5:p6:p7:p8:p9:p10:p11:_) = blockNodeVertex
+    !uvLstU = [uv0,uv1,uv2,uv3]
+    !uvLstD = [uv3,uv2,uv4,uv5]
+    !(uv0,uv1,uv2,uv3,uv4,uv5)
       = ((0.0,0.0)
         ,(1.0,0.0)
         ,(1.0,0.5)
@@ -133,7 +98,7 @@ getVertexList (Half b) f
         ,(0.0,1.0))
 
 drawBackPlane :: VrtxPos2D -> (GLfloat,GLfloat)
-              -> Maybe GLuint -> (GLfloat,GLfloat) -> (GLfloat,GLfloat)
+              -> Maybe TextureObject -> (GLfloat,GLfloat) -> (GLfloat,GLfloat)
               -> (GLfloat,GLfloat,GLfloat,GLfloat) -> IO ()
 drawBackPlane (xo,yo) (w,h) tex' (u0,v0) (tw,th) (r,g,b,a) =
   preservingMatrix $ do
@@ -141,7 +106,7 @@ drawBackPlane (xo,yo) (w,h) tex' (u0,v0) (tw,th) (r,g,b,a) =
     case tex' of
       Just t -> do
         texture Texture2D $= Enabled 
-        glBindTexture gl_TEXTURE_2D t
+        textureBinding Texture2D $= Just t
         renderPrimitive Quads $ do
           glTexCoord2f u0 (v0 + th)
           vertex $ Vertex2 xo  (yo::GLfloat)
@@ -177,9 +142,9 @@ drawIcon :: WorldResource -> GLfloat -> (GLfloat,GLfloat)
 drawIcon wldRes icSz (ox,oy) bID | null texIdx = return ()
                                  | otherwise = preservingMatrix $ do
   texture Texture2D $= Enabled 
-  glBindTexture gl_TEXTURE_2D tex
+  textureBinding Texture2D $= Just tex
 
-  let [tt,_,_,tl,tf,_] = texIdx
+  let ![tt,_,_,tl,tf,_] = texIdx
   renderPrimitive Quads $ do
     -- top 
     setColor 1.3 ct
@@ -206,16 +171,16 @@ drawIcon wldRes icSz (ox,oy) bID | null texIdx = return ()
       , (ox - icSzW, oy + icSzW * (sin.d2r) rt)
       ]
   where
-    icSzW = icSz / 2.2
-    icSzH = case shape $ getBlockInfo bID of
+    !icSzW = icSz / 2.2
+    !icSzH = case shape $ getBlockInfo bID of
               Cube -> icSzW
               Half _ -> icSzW / 2.0
               _ -> icSzW 
-    rt = 30.0
-    tex = blockTexture wldRes
+    !rt = 30.0
+    !tex = blockTexture wldRes
     d2r d = pi * d / 180.0
-    texIdx = textureIndex $ getBlockInfo bID
-    [ct,_,_,cl,cf,_] = bcolor $ getBlockInfo bID
+    !texIdx = textureIndex $ getBlockInfo bID
+    ![ct,_,_,cl,cf,_] = bcolor $ getBlockInfo bID
     setColor :: Double -> (Double,Double,Double) -> IO () 
     setColor c (r,g,b) =
       color $ Color3 (realToFrac (c * r)) (realToFrac (c * g))

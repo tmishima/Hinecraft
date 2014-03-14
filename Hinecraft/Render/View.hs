@@ -21,9 +21,6 @@ module Hinecraft.Render.View
   , drawPlay
   , genSufDispList
   --
-  , initShaderProg
-  , setSun
-  , drawSun 
   ) where
 
 -- Font
@@ -33,7 +30,8 @@ import Graphics.Rendering.FTGL as Ft
 import Graphics.Rendering.OpenGL as GL
 import Graphics.Rendering.OpenGL.Raw
 
-import Graphics.GLUtil
+import qualified Graphics.GLUtil as GU
+--import qualified Graphics.GLUtil.Camera3D as GU3
 
 -- Common
 import Debug.Trace as Dbg
@@ -45,7 +43,9 @@ import Hinecraft.Types
 
 import Hinecraft.Render.Types
 import Hinecraft.Render.Util
-import Hinecraft.Render.Shader
+--import Hinecraft.Render.WithSimpleShader
+import Hinecraft.Render.TitleView
+
 -- Define
 
 -- ##################### OpenGL ###########################
@@ -53,24 +53,6 @@ data ViewMode = V2DMode | V3DTitleMode | V3DMode
   deriving (Eq,Show)
 
 type WorldDispList = M.Map (Int,Int) [DisplayList]
-
-drawSun shprg vbo = do
-  --preservingMatrix $ do
-      --setPerspective V3DMode w h
-      --texture Texture2D $= Disabled 
-      currentProgram $= Just (program shprg)
-
-      -- shader ....
-      --clientState VertexArray $= Enabled
-
-      uniformMat (getUniform shprg "RotationMatrix")
-          $= [[1,0,0,0],[1,1,0,0] ,[1,0,1,0],[1,0,0,1]]
-
-      bindVertexArrayObject $= Just vbo
-      drawArrays Triangles 0 $ fromIntegral (3::Int)
-      bindBuffer ArrayBuffer $= Nothing
-
-      currentProgram $= Nothing
 
 renderCurFace :: Maybe (WorldIndex,Surface) -> IO ()
 renderCurFace objPos = 
@@ -97,11 +79,11 @@ renderCurFace objPos =
 drawPlay :: (Int,Int) -> GuiResource -> WorldResource
          -> UserStatus -> WorldDispList
          -> Maybe (WorldIndex,Surface)
-         -> [BlockIDNum] -> Bool -> DragDropState -> ShaderProgram
-         -> VertexArrayObject 
+         -> [BlockIDNum] -> Bool -> DragDropState {- -> ShaderProgram
+         -> VertexArrayObject  -}
          -> IO ()
 drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
-         invSw dragDrop shprg vbo = do
+         invSw dragDrop {-shprg vbo-} = do
 
   -- World
   preservingMatrix $ do
@@ -124,7 +106,7 @@ drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
     color $ Color3 0.0 1.0 (0.0::GLfloat)
     mapM_ (\ (_,b) -> mapM_ callList b) $ M.toList worldDispList
 
-  drawSun shprg vbo 
+  --drawSun shprg vbo 
 
   -- HUD
   renderHUD (w,h) guiRes wldRes pIndex invSw plt dragDrop
@@ -290,9 +272,9 @@ genSufDispList wldRes bsf dsp = case dsp of
     Just d -> defineList d Compile gen' >> return d
   where
     gen' = do
-      glBindTexture gl_TEXTURE_2D tex
       texture Texture2D $= Enabled
-      renderPrimitive Quads $ mapM_ genFace bsf 
+      GU.withTextures2D [tex] $ do
+        renderPrimitive Quads $ mapM_ genFace bsf 
     tex = blockTexture wldRes
     genFace ((x,y,z),bid,fs) = do
       let !sp = shape $ getBlockInfo bid
@@ -341,14 +323,11 @@ genSufDispList wldRes bsf dsp = case dsp of
 
 -- 
 
-drawTitle :: (Int,Int) -> GuiResource -> TitleModeState -> IO ()
-drawTitle (w,h) res stat = do
-  preservingMatrix $ do
-    setPerspective V3DTitleMode w h
-    scale 10.0 10.0 (10.0::GLfloat)
-    rotate 10 $ Vector3 1.0 0.0 (0::GLfloat)
-    rotate (realToFrac $ rotW stat) $ Vector3 0.0 1.0 (0::GLfloat)
-    drawBackGroundBox bkgTex
+drawTitle :: (Int,Int) -> GuiResource -> TitleModeState
+          -> TitleModeHdl
+          -> IO ()
+drawTitle (w,h) res stat tvHdl = do
+  drawBackGroundBox (w,h) res stat tvHdl 
 
   preservingMatrix $ do
     setPerspective V2DMode w h
@@ -393,7 +372,6 @@ drawTitle (w,h) res stat = do
 
   where
     slcBtnTexCrd sw = if sw then 86 / 256 else 66 / 256
-    bkgTex = backgroundBoxTexture res
     titleTex = backgroundTitleTexture res
     widTex = widgetsTexture res
     (xPlybtnPos,yPlybtnPos) = widgetPlayBtnPos res
@@ -416,7 +394,7 @@ gen3dCursol = renderPrimitive LineLoop
 
 loadWorldResouce :: FilePath -> IO WorldResource
 loadWorldResouce home = do
-  btex' <- loadTextures blkPng 
+  btex' <- loadTexture' blkPng 
   return WorldResource
     { blockTexture = btex'
     }
@@ -427,17 +405,15 @@ loadWorldResouce home = do
 
 loadGuiResource :: FilePath -> (Int,Int) -> IO GuiResource
 loadGuiResource home (w,h) = do
-  tex' <- mapM (\ fn -> 
-    Dbg.trace ("loadBackgroundPic : " ++ fn)
-     $ loadTextures fn )
+  tex' <- mapM loadTexture'
     [ bkgndPng0 , bkgndPng1 , bkgndPng2
     , bkgndPng3 , bkgndPng4 , bkgndPng5
     ]
-  ttex' <- loadTextures bkgTtlPng
-  wtex' <- loadTextures widPng
+  ttex' <- loadTexture' bkgTtlPng
+  wtex' <- loadTexture' widPng
   font' <- Ft.createBitmapFont fontPath
-  itex' <- loadTextures invDlgPng
-  ibtex' <- loadTextures invTabPng
+  itex' <- loadTexture' invDlgPng
+  ibtex' <- loadTexture' invTabPng
   return GuiResource
     { backgroundBoxTexture = tex'
     , backgroundTitleTexture = ttex'
@@ -471,14 +447,14 @@ loadGuiResource home (w,h) = do
     fontPath = "/usr/share/fonts/truetype/takao-mincho/TakaoPMincho.ttf" -- linux
 
 -- ##################### Font(Text) #######################
-
-drawBackGroundBox :: [GLuint] -> IO ()
+{-
+drawBackGroundBox :: [TextureObject] -> IO ()
 drawBackGroundBox [ftex',rtex',batex',ltex',ttex',botex'] = 
   preservingMatrix $ do
     texture Texture2D $= Enabled 
     color $ Color4 0.7 0.7 0.7 (0.8::GLfloat)
     mapM_ (\ (tex, nor, f) -> do
-      glBindTexture gl_TEXTURE_2D tex
+      textureBinding Texture2D $= Just tex
       renderPrimitive Quads $ genSuf nor f)
         [ (ftex',(0,0,-1), SFront)
         , (rtex',(-1,0,0), SRight)
@@ -495,7 +471,7 @@ drawBackGroundBox [ftex',rtex',batex',ltex',ttex',botex'] =
         (\ ((x', y', z'),(u,v)) -> do
                glTexCoord2f u v
                vertex (Vertex3 x' y' z')) 
-
+-}
 -- ##################### GLFW #############################
 
 updateDisplay :: IO () -> IO ()

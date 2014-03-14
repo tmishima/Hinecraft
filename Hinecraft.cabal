@@ -24,13 +24,14 @@ executable Hinecraft
                      Hinecraft.Render.View,
                      Hinecraft.Render.Types
                      Hinecraft.Render.Util
+                     Hinecraft.Render.TitleView
 
   build-depends:       base ==4.6.*
                      , GLFW-b , OpenGL , mtl == 2.*
                      , bytestring == 0.10.*
                      , array , vector , directory , process
                      , OpenGLRaw , cereal , JuicyPixels , FTGL 
-                     , containers , GLUtil
+                     , containers , GLUtil , linear
   -- hs-source-dirs:    Hinecraft
   -- ghc-options:         -Wall -threaded
   -- ghc-options:         -Wall -O2 -prof -auto-all -caf-all -fforce-recomp -rtsopts

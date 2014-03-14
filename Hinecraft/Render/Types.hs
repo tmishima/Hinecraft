@@ -15,22 +15,22 @@ type VrtxPos3D = (GLfloat,GLfloat,GLfloat)
 type VrtxPos2D = (GLfloat,GLfloat)
 
 data GuiResource = GuiResource
-  { backgroundBoxTexture :: [GLuint]
-  , backgroundTitleTexture :: GLuint
-  , widgetsTexture :: GLuint
+  { backgroundBoxTexture :: [TextureObject]
+  , backgroundTitleTexture :: TextureObject
+  , widgetsTexture :: TextureObject
   , widgetPlayBtnPos :: VrtxPos2D
   , widgetPlayBtnSiz :: VrtxPos2D
   , widgetExitBtnPos :: VrtxPos2D
   , widgetExitBtnSiz :: VrtxPos2D
   , font :: Ft.Font
-  , invDlgTexture :: GLuint
-  , invDlgTbTexture :: GLuint
+  , invDlgTexture :: TextureObject
+  , invDlgTbTexture :: TextureObject
   }
 
 data WorldResource = WorldResource
-  { blockTexture :: GLuint
-  --, skyTexture :: GLuint
-  --, starTexture :: GLuint
+  { blockTexture :: TextureObject
+  --, skyTexture :: 
+  --, starTexture :: 
   }
   deriving (Eq,Show)
 

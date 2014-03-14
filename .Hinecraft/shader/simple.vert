@@ -9,7 +9,7 @@ out vec4 Color;
 out vec2 TexCoord;
 
 uniform mat3 SclMat;
-uniform mat3 RotMat;
+uniform mat4 RotMat;
 uniform mat4 ProjViewMat; //projection_matrix modelview_matrix
 
 //uniform vec4 ambientColor = vec4 (0.2,0.2,0.2,0.2);
@@ -23,7 +23,6 @@ void main() {
   Color = VertexColor;  
   TexCoord = VertexTexture;
 
-  gl_Position = ProjViewMat * vec4(RotMat * SclMat * VertexPosition,1.0);
+  gl_Position = ProjViewMat * RotMat * vec4(SclMat * VertexPosition,1.0);
 }
-
 
