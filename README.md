@@ -7,7 +7,7 @@ This is a simple Minecraft Clone (DEMO) written in Haskell.
 データの保存機能もなくα版にも満たない状況です。  
 
 ![ScreenShot](https://raw.github.com/tmishima/Hinecraft/master/Hinecraft_title.png)
-
+![ScreenShot](https://raw.github.com/tmishima/Hinecraft/master/Hinecraft_blocks.png)
 
 * 注意
 
