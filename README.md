@@ -6,7 +6,8 @@ This is a simple Minecraft Clone (DEMO) written in Haskell.
 暇だったのでHaskell(OpenGL,GLFW,etc)でMinecraftっぽいものを作ってみました。まだ全然完成してないけど。  
 データの保存機能もなくα版にも満たない状況です。  
 
-![ScreenShot](https://github.com/tmishima/Hinecraft/blob/master/Hinecraft_title.png "ScreenShot")
+![ScreenShot](https://raw.github.com/tmishima/Hinecraft/master/Hinecraft_title.png)
+
 
 * 注意
 
