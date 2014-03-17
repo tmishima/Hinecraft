@@ -5,10 +5,18 @@ in vec2 TexCoord;
 
 out vec4 FragColor;
 
-uniform sampler2D Boxtex;
+uniform int TexEnbFlg;
+uniform sampler2D TexUnit;
 
 void main(){
-  FragColor = Color * (texture (Boxtex, TexCoord));
+  if (TexEnbFlg > 0)
+  {
+     FragColor = Color * (texture (TexUnit, TexCoord));
+  }
+  else
+  {
+     FragColor = Color;
+  }
 }
 
  

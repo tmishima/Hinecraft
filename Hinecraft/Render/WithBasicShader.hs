@@ -3,8 +3,8 @@
 -- Copyright : (c) T.Mishima 2014
 -- License : Apache-2.0
 --
-module Hinecraft.Render.WithSimpleShader 
-  ( SimpleShaderProg
+module Hinecraft.Render.WithBasicShader 
+  ( BasicShaderProg
   , makeSimpShdrVAO
   , orthoProjMatrix
   )
@@ -20,11 +20,12 @@ import Linear
 
 import Hinecraft.Render.Types
 
-data SimpleShaderProg = SimpleShaderProg
+data BasicShaderProg = BasicShaderProg
   { shprg :: ShaderProgram
   , inVertTag :: String
   , inVertClrTag :: String
   , inTexTag :: String
+  , inVertNormTag :: String
   , outFragTag :: String
   , uniProjViewMTag :: String      
   , uniRotMTag :: String
@@ -33,12 +34,13 @@ data SimpleShaderProg = SimpleShaderProg
   , uniTexUnitTag :: String
   }
 
-instance WithShader SimpleShaderProg where
+instance WithShader BasicShaderProg where
   initShaderProgram home = do
     sp <- simpleShaderProgramWith vertFn fragFn $ \ p -> do
-      attribLocation p inVertTag' $= AttribLocation 0
-      attribLocation p inVertClrTag' $= AttribLocation 1
-      attribLocation p inTexTag' $= AttribLocation 2
+      attribLocation p inVertTag'        $= AttribLocation 0
+      attribLocation p inVertClrTag'     $= AttribLocation 1
+      attribLocation p inVertNormTag'    $= AttribLocation 2
+      attribLocation p inTexTag'         $= AttribLocation 3
       bindFragDataLocation p outFragTag' $= 0
 
     -- set Defualt param to uniform
@@ -51,11 +53,12 @@ instance WithShader SimpleShaderProg where
 
     currentProgram $= Nothing
 
-    return SimpleShaderProg 
+    return BasicShaderProg 
              { shprg = sp
              , inVertTag = inVertTag'
              , inVertClrTag = inVertClrTag'
              , inTexTag = inTexTag'
+             , inVertNormTag = inVertNormTag'
              , outFragTag = outFragTag'
              , uniProjViewMTag = uniProjViewMTag'
              , uniRotMTag = uniRotMTag'
@@ -64,11 +67,12 @@ instance WithShader SimpleShaderProg where
              , uniTexUnitTag = uniTexUnitTag'
              }
     where
-      !vertFn = home ++ "/.Hinecraft/shader/simple.vert"
-      !fragFn = home ++ "/.Hinecraft/shader/simple.frag"
+      !vertFn = home ++ "/.Hinecraft/shader/basic.vert"
+      !fragFn = home ++ "/.Hinecraft/shader/basic.frag"
       !inVertTag'        = "VertexPosition"
       !inVertClrTag'     = "VertexColor"
       !inTexTag'         = "VertexTexture"
+      !inVertNormTag'    = "VertexNormal"
       !outFragTag'       = "FragColor"
       !uniProjViewMTag'  = "ProjViewMat"
       !uniRotMTag'       = "RotMat" 
@@ -106,9 +110,9 @@ instance WithShader SimpleShaderProg where
 orthoProjMatrix :: GLfloat -> GLfloat -> M44 GLfloat
 orthoProjMatrix w h = V4 (V4 (2/w) 0 0 (-1)) (V4 0 (2/h) 0 (-1)) (V4 0 0 0 0) (V4 0 0 0 1)
 
-makeSimpShdrVAO :: SimpleShaderProg -> [GLfloat]
-                -> [GLfloat] -> [GLfloat] -> [Word32]->IO VAO
-makeSimpShdrVAO simpShdr vertLst vertClrLst texCdLst elmLst = do
+makeSimpShdrVAO :: BasicShaderProg -> [GLfloat]
+                -> [GLfloat] -> [GLfloat] -> [GLfloat] -> [Word32]->IO VAO
+makeSimpShdrVAO simpShdr vertLst vertClrLst vertNrmLst texCdLst elmLst = do
   currentProgram $= Just (program sp)
   vao <- makeVAO $ do
     makeBuffer ArrayBuffer vertLst
@@ -120,7 +124,11 @@ makeSimpShdrVAO simpShdr vertLst vertClrLst texCdLst elmLst = do
     makeBuffer ArrayBuffer vertClrLst 
     enableAttrib sp (inVertClrTag simpShdr)
     setAttrib sp (inVertClrTag simpShdr) ToFloat (VertexArrayDescriptor 4 Float 0 offset0)
-    
+   
+    makeBuffer ArrayBuffer vertNrmLst 
+    enableAttrib sp (inVertNormTag simpShdr)
+    setAttrib sp (inVertNormTag simpShdr) ToFloat (VertexArrayDescriptor 3 Float 0 offset0)
+
     makeBuffer ArrayBuffer texCdLst
     enableAttrib sp (inTexTag simpShdr)
     setAttrib sp (inTexTag simpShdr) ToFloat (VertexArrayDescriptor 2 Float 0 offset0)
