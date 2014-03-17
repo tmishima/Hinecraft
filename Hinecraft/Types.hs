@@ -6,7 +6,7 @@
 module Hinecraft.Types where
 
 version :: String
-version = "0.1.1"
+version = "0.2.0"
 
 type BlockIDNum = Int
 

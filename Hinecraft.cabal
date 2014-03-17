@@ -2,7 +2,7 @@
 -- 
 
 name:                Hinecraft
-version:             0.1.1.0
+version:             0.2.0.0
 -- synopsis:            
 description:         This is minecraft clone
 license:             Apache-2.0
@@ -25,6 +25,7 @@ executable Hinecraft
                      Hinecraft.Render.Types
                      Hinecraft.Render.Util
                      Hinecraft.Render.TitleView
+                     Hinecraft.Render.WithSimpleShader
 
   build-depends:       base ==4.6.*
                      , GLFW-b , OpenGL , mtl == 2.*
