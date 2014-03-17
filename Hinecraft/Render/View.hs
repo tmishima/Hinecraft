@@ -15,7 +15,6 @@ module Hinecraft.Render.View
   , drawBackPlane
   , getVertexList
   , putTextLine
-  , drawBackGroundBox
   , updateDisplay
   , drawTitle
   , drawPlay
@@ -321,65 +320,6 @@ genSufDispList wldRes bsf dsp = case dsp of
             , pos)
           where i = fromIntegral i' ; j = fromIntegral j'
 
--- 
-
-drawTitle :: (Int,Int) -> GuiResource -> TitleModeState
-          -> TitleModeHdl
-          -> IO ()
-drawTitle (w,h) res stat tvHdl = do
-  drawBackGroundBox (w,h) res stat tvHdl 
-
-  preservingMatrix $ do
-    setPerspective V2DMode w h
-    glPushAttrib gl_DEPTH_BUFFER_BIT
-    glDisable gl_DEPTH_TEST
-    depthMask $= Disabled
-
-    putTextLine font' (Just (1,1,1)) (Just 20) (10,10)
-                      $ "Hinecraft " ++ version
-
-    -- White
-    drawBackPlane (0,0) (fromIntegral w, fromIntegral h) Nothing
-                  (0,0) (1,1) (1.0,1.0,1.0,0.30)
-    -- Title 
-    drawBackPlane (232,768 - 233) (508, 145) (Just titleTex)
-                  (0,0) (0.61,0.172) (1.0,1.0,1.0,1.0)
-    drawBackPlane (232 + 508 - 5, 768 - 233) (382, 145) (Just titleTex)
-                  (0,0.176) (0.458,0.172) (1.0,1.0,1.0,1.0)
-
-
-    -- Botton 
-    let vm = slcBtnTexCrd $ isModeChgBtnEntr stat
-    drawBackPlane (xPlybtnPos, yPlybtnPos) (wPlybntSiz,hPlybtnSiz)
-                  (Just widTex)
-                  (0,vm) (200/256,20/256) (1.0,1.0,1.0,1.0)
-    putTextLine font' (Just (1,1,1)) (Just 30)
-                  (590, yPlybtnPos + 20) "Single Player" 
-    -- 
-    let ve = slcBtnTexCrd $ isExitBtnEntr stat
-    drawBackPlane (xExtbtnPos, yExtbtnPos) (wExtbtnSiz / 2, hExtbtnSiz)
-                  (Just widTex)
-                  (0,ve) (0.20,0.078) (1.0,1.0,1.0,1.0)
-    drawBackPlane (xExtbtnPos + wExtbtnSiz / 2, yExtbtnPos)
-                  (wExtbtnSiz / 2, hExtbtnSiz) (Just widTex)
-                  (0.58,ve) (0.20,0.078) (1.0,1.0,1.0,1.0)
-    putTextLine font' (Just (1,1,1)) (Just 30)
-                  (780 ,yExtbtnPos + 20) "Quit game" 
-
-    glPopAttrib 
-    depthMask $= Enabled
-    glEnable gl_DEPTH_TEST
-
-  where
-    slcBtnTexCrd sw = if sw then 86 / 256 else 66 / 256
-    titleTex = backgroundTitleTexture res
-    widTex = widgetsTexture res
-    (xPlybtnPos,yPlybtnPos) = widgetPlayBtnPos res
-    (wPlybntSiz,hPlybtnSiz) = widgetPlayBtnSiz res
-    (xExtbtnPos,yExtbtnPos) = widgetExitBtnPos res
-    (wExtbtnSiz,hExtbtnSiz) = widgetExitBtnSiz res
-    font' = font res
-
 -- | 最小単位のブロックを囲う枠を描画する
 -- Private
 --
@@ -405,73 +345,32 @@ loadWorldResouce home = do
 
 loadGuiResource :: FilePath -> (Int,Int) -> IO GuiResource
 loadGuiResource home (w,h) = do
-  tex' <- mapM loadTexture'
-    [ bkgndPng0 , bkgndPng1 , bkgndPng2
-    , bkgndPng3 , bkgndPng4 , bkgndPng5
-    ]
-  ttex' <- loadTexture' bkgTtlPng
   wtex' <- loadTexture' widPng
   font' <- Ft.createBitmapFont fontPath
   itex' <- loadTexture' invDlgPng
   ibtex' <- loadTexture' invTabPng
   return GuiResource
-    { backgroundBoxTexture = tex'
-    , backgroundTitleTexture = ttex'
-    , widgetsTexture = wtex'
+    { widgetsTexture = wtex'
     , font = font'
     , widgetPlayBtnPos = ((w' - texBtnWd * rate) * 0.5 , h' * 0.5)
     , widgetPlayBtnSiz = (texBtnWd * rate, texBtnHt * rate)
-    , widgetExitBtnPos = ( w' - (w' - texBtnWd * rate) * 0.5
-                           - texBtnWd * hfrate
-                         , h' * 0.2)
-    , widgetExitBtnSiz = (texBtnWd * hfrate , texBtnHt * rate)
+    , widgetExitBtnPos = ((w' - texBtnWd * rate) * 0.5 , h' * 0.2)
+    , widgetExitBtnSiz = (texBtnWd * rate, texBtnHt * rate)
     , invDlgTexture = itex'
     , invDlgTbTexture = ibtex'
     }
   where
     (w',h') = (fromIntegral w, fromIntegral h)
     rate = 3.0
-    hfrate = 1.4
     texBtnWd = 200
     texBtnHt = 20
-    bkgndPng0 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_0.png"
-    bkgndPng1 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_1.png"
-    bkgndPng2 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_2.png"
-    bkgndPng3 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_3.png"
-    bkgndPng4 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_4.png"
-    bkgndPng5 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_5.png"
-    bkgTtlPng = home ++ "/.Hinecraft/textures/gui/title/hinecraft.png"
     widPng    = home ++ "/.Hinecraft/textures/gui/widgets.png"
     invDlgPng = home ++ "/.Hinecraft/textures/gui/container/creative_inventory/tab_items.png"
     invTabPng = home ++ "/.Hinecraft/textures/gui/container/creative_inventory/tabs.png"
     fontPath = "/usr/share/fonts/truetype/takao-mincho/TakaoPMincho.ttf" -- linux
 
 -- ##################### Font(Text) #######################
-{-
-drawBackGroundBox :: [TextureObject] -> IO ()
-drawBackGroundBox [ftex',rtex',batex',ltex',ttex',botex'] = 
-  preservingMatrix $ do
-    texture Texture2D $= Enabled 
-    color $ Color4 0.7 0.7 0.7 (0.8::GLfloat)
-    mapM_ (\ (tex, nor, f) -> do
-      textureBinding Texture2D $= Just tex
-      renderPrimitive Quads $ genSuf nor f)
-        [ (ftex',(0,0,-1), SFront)
-        , (rtex',(-1,0,0), SRight)
-        , (ltex',(1,0,0),  SLeft)
-        , (ttex',(0,-1,0), STop)
-        , (botex',(0,1,0), SBottom)
-        , (batex',(0,0,1), SBack)
-        ]
-  where
-    genSuf :: (GLfloat,GLfloat,GLfloat) -> Surface -> IO ()
-    genSuf (nx,ny,nz) f = do
-      normal $ Normal3 nx ny nz
-      forM_ (getVertexList Cube f)
-        (\ ((x', y', z'),(u,v)) -> do
-               glTexCoord2f u v
-               vertex (Vertex3 x' y' z')) 
--}
+
 -- ##################### GLFW #############################
 
 updateDisplay :: IO () -> IO ()

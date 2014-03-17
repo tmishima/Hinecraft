@@ -65,9 +65,9 @@ exitHinecraft (glfwHdl,_,_) = do
 
 runHinecraft :: (GLFWHandle, GuiResource, WorldResource)
              -> IO ()
-runHinecraft resouce@(glfwHdl,_,wldRes) = do
+runHinecraft resouce@(glfwHdl,guiRes,wldRes) = do
   home <- getHomeDirectory
-  !tvHdl <- initTitleModeView home
+  !tvHdl <- initTitleModeView home guiRes
   !wld <- loadWorldData home
   !sfl <- loadSurfaceList wld home
   let !tmstat = TitleModeState (0::Double) False False False

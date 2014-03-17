@@ -6,8 +6,8 @@
 module Hinecraft.Render.WithSimpleShader 
   ( SimpleShaderProg
   , makeSimpShdrVAO
-  , set3DCamParam
   , WithShader ( .. )
+  , orthoProjMatrix
   )
   where
 
@@ -15,6 +15,7 @@ module Hinecraft.Render.WithSimpleShader
 import Graphics.Rendering.OpenGL as GL
 import Graphics.GLUtil as GU
 import qualified Graphics.GLUtil.Camera3D as GU3
+--import Control.Exception ( bracket )
 
 import Linear
 
@@ -22,6 +23,8 @@ class WithShader a where
   initShaderProgram :: FilePath -> IO a
   setProjViewMat :: a -> M44 GLfloat -> IO ()
   getShaderProgram :: a -> ShaderProgram
+  setCamParam :: a -> GU3.Camera GLfloat -> IO ()
+  enableTexture :: a -> Bool -> IO ()
 
 data SimpleShaderProg = SimpleShaderProg
   { shprg :: ShaderProgram
@@ -32,6 +35,8 @@ data SimpleShaderProg = SimpleShaderProg
   , uniProjViewMTag :: String      
   , uniRotMTag :: String
   , uniScaleMTag :: String
+  , uniTexEnFTag :: String
+  , uniTexUnitTag :: String
   }
 
 instance WithShader SimpleShaderProg where
@@ -44,9 +49,12 @@ instance WithShader SimpleShaderProg where
 
     -- set Defualt param to uniform
     currentProgram $= Just (program sp)
+
     asUniform pvMat $ getUniform sp uniProjViewMTag' 
     GU.asUniform (GU3.camMatrix (GU3.fpsCamera :: GU3.Camera GLfloat)) (getUniform sp uniRotMTag')
     uniformMat (getUniform sp uniScaleMTag') $= ( [[1.0,0,0],[0,1.0,0],[0,0,1.0]]:: [[GLfloat]])
+    uniformScalar (getUniform sp uniTexEnFTag') $= (0 :: GLint)
+
     currentProgram $= Nothing
 
     return SimpleShaderProg 
@@ -58,6 +66,8 @@ instance WithShader SimpleShaderProg where
              , uniProjViewMTag = uniProjViewMTag'
              , uniRotMTag = uniRotMTag'
              , uniScaleMTag = uniScaleMTag'
+             , uniTexEnFTag = uniTexEnFTag'
+             , uniTexUnitTag = uniTexUnitTag'
              }
     where
       !vertFn = home ++ "/.Hinecraft/shader/simple.vert"
@@ -69,9 +79,16 @@ instance WithShader SimpleShaderProg where
       !uniProjViewMTag'  = "ProjViewMat"
       !uniRotMTag'       = "RotMat" 
       !uniScaleMTag'     = "SclMat"
+      !uniTexEnFTag'     = "TexEnbFlg"
+      !uniTexUnitTag'    = "TexUnit"
       !prjMat = GU3.projectionMatrix (GU3.deg2rad 60) 1.0 0.1 (10::GLfloat)
       !cam = GU3.camMatrix GU3.fpsCamera
       !pvMat = prjMat !*! cam
+
+  enableTexture shd flg =
+    uniformScalar (getUniform s $ uniTexEnFTag shd) $= if flg then 1 else (0 :: GLint)
+    where
+      !s = shprg shd
 
   getShaderProgram = shprg 
 
@@ -83,16 +100,17 @@ instance WithShader SimpleShaderProg where
       !pvUnifLoc = getUniform s (uniProjViewMTag shd)
       !s = shprg shd
 
+  setCamParam simpShdr cam = do
+    currentProgram $= Just (program sp)
+    GU.asUniform mat rUnifLoc
+    currentProgram $= Nothing
+    where
+      !mat = GU3.camMatrix cam
+      !rUnifLoc = GU.getUniform sp (uniRotMTag simpShdr)
+      !sp = shprg simpShdr
 
-set3DCamParam :: SimpleShaderProg -> GU3.Camera GLfloat -> IO ()
-set3DCamParam simpShdr cam = do
-  currentProgram $= Just (program sp)
-  GU.asUniform mat rUnifLoc
-  currentProgram $= Nothing
-  where
-    !mat = GU3.camMatrix cam
-    !rUnifLoc = GU.getUniform sp (uniRotMTag simpShdr)
-    !sp = shprg simpShdr
+orthoProjMatrix :: GLfloat -> GLfloat -> M44 GLfloat
+orthoProjMatrix w h = V4 (V4 (2/w) 0 0 (-1)) (V4 0 (2/h) 0 (-1)) (V4 0 0 0 0) (V4 0 0 0 1)
 
 makeSimpShdrVAO :: SimpleShaderProg -> [GLfloat]
                 -> [GLfloat] -> [GLfloat] -> [Word32]->IO VAO

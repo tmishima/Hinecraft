@@ -15,9 +15,7 @@ type VrtxPos3D = (GLfloat,GLfloat,GLfloat)
 type VrtxPos2D = (GLfloat,GLfloat)
 
 data GuiResource = GuiResource
-  { backgroundBoxTexture :: [TextureObject]
-  , backgroundTitleTexture :: TextureObject
-  , widgetsTexture :: TextureObject
+  { widgetsTexture :: TextureObject
   , widgetPlayBtnPos :: VrtxPos2D
   , widgetPlayBtnSiz :: VrtxPos2D
   , widgetExitBtnPos :: VrtxPos2D
