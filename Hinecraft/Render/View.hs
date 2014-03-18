@@ -27,8 +27,6 @@ import Graphics.Rendering.FTGL as Ft
 
 -- OpenGL
 import Graphics.Rendering.OpenGL as GL
-import Graphics.Rendering.OpenGL.Raw
-
 import qualified Graphics.GLUtil as GU
 --import qualified Graphics.GLUtil.Camera3D as GU3
 
@@ -137,8 +135,6 @@ renderHUD :: (Int,Int) -> GuiResource ->  WorldResource
 renderHUD (w,h) guiRes wldRes pIndex invSw plt dragDrop = 
   preservingMatrix $ do
     setPerspective V2DMode w h
-    glPushAttrib gl_DEPTH_BUFFER_BIT
-    glDisable gl_DEPTH_TEST
     depthMask $= Disabled
 
     if invSw
@@ -164,9 +160,7 @@ renderHUD (w,h) guiRes wldRes pIndex invSw plt dragDrop =
         (pltOx + rate + (20 * rate / 2) + (20 * rate * p) ,12) ib)
         $ zip [0.0,1.0 .. ] plt
 
-    glPopAttrib 
     depthMask $= Enabled
-    glEnable gl_DEPTH_TEST
   where
     !rate = 2.5
     !(w',h') = (fromIntegral w, fromIntegral h)
@@ -262,8 +256,6 @@ initGL = do
   colorMaterial     $= Just (FrontAndBack, AmbientAndDiffuse)
   --colorMaterial     $= Just (GL.Front, AmbientAndDiffuse)
 
-  glHint gl_PERSPECTIVE_CORRECTION_HINT gl_NICEST
-
 genSufDispList :: WorldResource -> SurfacePos -> Maybe DisplayList
                -> IO DisplayList
 genSufDispList wldRes bsf dsp = case dsp of
@@ -272,7 +264,7 @@ genSufDispList wldRes bsf dsp = case dsp of
   where
     gen' = do
       texture Texture2D $= Enabled
-      GU.withTextures2D [tex] $ do
+      GU.withTextures2D [tex] $ 
         renderPrimitive Quads $ mapM_ genFace bsf 
     tex = blockTexture wldRes
     genFace ((x,y,z),bid,fs) = do
@@ -309,7 +301,7 @@ genSufDispList wldRes bsf dsp = case dsp of
           normal $ Normal3 nx ny nz
           color $ Color3 r g b
           forM_ ndlst $ \ ((u,v),(x', y', z')) -> do
-                   glTexCoord2f u v
+                   texCoord (TexCoord2 u v)
                    vertex (Vertex3 (x' + fromIntegral x)
                                    (y' + fromIntegral y)
                                    (z' + fromIntegral z))
