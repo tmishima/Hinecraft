@@ -5,8 +5,10 @@
 --
 module Hinecraft.Render.WithBasicShader 
   ( BasicShaderProg
-  , makeSimpShdrVAO
+  , makeBasicShdrVAO
   , orthoProjMatrix
+  , setLightMode
+  , setColorBlendMode
   )
   where
 
@@ -32,6 +34,8 @@ data BasicShaderProg = BasicShaderProg
   , uniScaleMTag :: String
   , uniTexEnFTag :: String
   , uniTexUnitTag :: String
+  , uniClrBlndTag :: String
+  , uniLightMdTag :: String
   }
 
 instance WithShader BasicShaderProg where
@@ -65,6 +69,8 @@ instance WithShader BasicShaderProg where
              , uniScaleMTag = uniScaleMTag'
              , uniTexEnFTag = uniTexEnFTag'
              , uniTexUnitTag = uniTexUnitTag'
+             , uniClrBlndTag = uniClrBlndTag'
+             , uniLightMdTag = uniLightMdTag'
              }
     where
       !vertFn = home ++ "/.Hinecraft/shader/basic.vert"
@@ -79,7 +85,9 @@ instance WithShader BasicShaderProg where
       !uniScaleMTag'     = "SclMat"
       !uniTexEnFTag'     = "TexEnbFlg"
       !uniTexUnitTag'    = "TexUnit"
-      !prjMat = GU3.projectionMatrix (GU3.deg2rad 60) 1.0 0.1 (10::GLfloat)
+      !uniClrBlndTag'    = "ColorBlandType"
+      !uniLightMdTag'    = "LightMode"
+      !prjMat = GU3.projectionMatrix (GU3.deg2rad 60) 1.0 0.1 (1000::GLfloat)
       !cam = GU3.camMatrix GU3.fpsCamera
       !pvMat = prjMat !*! cam
 
@@ -110,16 +118,28 @@ instance WithShader BasicShaderProg where
 orthoProjMatrix :: GLfloat -> GLfloat -> M44 GLfloat
 orthoProjMatrix w h = V4 (V4 (2/w) 0 0 (-1)) (V4 0 (2/h) 0 (-1)) (V4 0 0 0 0) (V4 0 0 0 1)
 
-makeSimpShdrVAO :: BasicShaderProg -> [GLfloat]
-                -> [GLfloat] -> [GLfloat] -> [GLfloat] -> [Word32]->IO VAO
-makeSimpShdrVAO simpShdr vertLst vertClrLst vertNrmLst texCdLst elmLst = do
+setLightMode :: BasicShaderProg -> Int -> IO ()
+setLightMode sh md = 
+  uniformScalar (getUniform sp $ uniLightMdTag sh)
+    $= (fromIntegral md::GLint)
+  where
+    sp = shprg sh
+
+setColorBlendMode :: BasicShaderProg -> Int -> IO ()
+setColorBlendMode sh md =
+  uniformScalar (getUniform sp $ uniClrBlndTag sh)
+    $= (fromIntegral md::GLint)
+  where
+    sp = shprg sh
+
+makeBasicShdrVAO :: BasicShaderProg -> [GLfloat]
+                -> [GLfloat] -> [GLfloat] -> [GLfloat] -> IO VAO
+makeBasicShdrVAO simpShdr vertLst vertClrLst vertNrmLst texCdLst = do
   currentProgram $= Just (program sp)
   vao <- makeVAO $ do
     makeBuffer ArrayBuffer vertLst
     enableAttrib sp (inVertTag simpShdr)
     setAttrib sp (inVertTag simpShdr) ToFloat (VertexArrayDescriptor 3 Float 0 offset0)
-
-    bufferIndices elmLst
 
     makeBuffer ArrayBuffer vertClrLst 
     enableAttrib sp (inVertClrTag simpShdr)

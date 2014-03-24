@@ -40,8 +40,8 @@ import Hinecraft.Types
 
 import Hinecraft.Render.Types
 import Hinecraft.Render.Util
---import Hinecraft.Render.WithSimpleShader
 import Hinecraft.Render.TitleView
+import Hinecraft.Render.WorldView
 
 -- Define
 
@@ -76,11 +76,11 @@ renderCurFace objPos =
 drawPlay :: (Int,Int) -> GuiResource -> WorldResource
          -> UserStatus -> WorldDispList
          -> Maybe (WorldIndex,Surface)
-         -> [BlockIDNum] -> Bool -> DragDropState {- -> ShaderProgram
-         -> VertexArrayObject  -}
+         -> [BlockIDNum] -> Bool -> DragDropState
+         -> WorldViewVHdl 
          -> IO ()
 drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
-         invSw dragDrop {-shprg vbo-} = do
+         invSw dragDrop wvHdl = do
 
   -- World
   preservingMatrix $ do
@@ -90,9 +90,10 @@ drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
     rotate (-urx :: GLfloat) $ Vector3 1.0 0.0 (0.0::GLfloat)
     rotate (-ury :: GLfloat) $ Vector3 0.0 1.0 (0.0::GLfloat) -- z軸
  
-    preservingMatrix $ do
-      scale 200.0 200.0 (200.0::GLfloat)
-      drawBackGroundBox' 
+    --preservingMatrix $ do
+    --  scale 200.0 200.0 (200.0::GLfloat)
+    --  drawBackGroundBox' 
+    drawWorldView wvHdl (w,h) usrStat'
 
     -- カメラ位置
     translate $ Vector3 (-ux :: GLfloat) (-uy - 1.5) (-uz) 
@@ -103,7 +104,6 @@ drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
     color $ Color3 0.0 1.0 (0.0::GLfloat)
     mapM_ (\ (_,b) -> mapM_ callList b) $ M.toList worldDispList
 
-  --drawSun shprg vbo 
 
   -- HUD
   renderHUD (w,h) guiRes wldRes pIndex invSw plt dragDrop
@@ -255,6 +255,8 @@ initGL = do
   --lighting        $= Enabled
   colorMaterial     $= Just (FrontAndBack, AmbientAndDiffuse)
   --colorMaterial     $= Just (GL.Front, AmbientAndDiffuse)
+
+
 
 genSufDispList :: WorldResource -> SurfacePos -> Maybe DisplayList
                -> IO DisplayList

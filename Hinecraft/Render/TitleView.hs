@@ -42,8 +42,8 @@ initTitleModeView :: FilePath -> GuiResource -> IO TitleModeHdl
 initTitleModeView home res = do
   sh <- initShaderProgram home
   cvao <- genCubeVAO sh
-  pvao <- genWhitePlateVAO sh
-  tvao <- genTitlePlateVAO sh
+  pvao <- genWhitePlateVAO sh (w,h)
+  tvao <- genTitlePlateVAO sh (w,h)
   stbvao <- genStartBtnVAO res sh
   qbvao <- genQuitBtnVAO res sh
   bktex' <- mapM loadTexture'
@@ -62,6 +62,7 @@ initTitleModeView home res = do
     , envTitleTex = ttex'
     }
   where
+    (w,h) = (1366,768)
     bkgTtlPng = home ++ "/.Hinecraft/textures/gui/title/hinecraft.png"
     bkgndPng0 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_0.png"
     bkgndPng1 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_1.png"
@@ -82,7 +83,6 @@ drawTitle (w,h) res stat tvHdl =
     
     renderTitleCube sh (cubeVAO tvHdl) bkgTex 
 
-
      -- Draw 2D Title
     depthMask $= Disabled
     matrixMode $= Projection
@@ -98,13 +98,13 @@ drawTitle (w,h) res stat tvHdl =
     renderPlate sh (whitePlatVAO tvHdl) Nothing
 
     -- Botton 
-    let (si,sl) = slcBtnTexCrd $ isModeChgBtnEntr stat
-    renderPlate' sh (startBtnVAO tvHdl) (Just widTex) si sl
+    let si = slcBtnTexCrd $ isModeChgBtnEntr stat
+    renderPlate' sh (startBtnVAO tvHdl) (Just widTex) si
     putTextLine font' (Just (1,1,1)) (Just 30)
                   (590, yPlybtnPos + 20) "Single Player"
     --
-    let (qi,ql) = slcBtnTexCrd $ isExitBtnEntr stat
-    renderPlate' sh (quitBtnVAO tvHdl) (Just widTex) qi ql
+    let qi = slcBtnTexCrd $ isExitBtnEntr stat
+    renderPlate' sh (quitBtnVAO tvHdl) (Just widTex) qi
     putTextLine font' (Just (1,1,1)) (Just 30)
                   (620 ,yExtbtnPos + 20) "Quit game"
 
@@ -123,52 +123,47 @@ drawTitle (w,h) res stat tvHdl =
     widTex = widgetsTexture res
     sh = shader tvHdl
     font' = font res
-    slcBtnTexCrd sw = if sw then (4,4) else (0,4)
+    slcBtnTexCrd sw = if sw then 4 else 0
     (_,yPlybtnPos) = widgetPlayBtnPos res
     (_,yExtbtnPos) = widgetExitBtnPos res
 
 -- For 2D
 renderPlate :: SimpleShaderProg -> GU.VAO -> Maybe TextureObject -> IO ()
-renderPlate sh vao tex = renderPlate' sh vao tex 0 4
+renderPlate sh vao tex = renderPlate' sh vao tex 0
 
-renderPlate' :: SimpleShaderProg -> GU.VAO -> Maybe TextureObject -> Int -> Int -> IO ()
-renderPlate' sh vao tex i len = do
+renderPlate' :: SimpleShaderProg -> GU.VAO -> Maybe TextureObject -> Int -> IO ()
+renderPlate' sh vao tex i = do
   GL.currentProgram GL.$= Just (GU.program shprg')
   --GL.clientState GL.VertexArray $= GL.Enabled
   GU.withVAO vao $
     case tex of
       Just t -> do
         enableTexture sh True
-        GU.withTextures2D [t] $ 
-          drawElements Quads (fromIntegral len) UnsignedInt (GU.offsetPtr (i * 4))
+        GU.withTextures2D [t] $ drawArrays Quads (fromIntegral i) 4
       Nothing -> do  
         textureBinding Texture2D $= Nothing
         enableTexture sh False
-        drawElements Quads (fromIntegral len) UnsignedInt (GU.offsetPtr (i * 4))
+        drawArrays Quads (fromIntegral i) 4
   GL.currentProgram GL.$= Nothing
   where 
     !shprg' = getShaderProgram sh
 
 genQuitBtnVAO :: GuiResource -> SimpleShaderProg -> IO GU.VAO
 genQuitBtnVAO res shd =
-  makeSimpShdrVAO shd platVert pColor pTexCoord platElem
+  makeSimpShdrVAO shd platVert pColor pTexCoord
   where
     (xbtnPos,ybtnPos) = widgetExitBtnPos res
     (wbtnSiz,hbtnSiz) = widgetExitBtnSiz res
-    platVert :: [GLfloat]
     !platVert = concat [p0,p1,p2,p3,p0,p1,p2,p3]
 
     p0,p1,p2,p3 :: [GLfloat]
-    !p0 = [ xbtnPos, ybtnPos, 0.0]
-    !p1 = [ xbtnPos + wbtnSiz, ybtnPos, 0.0]
-    !p2 = [ xbtnPos + wbtnSiz, ybtnPos + hbtnSiz, 0.0]
-    !p3 = [ xbtnPos, ybtnPos + hbtnSiz, 0.0]
+    p0 = [ xbtnPos, ybtnPos, 0.0]
+    p1 = [ xbtnPos + wbtnSiz, ybtnPos, 0.0]
+    p2 = [ xbtnPos + wbtnSiz, ybtnPos + hbtnSiz, 0.0]
+    p3 = [ xbtnPos, ybtnPos + hbtnSiz, 0.0]
 
     pColor :: [GLfloat]
     !pColor = concat $ replicate 8 [ 1.0, 1.0, 1.0, 1.0 ]
-
-    platElem :: [GU.Word32]
-    !platElem = [0 .. 7]
 
     pTexCoord :: [GLfloat]
     (cox,coy1,coy2,cw,ch) = ( 0, 66/256, 86/256, 200/256, 20/256)
@@ -177,7 +172,7 @@ genQuitBtnVAO res shd =
 
 genStartBtnVAO :: GuiResource -> SimpleShaderProg -> IO GU.VAO
 genStartBtnVAO res shd =
-  makeSimpShdrVAO shd platVert pColor pTexCoord platElem
+  makeSimpShdrVAO shd platVert pColor pTexCoord
   where
     (xbtnPos,ybtnPos) = widgetPlayBtnPos res
     (wbntSiz,hbtnSiz) = widgetPlayBtnSiz res
@@ -193,21 +188,18 @@ genStartBtnVAO res shd =
     pColor :: [GLfloat]
     !pColor = concat $ replicate 8 [ 1.0, 1.0, 1.0, 1.0 ]
 
-    platElem :: [GU.Word32]
-    !platElem = [0 .. 7]
-
     pTexCoord :: [GLfloat]
     (cox,coy1,coy2,cw,ch) = ( 0, 66/256, 86/256, 200/256, 20/256)
     pTexCoord = [ cox, coy1, cox + cw, coy1, cox + cw, coy1 + ch, cox, coy1 + ch
                 , cox, coy2, cox + cw, coy2, cox + cw, coy2 + ch, cox, coy2 + ch]
 
-genTitlePlateVAO :: SimpleShaderProg -> IO [GU.VAO]
-genTitlePlateVAO sh = 
+genTitlePlateVAO :: SimpleShaderProg -> (Int,Int) -> IO [GU.VAO]
+genTitlePlateVAO sh (w',h') = 
   mapM (\ (v,c) ->
-    makeSimpShdrVAO sh v pColor c platElem)
+    makeSimpShdrVAO sh v pColor c)
       [(platVert1,pTexCoord1),(platVert2,pTexCoord2)]
   where
-    (w,h) = (1366,768)
+    (w,h) = (fromIntegral w', fromIntegral h')
     (texW1,texW2,texH) = (310,240,90)
     rate = 1.65
     (orgx1,orgy1) = ( (w - (texW1 + texW2) * rate ) / 2
@@ -229,20 +221,17 @@ genTitlePlateVAO sh =
     pColor :: [GLfloat]
     !pColor = concat $ replicate 4 [ 1.0, 1.0, 1.0, 1.0 ]
 
-    platElem :: [GU.Word32]
-    !platElem = [0 .. 3]
-
     pTexCoord1,pTexCoord2 :: [GLfloat]
     pTexCoord1 = [ 0.0, texH / 512, texW1 / 512, texH / 512
                  , texW1 / 512, 0.0 , 0.0, 0.0 ] 
     pTexCoord2 = [ 0.0, 2 * texH / 512 , texW2 / 512, 2 * texH / 512 
                  , texW2 / 512, texH / 512 , 0.0, texH / 512 ] 
 
-genWhitePlateVAO :: SimpleShaderProg -> IO GU.VAO
-genWhitePlateVAO sh =
-  makeSimpShdrVAO sh platVert pColor pTexCoord platElem
+genWhitePlateVAO :: SimpleShaderProg -> (Int,Int) ->  IO GU.VAO
+genWhitePlateVAO sh (w',h') =
+  makeSimpShdrVAO sh platVert pColor pTexCoord
   where
-    (w,h) = (1366,768)
+    (w,h) = (fromIntegral w', fromIntegral h')
     platVert :: [GLfloat]
     !platVert = concat [p0,p1,p2,p3]
 
@@ -255,9 +244,6 @@ genWhitePlateVAO sh =
     pColor :: [GLfloat]
     !pColor = concat $ replicate 4 [ 1.0, 1.0, 1.0, 0.3 ]
 
-    platElem :: [GU.Word32]
-    !platElem = [0 .. 3]
-
     pTexCoord :: [GLfloat]
     pTexCoord = [ 0.0, 0.0 , 1.0, 0.0 , 1.0, 1.0 , 0.0, 1.0 ] 
 
@@ -269,17 +255,16 @@ renderTitleCube sh vao [ftex',rtex',batex',ltex',ttex',botex'] = do
   --GL.clientState GL.VertexArray $= GL.Enabled
 
   enableTexture sh True
-  GU.withVAO vao $ mapM_ (\ (t,elst) ->
-    GU.withTextures2D [t] $ 
-      drawElements Quads (fromIntegral $ length elst) UnsignedInt $ GU.offsetPtr $ fromIntegral (head elst * 4))
-    $ zip [ftex',rtex',batex',ltex',ttex',botex'] ([[0..3],[4..7],[8..11],[12..15],[16..19],[20..23]] :: [[GU.Word32]])
+  GU.withVAO vao $ mapM_ (\ (t,i) ->
+    GU.withTextures2D [t] $ drawArrays Quads i 4 )
+    $ zip [ftex',rtex',batex',ltex',ttex',botex'] [0,4,8,12,16,20]
   GL.currentProgram GL.$= Nothing
   where 
     !shprg' = getShaderProgram sh
 
 genCubeVAO :: SimpleShaderProg  -> IO GU.VAO
 genCubeVAO sh = 
-  makeSimpShdrVAO sh cubeVert qColor qTexCoord cubeElem
+  makeSimpShdrVAO sh cubeVert qColor qTexCoord
   where
     qColor :: [GL.GLfloat]
     !qColor = concat $ replicate 24 [ 1.0, 1.0, 1.0, 1.0 ]
@@ -303,9 +288,6 @@ genCubeVAO sh =
       , p7, p6, p5, p4 -- Top
       , p0, p1, p2 ,p3 -- Bottom
       ]
-
-    cubeElem :: [GU.Word32]
-    !cubeElem = [0 .. 23]
 
     qTexCoord :: [GLfloat]
     qTexCoord = concat $ replicate 6 

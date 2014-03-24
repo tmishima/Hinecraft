@@ -107,15 +107,13 @@ orthoProjMatrix :: GLfloat -> GLfloat -> M44 GLfloat
 orthoProjMatrix w h = V4 (V4 (2/w) 0 0 (-1)) (V4 0 (2/h) 0 (-1)) (V4 0 0 0 0) (V4 0 0 0 1)
 
 makeSimpShdrVAO :: SimpleShaderProg -> [GLfloat]
-                -> [GLfloat] -> [GLfloat] -> [Word32]->IO VAO
-makeSimpShdrVAO simpShdr vertLst vertClrLst texCdLst elmLst = do
+                -> [GLfloat] -> [GLfloat] -> IO VAO
+makeSimpShdrVAO simpShdr vertLst vertClrLst texCdLst = do
   currentProgram $= Just (program sp)
   vao <- makeVAO $ do
     makeBuffer ArrayBuffer vertLst
     enableAttrib sp (inVertTag simpShdr)
     setAttrib sp (inVertTag simpShdr) ToFloat (VertexArrayDescriptor 3 Float 0 offset0)
-
-    bufferIndices elmLst
 
     makeBuffer ArrayBuffer vertClrLst 
     enableAttrib sp (inVertClrTag simpShdr)
