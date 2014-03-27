@@ -2,7 +2,7 @@
 -- 
 
 name:                Hinecraft
-version:             0.1.1.0
+version:             0.1.2.0
 -- synopsis:            
 description:         This is minecraft clone
 license:             Apache-2.0
@@ -31,8 +31,8 @@ executable Hinecraft
                      , array , vector , directory , process
                      , OpenGLRaw , cereal , JuicyPixels , FTGL 
                      , containers
-  -- hs-source-dirs:    Hinecraft
-  -- ghc-options:         -Wall -threaded
+  if os(windows)
+    extra-lib-dirs:    extra_lib_for_Windows7_32bit
   -- ghc-options:         -Wall -O2 -prof -auto-all -caf-all -fforce-recomp -rtsopts
   -- ghc-options:         -Wall -O2 -threaded 
   ghc-options:       -O2 -threaded 

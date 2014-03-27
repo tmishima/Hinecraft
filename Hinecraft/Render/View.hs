@@ -11,7 +11,6 @@ module Hinecraft.Render.View
   , loadGuiResource
   , loadWorldResouce
   , initGL
-  , initShader
   , setPerspective
   , gen3dCursol
   , drawBackPlane
@@ -79,10 +78,10 @@ renderCurFace objPos =
 drawPlay :: (Int,Int) -> GuiResource -> WorldResource
          -> UserStatus -> WorldDispList
          -> Maybe (WorldIndex,Surface)
-         -> [BlockIDNum] -> Bool -> DragDropState -> ShaderParam
+         -> [BlockIDNum] -> Bool -> DragDropState
          -> IO ()
 drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
-         invSw dragDrop shprg = do
+         invSw dragDrop = do
 
   -- World
   preservingMatrix $ do
@@ -105,11 +104,6 @@ drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
     color $ Color3 0.0 1.0 (0.0::GLfloat)
     
     mapM_ (\ (_,b) -> mapM_ callList b) $ M.toList worldDispList
-
-  preservingMatrix $ do
-    currentProgram $= Just (shdprg shprg)
-    -- shader ....
-    currentProgram $= Nothing
 
   -- HUD
   renderHUD (w,h) guiRes wldRes pIndex invSw plt dragDrop
@@ -240,14 +234,6 @@ setPerspective viewMode' w h = do
 
 initGL :: IO ()
 initGL = do
-  tu <- get maxTextureUnit
-  tm <- get maxTextureSize
-  lt <- get maxLights
-  Dbg.traceIO $ unwords [ "\n max texutere unit =", show tu
-                        , "\n max texture size =", show tm
-                        , "\n max lights =" , show lt
-                        ]
-
   texture Texture2D $= Enabled
   shadeModel        $= Smooth
   clearColor        $= Color4 0 0 0 0.0
@@ -267,60 +253,6 @@ initGL = do
   --colorMaterial     $= Just (GL.Front, AmbientAndDiffuse)
 
   glHint gl_PERSPECTIVE_CORRECTION_HINT gl_NICEST
-
-initShader :: FilePath -> IO ShaderParam
-initShader home = do
-  Dbg.traceIO "\nload basic.vert"
-  vertSrc <- B.readFile $ home ++ "/.Hinecraft/shader/basic.vert"
-  vsh <- compShader vertSrc VertexShader
-
-  Dbg.traceIO "load basic.frag"
-  frgSrc <- B.readFile $ home ++ "/.Hinecraft/shader/basic.frag"
-  fsh <- compShader frgSrc FragmentShader 
-
-  prg <- createProgram
-  attachShader prg vsh
-  attachShader prg fsh
-
-  attribLocation prg "VertexPosition" $= AttribLocation 0
-  attribLocation prg "VertexColor" $= AttribLocation 1
-  bindFragDataLocation prg "FragColor" $= 0
-
-  linkProgram prg
-  ls <- get $ linkStatus prg
-  if ls
-    then Dbg.traceIO "prg link ok"
-    else do
-      Dbg.traceIO "prg link error"
-      Dbg.traceIO =<< get (programInfoLog prg)  
-  -- 
-  --detachShader prg vsh
-  --detachShader prg fsh
-  releaseShaderCompiler
-  --
-
-  validateProgram prg
-  --currentProgram $= Just prg
-  ps <- get $ validateStatus prg
-  if ps
-    then Dbg.traceIO "prg validate ok"
-    else do
-      Dbg.traceIO "prg link error"
-      Dbg.traceIO =<< get (programInfoLog prg)  
-
-  return ShaderParam { shdprg = prg }
-  where
-    compShader src stype = do
-      sh <- createShader stype 
-      shaderSourceBS sh $= src 
-      compileShader sh
-      cs <- get $ compileStatus sh
-      if cs
-        then Dbg.traceIO "sh complie ok"
-        else do
-          Dbg.traceIO "sh complie error"
-          Dbg.traceIO =<< get (shaderInfoLog sh)
-      return $! sh
 
 genSufDispList :: WorldResource -> SurfacePos -> Maybe DisplayList
                -> IO DisplayList
@@ -507,7 +439,7 @@ loadGuiResource home (w,h) = do
     widPng    = home ++ "/.Hinecraft/textures/gui/widgets.png"
     invDlgPng = home ++ "/.Hinecraft/textures/gui/container/creative_inventory/tab_items.png"
     invTabPng = home ++ "/.Hinecraft/textures/gui/container/creative_inventory/tabs.png"
-    fontPath = "/usr/share/fonts/truetype/takao-mincho/TakaoPMincho.ttf" -- linux
+    fontPath = home ++ "/.Hinecraft/Font/ipamp.ttf" 
 
 -- ##################### Font(Text) #######################
 
