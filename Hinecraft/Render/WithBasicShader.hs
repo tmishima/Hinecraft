@@ -136,23 +136,29 @@ makeBasicShdrVAO :: BasicShaderProg -> [GLfloat]
                 -> [GLfloat] -> [GLfloat] -> [GLfloat] -> IO VAO
 makeBasicShdrVAO simpShdr vertLst vertClrLst vertNrmLst texCdLst = do
   currentProgram $= Just (program sp)
+  vb <- makeBuffer ArrayBuffer vertLst
+  cb <- makeBuffer ArrayBuffer vertClrLst 
+  nb <- makeBuffer ArrayBuffer vertNrmLst 
+  tb <- makeBuffer ArrayBuffer texCdLst
   vao <- makeVAO $ do
-    makeBuffer ArrayBuffer vertLst
+    bindBuffer ArrayBuffer $= Just vb
     enableAttrib sp (inVertTag simpShdr)
     setAttrib sp (inVertTag simpShdr) ToFloat (VertexArrayDescriptor 3 Float 0 offset0)
 
-    makeBuffer ArrayBuffer vertClrLst 
+    bindBuffer ArrayBuffer $= Just cb
     enableAttrib sp (inVertClrTag simpShdr)
     setAttrib sp (inVertClrTag simpShdr) ToFloat (VertexArrayDescriptor 4 Float 0 offset0)
    
-    makeBuffer ArrayBuffer vertNrmLst 
+    bindBuffer ArrayBuffer $= Just nb
     enableAttrib sp (inVertNormTag simpShdr)
     setAttrib sp (inVertNormTag simpShdr) ToFloat (VertexArrayDescriptor 3 Float 0 offset0)
 
-    makeBuffer ArrayBuffer texCdLst
+    bindBuffer ArrayBuffer $= Just tb
     enableAttrib sp (inTexTag simpShdr)
     setAttrib sp (inTexTag simpShdr) ToFloat (VertexArrayDescriptor 2 Float 0 offset0)
 
+  deleteObjectNames [vb,cb,nb,tb]
+  
   GL.currentProgram $= Nothing
   return vao
   where

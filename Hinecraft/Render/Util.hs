@@ -10,6 +10,7 @@ module Hinecraft.Render.Util
   , putTextLine
   , drawIcon
   , loadTexture'
+  , getVertexList'
   )
   where
 
@@ -53,6 +54,23 @@ loadTexture' fn = do
         >> texture2DWrap $= (Repeated, ClampToEdge)
       return t'
     Left e -> error e
+
+getVertexList' :: Shape -> Surface
+              -> ([VrtxPos3D],[(GLfloat,GLfloat)])
+getVertexList' Cube f = case f of
+  STop    -> ([p7,p6,p5,p4],uvLst)
+  SBottom -> ([p0,p1,p2,p3],uvLst)
+  SFront  -> ([p6,p7,p1,p0],uvLst)
+  SBack   -> ([p4,p5,p3,p2],uvLst)
+  SRight  -> ([p7,p4,p2,p1],uvLst)
+  SLeft   -> ([p5,p6,p0,p3],uvLst)
+  where
+    (p0:p1:p2:p3:p4:p5:p6:p7:_) = blockNodeVertex
+    !uvLst = [ (0.0,0.0)
+             , (1.0,0.0)
+             , (1.0,1.0)
+             , (0.0,1.0)
+             ]
 
 getVertexList :: Shape -> Surface
               -> [(VrtxPos3D,(GLfloat,GLfloat))]

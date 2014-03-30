@@ -19,6 +19,7 @@ module Hinecraft.Render.View
   , drawTitle
   , drawPlay
   , genSufDispList
+  , WorldVAOList
   --
   ) where
 
@@ -74,7 +75,7 @@ renderCurFace objPos =
     SLeft   -> rotate 90    $ Vector3 0.0 0.0 (1::GLfloat)
 
 drawPlay :: (Int,Int) -> GuiResource -> WorldResource
-         -> UserStatus -> WorldDispList
+         -> UserStatus -> WorldVAOList {- WorldDispList -}
          -> Maybe (WorldIndex,Surface)
          -> [BlockIDNum] -> Bool -> DragDropState
          -> WorldViewVHdl 
@@ -83,6 +84,8 @@ drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
          invSw dragDrop wvHdl = do
 
   -- World
+  drawWorldView wvHdl (w,h) worldDispList usrStat'
+
   preservingMatrix $ do
     setPerspective V3DMode w h
   
@@ -93,7 +96,6 @@ drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
     --preservingMatrix $ do
     --  scale 200.0 200.0 (200.0::GLfloat)
     --  drawBackGroundBox' 
-    drawWorldView wvHdl (w,h) usrStat'
 
     -- カメラ位置
     translate $ Vector3 (-ux :: GLfloat) (-uy - 1.5) (-uz) 
@@ -101,9 +103,8 @@ drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
     -- Cursol 選択された面を強調
     renderCurFace  pos
 
-    color $ Color3 0.0 1.0 (0.0::GLfloat)
-    mapM_ (\ (_,b) -> mapM_ callList b) $ M.toList worldDispList
-
+    --color $ Color3 0.0 1.0 (0.0::GLfloat)
+    --mapM_ (\ (_,b) -> mapM_ callList b) $ M.toList worldDispList
 
   -- HUD
   renderHUD (w,h) guiRes wldRes pIndex invSw plt dragDrop
@@ -112,22 +113,6 @@ drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
     (ux,uy,uz) = d2f $ userPos usrStat'
     (urx,ury,_) = d2f $ userRot usrStat' :: (GLfloat,GLfloat,GLfloat)
     pIndex =  palletIndex usrStat'
-    drawBackGroundBox' = preservingMatrix $ do
-      color $ Color4 (180/255) (226/255) (255/255) (1.0::GLfloat)
-      texture Texture2D $= Disabled
-      renderPrimitive Quads $ do
-        genSuf (0,0,-1) $ getVertexList Cube SFront  -- Front
-        genSuf (-1,0,0) $ getVertexList Cube SRight  -- Right
-        genSuf (1,0,0)  $ getVertexList Cube SLeft   -- Left
-        genSuf (0,-1,0) $ getVertexList Cube STop    -- Top
-        genSuf (0,1,0)  $ getVertexList Cube SBottom -- Bottom
-        genSuf (0,0,1)  $ getVertexList Cube SBack   -- Back 
-    genSuf :: (GLfloat,GLfloat,GLfloat)
-           -> [((GLfloat,GLfloat,GLfloat),(GLfloat,GLfloat))]
-           -> IO ()
-    genSuf (nx,ny,nz) ndlst = do
-      normal $ Normal3 nx ny nz
-      forM_ ndlst $ \ ((x', y', z'),_) -> vertex (Vertex3 x' y' z')
 
 renderHUD :: (Int,Int) -> GuiResource ->  WorldResource
           -> Int -> Bool -> [BlockIDNum] -> DragDropState

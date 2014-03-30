@@ -9,6 +9,11 @@ module Hinecraft.Render.WorldView
   , drawWorldView
   , renderEnvCube
   , genChunkVAO
+  , WorldVAOList
+  , initWorldVAOList
+  , getBlockVAOList
+  , setBlockVAOList
+  , updateVAOlist
   )
   where
 
@@ -20,8 +25,14 @@ import qualified Graphics.GLUtil.Camera3D as GU3
 import qualified Graphics.GLUtil.Camera2D as GU2
 --import Linear ( M44 ) --  eye4
 import Linear.V3
+import qualified Data.Map as M
+import Control.Monad (  forM_, forM , foldM {-,when, unless,void-} )
+import Debug.Trace as Dbg
+import Data.IORef
+import Control.Applicative
 
 import Hinecraft.Types
+import Hinecraft.Model
 import Hinecraft.Render.Util
 import Hinecraft.Render.Types
 import Hinecraft.Render.WithBasicShader as BSd
@@ -33,6 +44,7 @@ data WorldViewVHdl = WorldViewVHdl
   , envCube :: GU.VAO
   , blockTexture' :: TextureObject
   , skyTexture :: TextureObject
+  , blkVAOList :: IORef WorldVAOList
   --, starTexture ::
   }
 {- 
@@ -43,6 +55,35 @@ data WorldViewVHdl = WorldViewVHdl
   , envCubeTex :: [TextureObject]
 -}
 
+type WorldVAOList = M.Map (Int,Int) [Maybe (Int,GU.VAO)]
+
+updateVAOlist :: WorldViewVHdl -> [(((Int, Int), Int),SurfacePos)]
+              -> IO ()
+updateVAOlist wvhdl sufList = do
+  vao <- getBlockVAOList wvhdl
+  newvao <- foldM fn vao sufList 
+  setBlockVAOList wvhdl newvao  
+  where
+    fn wvlst ((ij,bNo'),sfs) = do
+      case M.lookup ij wvlst of
+        Just d -> case d !! bNo' of
+                    Just (_,v) -> do
+                      GU.deleteVAO v
+                      vao <- genChunkVAO wvhdl sfs 
+                      let newVAO = (take bNo' d) ++ [vao]
+                                  ++ (drop (bNo' + 1) d)
+                      return $! M.update (upfn newVAO) ij wvlst
+                    Nothing -> return wvlst
+        Nothing -> return wvlst
+    upfn nv _ = Just nv
+
+
+getBlockVAOList :: WorldViewVHdl -> IO WorldVAOList
+getBlockVAOList vwHdl = readIORef (blkVAOList vwHdl)
+
+setBlockVAOList :: WorldViewVHdl -> WorldVAOList -> IO ()
+setBlockVAOList vwHdl vaos = writeIORef (blkVAOList vwHdl) vaos
+
 initWorldView :: FilePath -> IO WorldViewVHdl
 initWorldView home = do
   bsh <- initShaderProgram home
@@ -50,45 +91,167 @@ initWorldView home = do
   blks <- loadTexture' blkPng
   sky <- loadTexture' skyPng
   cb <- genEnvCubeVAO bsh
+  vao <- newIORef M.empty 
   return WorldViewVHdl 
     { basicShader = bsh
     , simpleShader = ssh
     , envCube = cb
     , blockTexture' = blks
     , skyTexture = sky
+    , blkVAOList = vao
     }
   where
     blkPng = home ++ "/.Hinecraft/terrain.png"
     skyPng = home ++ "/.Hinecraft/mcpatcher/sky/world0/cloud1.png"
     --starPng = home ++ "/.Hinecraft/mcpatcher/sky/world0/star1.png"
 
-drawWorldView :: WorldViewVHdl -> (Int,Int) -> UserStatus -> IO ()
-drawWorldView wvhdl (w,h) usrStat' = 
+initWorldVAOList :: WorldViewVHdl 
+                 -> [((Int, Int), [SurfacePos])] -> IO ()
+initWorldVAOList wvhdl suflst = do
+  vao <- M.fromList <$> mapM (\ (ij,slst) -> do
+    ds <- forM slst (\ sfs -> genChunkVAO wvhdl sfs)
+    return (ij,ds)
+    ) suflst
+  writeIORef (blkVAOList wvhdl) vao
+
+drawWorldView :: WorldViewVHdl -> (Int,Int)
+              -> WorldVAOList -> UserStatus -> IO ()
+drawWorldView wvhdl (w,h) vaos usrStat' = 
   GU.withViewport (Position 0 0) (Size (fromIntegral w) (fromIntegral h)) $ do
     -- Draw 3D cube
     let prjMat = GU3.projectionMatrix (GU3.deg2rad 60) (fromIntegral w/ fromIntegral h) 0.1 (2000::GLfloat)
     setProjViewMat pg prjMat
-    setCamParam pg $ GU3.dolly (V3 0 (-uy - 1.5) 0)
+    setCamParam pg -- $ GU3.dolly (V3 0 (-uy - 1.5) 0)
                    $ GU3.pan ury $ GU3.tilt urx GU3.fpsCamera
 
     renderEnvCube pg cbVao skyTex 
+
+    setCamParam pg $ GU3.pan ury $ GU3.tilt urx
+                   $ GU3.dolly (V3 ux (uy + 1.5) uz)
+                   $ GU3.fpsCamera
+     
+    forM_ vs (\ (_,vas) ->
+      mapM_ (\ v -> renderChunk pg v blkTex) vas)
+    
   where
     pg = basicShader wvhdl
+    vs = M.toList vaos
     cbVao = envCube wvhdl
     skyTex = skyTexture wvhdl
+    blkTex = blockTexture' wvhdl
     d2f (a,b,c) = (realToFrac a, realToFrac b, realToFrac c)
     (ux,uy,uz) = d2f $ userPos usrStat'
     (urx,ury,_) = d2f $ userRot usrStat' :: (GLfloat,GLfloat,GLfloat)
 
-genChunkVAO :: BasicShaderProg -> SurfacePos -> IO GU.VAO
-genChunkVAO sh bsf =
-  makeBasicShdrVAO sh vertlst clrlst normlst coordlst
+renderChunk :: BasicShaderProg -> Maybe (Int,GU.VAO) 
+            -> TextureObject -> IO ()
+renderChunk _ Nothing _ = return ()
+renderChunk _ (Just (0,_)) _ = return ()
+renderChunk sh (Just (len,vao)) tex = do
+  currentProgram $= Just (GU.program shprg')
+  --GL.clientState GL.VertexArray $= GL.Enabled
+  setLightMode sh 0
+  setColorBlendMode sh 0
+  enableTexture sh True
+  GU.withVAO vao $ 
+    GU.withTextures2D [tex] $ drawArrays Quads 0 $ fromIntegral len * 4
+
+  currentProgram $= Nothing
+  where 
+    !shprg' = getShaderProgram sh
+
+genChunkVAO :: WorldViewVHdl -> SurfacePos -> IO (Maybe (Int,GU.VAO))
+genChunkVAO wvhdl bsf = genChunkVAO' sh bsf
+  where sh = basicShader wvhdl
+
+genChunkVAO' :: BasicShaderProg -> SurfacePos -> IO (Maybe (Int,GU.VAO))
+genChunkVAO' _ [] = return Nothing
+genChunkVAO' sh bsf = do
+  vao <- makeBasicShdrVAO sh (concat vertlst)
+                      (concat clrlst)
+                      (concat normlst)
+                      (concat coordlst)
+  return $! Just (ndnum, vao)
   where
-    vertlst = undefined
-    clrlst = undefined
-    normlst = undefined
-    coordlst = undefined
-  --mapM_ genFace bsf
+    (clrlst, normlst, coordlst, vertlst, ndnum) = foldr 
+      (\ e (cs,ns,cds,vs,s) -> let (c,n,cd,v,num) = genElem e
+                             in (c:cs,n:ns,cd:cds,v:vs,num+s)
+                             ) ([],[],[],[],0) bsf
+  --
+
+genElem :: (WorldIndex, BlockIDNum, [Surface])
+        -> ([GLfloat],[GLfloat],[GLfloat],[GLfloat],Int)
+genElem ((x,y,z),bid,fs) =
+    ( colorList fs, normList fs, coordList fs
+    , vertexList fs ,4 * length fs)
+  where
+    sp = shape $ getBlockInfo bid
+    -- Top | Bottom | Right | Left | Front | Back
+    [tt',tb',tr',tl',tf',tba'] = case textureIndex $ getBlockInfo bid of
+      [] -> replicate 6 (0,0)
+      ti -> ti
+
+    colorList :: [Surface] -> [GLfloat]
+    colorList = concatMap (\ f ->
+      genColorList $ setColor $ case f of
+        STop -> 0
+        SBottom -> 1
+        SRight -> 2
+        SLeft -> 3
+        SFront -> 4
+        SBack -> 5)
+
+    normList :: [Surface] -> [GLfloat]
+    normList = concatMap (\ f ->
+      genNormList $ case f of
+        STop -> (0,-1,0)
+        SBottom -> (0,-1,0)
+        SRight -> (1,0,0)
+        SLeft -> (-1,0,0)
+        SFront -> (0,0,-1) 
+        SBack -> (0,0,1))
+
+    coordList :: [Surface] -> [GLfloat]
+    coordList = concatMap (\ f ->
+      let (_,uv) = getVertexList' sp f
+      in genCoordList (case f of
+        STop -> tt' 
+        SBottom  -> tb'
+        SRight -> tf'
+        SLeft -> tba'
+        SFront -> tr'
+        SBack -> tl' ) uv
+        )
+    vertexList :: [Surface] -> [GLfloat]
+    vertexList = concatMap (\ f ->
+      let (vs,_) = getVertexList' sp f
+      in genVertLst vs 
+        )
+
+    d2fv3 :: (Double,Double,Double) -> VrtxPos3D 
+    d2fv3 (a,b,c) = ( realToFrac a, realToFrac b, realToFrac c)
+    setColor i = d2fv3 $ bcolor (getBlockInfo bid) !! i
+    genColorList :: (GLfloat,GLfloat,GLfloat)
+                 -> [GLfloat]
+    genColorList (r,g,b) = (concat . replicate 4) [r,g,b,1.0]
+    genNormList :: (GLfloat,GLfloat,GLfloat)
+                 -> [GLfloat]
+    genNormList (nx,ny,nz) = (concat . replicate 4) [nx,ny,nz]
+    genCoordList :: (Int,Int) -> [(GLfloat,GLfloat)]
+                 -> [GLfloat]
+    genCoordList (i',j') lst =
+      concatMap (\ (u,v) -> [i * (1/16) + (1/16) * u
+                        , j * (1/16) + (1/16) * v ]) lst
+      where i = fromIntegral i' ; j = fromIntegral j'
+    genVertLst :: [(GLfloat,GLfloat,GLfloat)]
+           -> [GLfloat]
+    genVertLst ndlst =
+      concatMap (\ (x', y', z') -> 
+               [ (x' + fromIntegral x)
+               , (y' + fromIntegral y)
+               , (z' + fromIntegral z)
+               ]
+               ) ndlst 
 
 renderEnvCube :: BasicShaderProg -> GU.VAO -> TextureObject -> IO ()
 renderEnvCube sh vao tex = do 

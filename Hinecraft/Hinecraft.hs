@@ -21,9 +21,8 @@ import qualified Data.Map as M
 import Data.Maybe
 import Debug.Trace as Dbg
 import Control.Exception ( bracket )
-import Control.Monad ( when,forM,forM {-unless,,foldMvoid,filterM-} )
+import Control.Monad ( when {-unless,,foldMvoid,filterM-} )
 --import Data.Maybe ( fromJust,isJust ) --,catMaybes )
-import Control.Applicative
 import System.Directory ( getHomeDirectory )
 --import Control.Concurrent
 
@@ -66,7 +65,7 @@ exitHinecraft (glfwHdl,_,_) = do
 
 runHinecraft :: (GLFWHandle, GuiResource, WorldResource)
              -> IO ()
-runHinecraft resouce@(glfwHdl,guiRes,wldRes) = do
+runHinecraft resouce@(glfwHdl,guiRes,_) = do
   home <- getHomeDirectory
   !tvHdl <- initTitleModeView home guiRes
   !wvHdl <- initWorldView home
@@ -85,34 +84,35 @@ runHinecraft resouce@(glfwHdl,guiRes,wldRes) = do
         , curPos = Nothing
         , pallet = replicate 9 airBlockID
         }
-  dsps <- genWorldDispList wldRes sfl 
+  initWorldVAOList wvHdl $ M.toList sfl
+
   _ <- getDeltTime glfwHdl
-  mainLoop tmstat plstat TitleMode (wld,sfl,dsps,tvHdl,wvHdl) 
+  mainLoop tmstat plstat TitleMode (wld,sfl,tvHdl,wvHdl) 
   where
-    mainLoop tmstat' plstat' runMode (w',f',d',tvHdl,wvHdl) = do
+    mainLoop tmstat' plstat' runMode (w',f',tvHdl,wvHdl) = do
       pollGLFW
       --threadDelay 10000
       dt <- getDeltTime glfwHdl
       exitflg' <- getExitReqGLFW glfwHdl
       (ntmstat',nplstat',runMode',f'',nw') <- mainProcess
-                   resouce tmstat' plstat' w' runMode f' d' dt
-      drawView resouce ntmstat' nplstat' runMode' d' tvHdl wvHdl
+                   resouce tmstat' plstat' w' runMode f' wvHdl dt
+      drawView resouce ntmstat' nplstat' runMode' tvHdl wvHdl
       swapBuff glfwHdl
       if exitflg' || isQuit ntmstat'
         then return () -- do
           --home <- getHomeDirectory
           --saveWorldData nw' home  
           --saveSurfaceList f'' home
-        else mainLoop ntmstat' nplstat' runMode' (nw',f'',d',tvHdl,wvHdl)
+        else mainLoop ntmstat' nplstat' runMode' (nw',f'',tvHdl,wvHdl)
 
 mainProcess :: (GLFWHandle, GuiResource, WorldResource)
             -> TitleModeState -> PlayModeState -> WorldData
-            ->RunMode -> SurfaceList -> WorldDispList 
+            ->RunMode -> SurfaceList -> WorldViewVHdl
             -> Double
             -> IO ( TitleModeState, PlayModeState, RunMode
                   , SurfaceList, WorldData)
-mainProcess (glfwHdl, guiRes, wldRes) tmstat plstat wld runMode
-            sufList dsps dt = do
+mainProcess (glfwHdl, guiRes, _) tmstat plstat wld runMode
+            sufList wvHdl dt = do
   -- Common User input
   mous <- getButtonClick glfwHdl
   syskey <- getSystemKeyOpe glfwHdl
@@ -144,10 +144,14 @@ mainProcess (glfwHdl, guiRes, wldRes) tmstat plstat wld runMode
         Just (pos',bid) -> do
           let !newWld = setBlockID wld pos' bid
               !newSuf = updateSufList newWld sufList pos'
-          updateDisplist wldRes dsps newSuf pos'
+              !clst = calcReGenArea pos'
+              !sflst = map (\ (ij,bNo') ->
+                         ((ij,bNo')
+                         , fromJust $ getSurfaceList newSuf (ij,bNo')
+                         )) clst 
+          updateVAOlist wvHdl sflst
           return $! (newWld,newSuf)
         Nothing -> return (wld,sufList)
-
       return $! ( md
                 , PlayModeState
                        { usrStat = newStat , drgdrpMd = Nothing
@@ -243,17 +247,6 @@ updateSufList wld sufList pos = foldr (\ (i,b) sfl
      $ fromJust $ getSurface wld (i,b)) sufList clst 
   where
     !clst = calcReGenArea pos 
-
-updateDisplist :: WorldResource -> WorldDispList
-               -> SurfaceList -> WorldIndex -> IO () 
-updateDisplist wldRes dsps sufList pos =  
-  mapM_ (\ (ij,bNo') -> do
-    let !sfs = fromJust $ getSurfaceList sufList (ij,bNo')
-        Just d = M.lookup ij dsps
-    genSufDispList wldRes sfs $ Just $ d !! bNo' 
-    return ()) clst 
-  where
-    !clst = calcReGenArea pos
 
 setBlock :: UserStatus -> (Double,Double,Bool,Bool,Bool)
          -> Maybe (WorldIndex,Surface) -> [BlockIDNum]
@@ -411,10 +404,11 @@ guiProcess res (x,y,btn1,_,_) = (chkModeChg,chkExit)
 
 drawView :: ( GLFWHandle, GuiResource, WorldResource)
          -> TitleModeState -> PlayModeState -> RunMode
-         -> WorldDispList -> TitleModeHdl -> WorldViewVHdl
+         -> TitleModeHdl -> WorldViewVHdl
          -> IO ()
 drawView (glfwHdl, guiRes, wldRes) tmstat plstat runMode'
-         worldDispList tvHdl wvHdl = do
+          tvHdl wvHdl = do
+  worldDispList <- getBlockVAOList wvHdl
   winSize <- getWindowSize glfwHdl
   updateDisplay $
     if runMode' == TitleMode
@@ -430,15 +424,4 @@ drawView (glfwHdl, guiRes, wldRes) tmstat plstat runMode'
     drgSta' = drgSta plstat
     plt = pallet plstat
 --
-
-genWorldDispList :: WorldResource -> SurfaceList -> IO WorldDispList
-genWorldDispList wldRes suf = M.fromList <$>
-  mapM (\ (ij,slst) -> do
-    ds <- forM slst (\ sfs -> genSufDispList wldRes sfs Nothing)
-    return (ij,ds)
-    ) suflst
-  where
-    !suflst = M.toList suf
--- 
-
 

@@ -123,12 +123,14 @@ calcPointer (x,y,z) (rx,ry,_) r =
   where
     d2r d = pi*d/180.0
 
+{-
 genSurfaceList :: WorldData -> SurfaceList
 genSurfaceList wld = M.mapWithKey f $ chunkList wld
   where
     !bkNo = blockNum chunkParam - 1
     f k c = map (\ (k',bn) -> getSurface' wld c (k',bn))
                 [(k,bn) | bn <-[0 .. bkNo]]
+-}
 
 setSurfaceList :: SurfaceList -> ((Int,Int),Int)
                -> SurfacePos -> SurfaceList
