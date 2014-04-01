@@ -52,30 +52,8 @@ data ViewMode = V2DMode | V3DTitleMode | V3DMode
 
 type WorldDispList = M.Map (Int,Int) [DisplayList]
 
-renderCurFace :: Maybe (WorldIndex,Surface) -> IO ()
-renderCurFace objPos = 
-  case objPos of 
-    Just ((px,py,pz),s) -> preservingMatrix $ do -- 選択された面を強調
-      texture Texture2D $= Disabled
-      lineWidth         $= 1.2
-      color $ Color3 0.1 0.1 (0.1::GLfloat)
-      translate $ Vector3 (fromIntegral px)
-                          (fromIntegral py)
-                          (fromIntegral pz :: GLfloat)
-      rotCursol s -- SBack -- SLeft -- SRight -- SFront -- SBottom -- STop
-      gen3dCursol
-    Nothing -> return ()
-  where
-  rotCursol face = case face of
-    STop    -> return ()
-    SBottom -> rotate 180   $ Vector3 1.0 0.0 (0::GLfloat)
-    SFront  -> rotate (-90) $ Vector3 1.0 0.0 (0::GLfloat)
-    SBack   -> rotate 90    $ Vector3 1.0 0.0 (0::GLfloat)
-    SRight  -> rotate (-90) $ Vector3 0.0 0.0 (1::GLfloat)
-    SLeft   -> rotate 90    $ Vector3 0.0 0.0 (1::GLfloat)
-
 drawPlay :: (Int,Int) -> GuiResource -> WorldResource
-         -> UserStatus -> WorldVAOList {- WorldDispList -}
+         -> UserStatus -> WorldVAOList 
          -> Maybe (WorldIndex,Surface)
          -> [BlockIDNum] -> Bool -> DragDropState
          -> WorldViewVHdl 
@@ -84,34 +62,11 @@ drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
          invSw dragDrop wvHdl = do
 
   -- World
-  drawWorldView wvHdl (w,h) worldDispList usrStat'
-
-  preservingMatrix $ do
-    setPerspective V3DMode w h
-  
-    -- 視線
-    rotate (-urx :: GLfloat) $ Vector3 1.0 0.0 (0.0::GLfloat)
-    rotate (-ury :: GLfloat) $ Vector3 0.0 1.0 (0.0::GLfloat) -- z軸
- 
-    --preservingMatrix $ do
-    --  scale 200.0 200.0 (200.0::GLfloat)
-    --  drawBackGroundBox' 
-
-    -- カメラ位置
-    translate $ Vector3 (-ux :: GLfloat) (-uy - 1.5) (-uz) 
-
-    -- Cursol 選択された面を強調
-    renderCurFace  pos
-
-    --color $ Color3 0.0 1.0 (0.0::GLfloat)
-    --mapM_ (\ (_,b) -> mapM_ callList b) $ M.toList worldDispList
+  drawWorldView wvHdl (w,h) worldDispList usrStat' pos
 
   -- HUD
   renderHUD (w,h) guiRes wldRes pIndex invSw plt dragDrop
   where
-    d2f (a,b,c) = (realToFrac a, realToFrac b, realToFrac c)
-    (ux,uy,uz) = d2f $ userPos usrStat'
-    (urx,ury,_) = d2f $ userRot usrStat' :: (GLfloat,GLfloat,GLfloat)
     pIndex =  palletIndex usrStat'
 
 renderHUD :: (Int,Int) -> GuiResource ->  WorldResource
@@ -197,7 +152,6 @@ renderInventory (w,h) guiRes wldRes plt dragDrop = preservingMatrix $ do
     (w',h') = (fromIntegral w, fromIntegral h)
     tdlg' = invDlgTexture guiRes
 
-
 setPerspective :: ViewMode -> Int -> Int -> IO ()
 setPerspective viewMode' w h = do
   matrixMode $= Projection
@@ -240,8 +194,6 @@ initGL = do
   --lighting        $= Enabled
   colorMaterial     $= Just (FrontAndBack, AmbientAndDiffuse)
   --colorMaterial     $= Just (GL.Front, AmbientAndDiffuse)
-
-
 
 genSufDispList :: WorldResource -> SurfacePos -> Maybe DisplayList
                -> IO DisplayList

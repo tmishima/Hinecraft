@@ -22,12 +22,12 @@ module Hinecraft.Render.WorldView
 import Graphics.Rendering.OpenGL as GL
 import qualified Graphics.GLUtil as GU
 import qualified Graphics.GLUtil.Camera3D as GU3
-import qualified Graphics.GLUtil.Camera2D as GU2
+--import qualified Graphics.GLUtil.Camera2D as GU2
 --import Linear ( M44 ) --  eye4
 import Linear.V3
 import qualified Data.Map as M
 import Control.Monad (  forM_, forM , foldM {-,when, unless,void-} )
-import Debug.Trace as Dbg
+--import Debug.Trace as Dbg
 import Data.IORef
 import Control.Applicative
 
@@ -45,6 +45,7 @@ data WorldViewVHdl = WorldViewVHdl
   , blockTexture' :: TextureObject
   , skyTexture :: TextureObject
   , blkVAOList :: IORef WorldVAOList
+  , blkCursol :: GU.VAO
   --, starTexture ::
   }
 {- 
@@ -66,14 +67,14 @@ updateVAOlist wvhdl sufList = do
   where
     fn wvlst ((ij,bNo'),sfs) = do
       case M.lookup ij wvlst of
-        Just d -> case d !! bNo' of
-                    Just (_,v) -> do
-                      GU.deleteVAO v
-                      vao <- genChunkVAO wvhdl sfs 
-                      let newVAO = (take bNo' d) ++ [vao]
-                                  ++ (drop (bNo' + 1) d)
-                      return $! M.update (upfn newVAO) ij wvlst
-                    Nothing -> return wvlst
+        Just d -> do
+          case d !! bNo' of
+            Just (_,v) -> GU.deleteVAO v
+            Nothing -> return ()
+          vao <- genChunkVAO wvhdl sfs 
+          let newVAO = (take bNo' d) ++ [vao]
+                       ++ (drop (bNo' + 1) d)
+          return $! M.update (upfn newVAO) ij wvlst
         Nothing -> return wvlst
     upfn nv _ = Just nv
 
@@ -92,6 +93,7 @@ initWorldView home = do
   sky <- loadTexture' skyPng
   cb <- genEnvCubeVAO bsh
   vao <- newIORef M.empty 
+  bCur <- genBlockCursol ssh
   return WorldViewVHdl 
     { basicShader = bsh
     , simpleShader = ssh
@@ -99,6 +101,7 @@ initWorldView home = do
     , blockTexture' = blks
     , skyTexture = sky
     , blkVAOList = vao
+    , blkCursol = bCur
     }
   where
     blkPng = home ++ "/.Hinecraft/terrain.png"
@@ -115,11 +118,14 @@ initWorldVAOList wvhdl suflst = do
   writeIORef (blkVAOList wvhdl) vao
 
 drawWorldView :: WorldViewVHdl -> (Int,Int)
-              -> WorldVAOList -> UserStatus -> IO ()
-drawWorldView wvhdl (w,h) vaos usrStat' = 
-  GU.withViewport (Position 0 0) (Size (fromIntegral w) (fromIntegral h)) $ do
+              -> WorldVAOList -> UserStatus
+              -> Maybe (WorldIndex,Surface) -> IO ()
+drawWorldView wvhdl (w,h) vaos usrStat' pos = 
+  GU.withViewport (Position 0 0) (Size (fromIntegral w)
+                  (fromIntegral h)) $ do
     -- Draw 3D cube
-    let prjMat = GU3.projectionMatrix (GU3.deg2rad 60) (fromIntegral w/ fromIntegral h) 0.1 (2000::GLfloat)
+    let prjMat = GU3.projectionMatrix (GU3.deg2rad 60)
+                   (fromIntegral w/ fromIntegral h) 0.1 (2000::GLfloat)
     setProjViewMat pg prjMat
     setCamParam pg -- $ GU3.dolly (V3 0 (-uy - 1.5) 0)
                    $ GU3.pan ury $ GU3.tilt urx GU3.fpsCamera
@@ -128,13 +134,29 @@ drawWorldView wvhdl (w,h) vaos usrStat' =
 
     setCamParam pg $ GU3.pan ury $ GU3.tilt urx
                    $ GU3.dolly (V3 ux (uy + 1.5) uz)
-                   $ GU3.fpsCamera
+                   GU3.fpsCamera
      
     forM_ vs (\ (_,vas) ->
       mapM_ (\ v -> renderChunk pg v blkTex) vas)
-    
+
+    -- Cursol 選択された面を強調
+    case pos of 
+      Just ((px,py,pz),s) -> do
+        --lineWidth    $= 1.2
+        setProjViewMat spg prjMat
+        setCamParam spg 
+                $ GU3.pan ury $ GU3.tilt urx
+                $ GU3.dolly (V3 (ux - fromIntegral px)
+                                ((uy + 1.5) - fromIntegral py)
+                                (uz - fromIntegral pz))
+                GU3.fpsCamera
+        renderBlockCursol spg bCurVAO s
+      Nothing -> return ()
+
   where
     pg = basicShader wvhdl
+    spg = simpleShader wvhdl
+    bCurVAO = blkCursol wvhdl
     vs = M.toList vaos
     cbVao = envCube wvhdl
     skyTex = skyTexture wvhdl
@@ -143,6 +165,35 @@ drawWorldView wvhdl (w,h) vaos usrStat' =
     (ux,uy,uz) = d2f $ userPos usrStat'
     (urx,ury,_) = d2f $ userRot usrStat' :: (GLfloat,GLfloat,GLfloat)
 
+genBlockCursol :: SimpleShaderProg -> IO GU.VAO
+genBlockCursol sh = makeSimpShdrVAO sh  vertLst vertClrLst texCdLst
+  where
+    vertLst = concatMap ajust $ concat vlst
+    vertClrLst = concat $ replicate (4 * 6) [0.1,0.1,0.1,1.0]
+    texCdLst = concat $ replicate (4 * 6) [0.0,1.0]
+    extnd v = if v > 0 then v + 0.05 else  v - 0.05
+    ajust (a,b,c) = [ extnd a, extnd b, extnd c]
+    vlst = map (fst . getVertexList' Cube ) [STop,SBottom,SFront,SBack
+                                            ,SRight,SLeft]
+
+renderBlockCursol :: SimpleShaderProg -> GU.VAO -> Surface -> IO ()
+renderBlockCursol sh vao s = do
+  currentProgram $= Just (GU.program shprg')
+  --GL.clientState GL.VertexArray $= GL.Enabled
+  enableTexture sh False 
+  GU.withVAO vao $ 
+    drawArrays LineLoop (calcIdx s) 4
+  currentProgram $= Nothing
+  where 
+    !shprg' = getShaderProgram sh
+    calcIdx f = case f of
+      STop -> 0
+      SBottom -> 4
+      SFront -> 8
+      SBack -> 12
+      SRight -> 16
+      SLeft -> 20
+
 renderChunk :: BasicShaderProg -> Maybe (Int,GU.VAO) 
             -> TextureObject -> IO ()
 renderChunk _ Nothing _ = return ()
@@ -150,7 +201,7 @@ renderChunk _ (Just (0,_)) _ = return ()
 renderChunk sh (Just (len,vao)) tex = do
   currentProgram $= Just (GU.program shprg')
   --GL.clientState GL.VertexArray $= GL.Enabled
-  setLightMode sh 0
+  setLightMode sh 1
   setColorBlendMode sh 0
   enableTexture sh True
   GU.withVAO vao $ 
@@ -261,7 +312,7 @@ renderEnvCube sh vao tex = do
   setColorBlendMode sh 1
   enableTexture sh True
   GU.withVAO vao $ 
-    GU.withTextures2D [tex] $ drawArrays Quads 0 24
+    GU.withTextures2D [tex] $ drawArrays Quads 0 (4 * 6) 
 
   currentProgram $= Nothing
   where 
