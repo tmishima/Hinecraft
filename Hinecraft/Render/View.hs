@@ -6,7 +6,6 @@
 module Hinecraft.Render.View
   ( ViewMode (..)
   , UserStatus (..)
-  , ShaderParam
   , WorldDispList
   , loadGuiResource
   , loadWorldResouce
@@ -16,24 +15,25 @@ module Hinecraft.Render.View
   , drawBackPlane
   , getVertexList
   , putTextLine
-  , drawBackGroundBox
   , updateDisplay
   , drawTitle
   , drawPlay
   , genSufDispList
+  , WorldVAOList
+  --
   ) where
 
 -- Font
 import Graphics.Rendering.FTGL as Ft
 
 -- OpenGL
-import Graphics.Rendering.OpenGL
-import Graphics.Rendering.OpenGL.Raw
+import Graphics.Rendering.OpenGL as GL
+import qualified Graphics.GLUtil as GU
+--import qualified Graphics.GLUtil.Camera3D as GU3
 
 -- Common
 import Debug.Trace as Dbg
 import Control.Monad (  forM_ {-,when, unless,void,filterM-} )
-import qualified Data.ByteString as B
 import qualified Data.Map as M
 
 import Hinecraft.Model
@@ -41,11 +41,10 @@ import Hinecraft.Types
 
 import Hinecraft.Render.Types
 import Hinecraft.Render.Util
--- Define
+import Hinecraft.Render.TitleView
+import Hinecraft.Render.WorldView
 
-data ShaderParam = ShaderParam
-  { shdprg :: Program
-  }
+-- Define
 
 -- ##################### OpenGL ###########################
 data ViewMode = V2DMode | V3DTitleMode | V3DMode
@@ -53,82 +52,22 @@ data ViewMode = V2DMode | V3DTitleMode | V3DMode
 
 type WorldDispList = M.Map (Int,Int) [DisplayList]
 
-renderCurFace :: Maybe (WorldIndex,Surface) -> IO ()
-renderCurFace objPos = 
-  case objPos of 
-    Just ((px,py,pz),s) -> preservingMatrix $ do -- 選択された面を強調
-      texture Texture2D $= Disabled
-      lineWidth         $= 1.2
-      color $ Color3 0.1 0.1 (0.1::GLfloat)
-      translate $ Vector3 (fromIntegral px)
-                          (fromIntegral py)
-                          (fromIntegral pz :: GLfloat)
-      rotCursol s -- SBack -- SLeft -- SRight -- SFront -- SBottom -- STop
-      gen3dCursol
-    Nothing -> return ()
-  where
-  rotCursol face = case face of
-    STop    -> return ()
-    SBottom -> rotate 180   $ Vector3 1.0 0.0 (0::GLfloat)
-    SFront  -> rotate (-90) $ Vector3 1.0 0.0 (0::GLfloat)
-    SBack   -> rotate 90    $ Vector3 1.0 0.0 (0::GLfloat)
-    SRight  -> rotate (-90) $ Vector3 0.0 0.0 (1::GLfloat)
-    SLeft   -> rotate 90    $ Vector3 0.0 0.0 (1::GLfloat)
-
 drawPlay :: (Int,Int) -> GuiResource -> WorldResource
-         -> UserStatus -> WorldDispList
+         -> UserStatus -> WorldVAOList 
          -> Maybe (WorldIndex,Surface)
          -> [BlockIDNum] -> Bool -> DragDropState
+         -> WorldViewVHdl 
          -> IO ()
 drawPlay (w,h) guiRes wldRes usrStat' worldDispList pos plt
-         invSw dragDrop = do
+         invSw dragDrop wvHdl = do
 
   -- World
-  preservingMatrix $ do
-    setPerspective V3DMode w h
-  
-    -- 視線
-    rotate (-urx :: GLfloat) $ Vector3 1.0 0.0 (0.0::GLfloat)
-    rotate (-ury :: GLfloat) $ Vector3 0.0 1.0 (0.0::GLfloat) -- z軸
- 
-    preservingMatrix $ do
-      scale 100.0 100.0 (100.0::GLfloat)
-      drawBackGroundBox' 
-
-    -- カメラ位置
-    translate $ Vector3 (-ux :: GLfloat) (-uy - 1.5) (-uz) 
-
-    -- Cursol 選択された面を強調
-    renderCurFace  pos
-
-    color $ Color3 0.0 1.0 (0.0::GLfloat)
-    
-    mapM_ (\ (_,b) -> mapM_ callList b) $ M.toList worldDispList
+  drawWorldView wvHdl (w,h) worldDispList usrStat' pos
 
   -- HUD
   renderHUD (w,h) guiRes wldRes pIndex invSw plt dragDrop
-
   where
-    d2f (a,b,c) = (realToFrac a, realToFrac b, realToFrac c)
-    (ux,uy,uz) = d2f $ userPos usrStat'
-    (urx,ury,_) = d2f $ userRot usrStat' :: (GLfloat,GLfloat,GLfloat)
     pIndex =  palletIndex usrStat'
-    drawBackGroundBox' = preservingMatrix $ do
-      color $ Color4 (180/255) (226/255) (255/255) (1.0::GLfloat)
-      texture Texture2D $= Disabled
-      renderPrimitive Quads $ do
-        genSuf (0,0,-1) $ getVertexList Cube SFront  -- Front
-        genSuf (-1,0,0) $ getVertexList Cube SRight  -- Right
-        genSuf (1,0,0)  $ getVertexList Cube SLeft   -- Left
-        genSuf (0,-1,0) $ getVertexList Cube STop    -- Top
-        genSuf (0,1,0)  $ getVertexList Cube SBottom -- Bottom
-        genSuf (0,0,1)  $ getVertexList Cube SBack   -- Back 
-    genSuf :: (GLfloat,GLfloat,GLfloat)
-           -> [((GLfloat,GLfloat,GLfloat),(GLfloat,GLfloat))]
-           -> IO ()
-    genSuf (nx,ny,nz) ndlst = do
-      normal $ Normal3 nx ny nz
-      forM_ ndlst $ \ ((x', y', z'),_) -> vertex (Vertex3 x' y' z')
 
 renderHUD :: (Int,Int) -> GuiResource ->  WorldResource
           -> Int -> Bool -> [BlockIDNum] -> DragDropState
@@ -136,8 +75,6 @@ renderHUD :: (Int,Int) -> GuiResource ->  WorldResource
 renderHUD (w,h) guiRes wldRes pIndex invSw plt dragDrop = 
   preservingMatrix $ do
     setPerspective V2DMode w h
-    glPushAttrib gl_DEPTH_BUFFER_BIT
-    glDisable gl_DEPTH_TEST
     depthMask $= Disabled
 
     if invSw
@@ -163,9 +100,7 @@ renderHUD (w,h) guiRes wldRes pIndex invSw plt dragDrop =
         (pltOx + rate + (20 * rate / 2) + (20 * rate * p) ,12) ib)
         $ zip [0.0,1.0 .. ] plt
 
-    glPopAttrib 
     depthMask $= Enabled
-    glEnable gl_DEPTH_TEST
   where
     !rate = 2.5
     !(w',h') = (fromIntegral w, fromIntegral h)
@@ -217,7 +152,6 @@ renderInventory (w,h) guiRes wldRes plt dragDrop = preservingMatrix $ do
     (w',h') = (fromIntegral w, fromIntegral h)
     tdlg' = invDlgTexture guiRes
 
-
 setPerspective :: ViewMode -> Int -> Int -> IO ()
 setPerspective viewMode' w h = do
   matrixMode $= Projection
@@ -252,8 +186,6 @@ initGL = do
   colorMaterial     $= Just (FrontAndBack, AmbientAndDiffuse)
   --colorMaterial     $= Just (GL.Front, AmbientAndDiffuse)
 
-  glHint gl_PERSPECTIVE_CORRECTION_HINT gl_NICEST
-
 genSufDispList :: WorldResource -> SurfacePos -> Maybe DisplayList
                -> IO DisplayList
 genSufDispList wldRes bsf dsp = case dsp of
@@ -261,9 +193,9 @@ genSufDispList wldRes bsf dsp = case dsp of
     Just d -> defineList d Compile gen' >> return d
   where
     gen' = do
-      glBindTexture gl_TEXTURE_2D tex
       texture Texture2D $= Enabled
-      renderPrimitive Quads $ mapM_ genFace bsf 
+      GU.withTextures2D [tex] $ 
+        renderPrimitive Quads $ mapM_ genFace bsf 
     tex = blockTexture wldRes
     genFace ((x,y,z),bid,fs) = do
       let !sp = shape $ getBlockInfo bid
@@ -299,7 +231,7 @@ genSufDispList wldRes bsf dsp = case dsp of
           normal $ Normal3 nx ny nz
           color $ Color3 r g b
           forM_ ndlst $ \ ((u,v),(x', y', z')) -> do
-                   glTexCoord2f u v
+                   texCoord (TexCoord2 u v)
                    vertex (Vertex3 (x' + fromIntegral x)
                                    (y' + fromIntegral y)
                                    (z' + fromIntegral z))
@@ -309,69 +241,6 @@ genSufDispList wldRes bsf dsp = case dsp of
               ) 
             , pos)
           where i = fromIntegral i' ; j = fromIntegral j'
-
--- 
-
-drawTitle :: (Int,Int) -> GuiResource -> TitleModeState -> IO ()
-drawTitle (w,h) res stat = do
-  preservingMatrix $ do
-    setPerspective V3DTitleMode w h
-    scale 10.0 10.0 (10.0::GLfloat)
-    rotate 10 $ Vector3 1.0 0.0 (0::GLfloat)
-    rotate (realToFrac $ rotW stat) $ Vector3 0.0 1.0 (0::GLfloat)
-    drawBackGroundBox bkgTex
-
-  preservingMatrix $ do
-    setPerspective V2DMode w h
-    glPushAttrib gl_DEPTH_BUFFER_BIT
-    glDisable gl_DEPTH_TEST
-    depthMask $= Disabled
-
-    putTextLine font' (Just (1,1,1)) (Just 20) (10,10)
-                      $ "Hinecraft " ++ version
-
-    -- White
-    drawBackPlane (0,0) (fromIntegral w, fromIntegral h) Nothing
-                  (0,0) (1,1) (1.0,1.0,1.0,0.30)
-    -- Title 
-    drawBackPlane (232,768 - 233) (508, 145) (Just titleTex)
-                  (0,0) (0.61,0.172) (1.0,1.0,1.0,1.0)
-    drawBackPlane (232 + 508 - 5, 768 - 233) (382, 145) (Just titleTex)
-                  (0,0.176) (0.458,0.172) (1.0,1.0,1.0,1.0)
-
-
-    -- Botton 
-    let vm = slcBtnTexCrd $ isModeChgBtnEntr stat
-    drawBackPlane (xPlybtnPos, yPlybtnPos) (wPlybntSiz,hPlybtnSiz)
-                  (Just widTex)
-                  (0,vm) (200/256,20/256) (1.0,1.0,1.0,1.0)
-    putTextLine font' (Just (1,1,1)) (Just 30)
-                  (590, yPlybtnPos + 20) "Single Player" 
-    -- 
-    let ve = slcBtnTexCrd $ isExitBtnEntr stat
-    drawBackPlane (xExtbtnPos, yExtbtnPos) (wExtbtnSiz / 2, hExtbtnSiz)
-                  (Just widTex)
-                  (0,ve) (0.20,0.078) (1.0,1.0,1.0,1.0)
-    drawBackPlane (xExtbtnPos + wExtbtnSiz / 2, yExtbtnPos)
-                  (wExtbtnSiz / 2, hExtbtnSiz) (Just widTex)
-                  (0.58,ve) (0.20,0.078) (1.0,1.0,1.0,1.0)
-    putTextLine font' (Just (1,1,1)) (Just 30)
-                  (780 ,yExtbtnPos + 20) "Quit game" 
-
-    glPopAttrib 
-    depthMask $= Enabled
-    glEnable gl_DEPTH_TEST
-
-  where
-    slcBtnTexCrd sw = if sw then 86 / 256 else 66 / 256
-    bkgTex = backgroundBoxTexture res
-    titleTex = backgroundTitleTexture res
-    widTex = widgetsTexture res
-    (xPlybtnPos,yPlybtnPos) = widgetPlayBtnPos res
-    (wPlybntSiz,hPlybtnSiz) = widgetPlayBtnSiz res
-    (xExtbtnPos,yExtbtnPos) = widgetExitBtnPos res
-    (wExtbtnSiz,hExtbtnSiz) = widgetExitBtnSiz res
-    font' = font res
 
 -- | 最小単位のブロックを囲う枠を描画する
 -- Private
@@ -387,7 +256,7 @@ gen3dCursol = renderPrimitive LineLoop
 
 loadWorldResouce :: FilePath -> IO WorldResource
 loadWorldResouce home = do
-  btex' <- loadTextures blkPng 
+  btex' <- loadTexture' blkPng 
   return WorldResource
     { blockTexture = btex'
     }
@@ -398,74 +267,31 @@ loadWorldResouce home = do
 
 loadGuiResource :: FilePath -> (Int,Int) -> IO GuiResource
 loadGuiResource home (w,h) = do
-  tex' <- mapM (\ fn -> 
-    Dbg.trace ("loadBackgroundPic : " ++ fn)
-     $ loadTextures fn )
-    [ bkgndPng0 , bkgndPng1 , bkgndPng2
-    , bkgndPng3 , bkgndPng4 , bkgndPng5
-    ]
-  ttex' <- loadTextures bkgTtlPng
-  wtex' <- loadTextures widPng
+  wtex' <- loadTexture' widPng
   font' <- Ft.createBitmapFont fontPath
-  itex' <- loadTextures invDlgPng
-  ibtex' <- loadTextures invTabPng
+  itex' <- loadTexture' invDlgPng
+  ibtex' <- loadTexture' invTabPng
   return GuiResource
-    { backgroundBoxTexture = tex'
-    , backgroundTitleTexture = ttex'
-    , widgetsTexture = wtex'
+    { widgetsTexture = wtex'
     , font = font'
     , widgetPlayBtnPos = ((w' - texBtnWd * rate) * 0.5 , h' * 0.5)
     , widgetPlayBtnSiz = (texBtnWd * rate, texBtnHt * rate)
-    , widgetExitBtnPos = ( w' - (w' - texBtnWd * rate) * 0.5
-                           - texBtnWd * hfrate
-                         , h' * 0.2)
-    , widgetExitBtnSiz = (texBtnWd * hfrate , texBtnHt * rate)
+    , widgetExitBtnPos = ((w' - texBtnWd * rate) * 0.5 , h' * 0.2)
+    , widgetExitBtnSiz = (texBtnWd * rate, texBtnHt * rate)
     , invDlgTexture = itex'
     , invDlgTbTexture = ibtex'
     }
   where
     (w',h') = (fromIntegral w, fromIntegral h)
     rate = 3.0
-    hfrate = 1.4
     texBtnWd = 200
     texBtnHt = 20
-    bkgndPng0 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_0.png"
-    bkgndPng1 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_1.png"
-    bkgndPng2 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_2.png"
-    bkgndPng3 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_3.png"
-    bkgndPng4 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_4.png"
-    bkgndPng5 = home ++ "/.Hinecraft/textures/gui/title/background/panorama_5.png"
-    bkgTtlPng = home ++ "/.Hinecraft/textures/gui/title/hinecraft.png"
     widPng    = home ++ "/.Hinecraft/textures/gui/widgets.png"
     invDlgPng = home ++ "/.Hinecraft/textures/gui/container/creative_inventory/tab_items.png"
     invTabPng = home ++ "/.Hinecraft/textures/gui/container/creative_inventory/tabs.png"
     fontPath = home ++ "/.Hinecraft/Font/ipamp.ttf" 
 
 -- ##################### Font(Text) #######################
-
-drawBackGroundBox :: [GLuint] -> IO ()
-drawBackGroundBox [ftex',rtex',batex',ltex',ttex',botex'] = 
-  preservingMatrix $ do
-    texture Texture2D $= Enabled 
-    color $ Color4 0.7 0.7 0.7 (0.8::GLfloat)
-    mapM_ (\ (tex, nor, f) -> do
-      glBindTexture gl_TEXTURE_2D tex
-      renderPrimitive Quads $ genSuf nor f)
-        [ (ftex',(0,0,-1), SFront)
-        , (rtex',(-1,0,0), SRight)
-        , (ltex',(1,0,0),  SLeft)
-        , (ttex',(0,-1,0), STop)
-        , (botex',(0,1,0), SBottom)
-        , (batex',(0,0,1), SBack)
-        ]
-  where
-    genSuf :: (GLfloat,GLfloat,GLfloat) -> Surface -> IO ()
-    genSuf (nx,ny,nz) f = do
-      normal $ Normal3 nx ny nz
-      forM_ (getVertexList Cube f)
-        (\ ((x', y', z'),(u,v)) -> do
-               glTexCoord2f u v
-               vertex (Vertex3 x' y' z')) 
 
 -- ##################### GLFW #############################
 
