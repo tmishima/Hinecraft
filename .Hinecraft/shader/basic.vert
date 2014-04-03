@@ -13,7 +13,7 @@ uniform mat4 RotMat;
 uniform mat4 ProjViewMat; //projection_matrix modelview_matrix
 
 uniform vec4 ambientColor = vec4 (0.2,0.2,0.2,0.2);
-uniform vec3 lightDirection = vec3 (5,5,5);
+uniform vec3 lightDirection = vec3 (0,1,0);
 
 uniform int LightMode;
 
@@ -25,10 +25,11 @@ void main() {
   else
   {
     mat3 rot = mat3 (RotMat);
-    vec3 invLight = normalize (lightDirection);
-    float diffuse = clamp (dot (rot * VertexNormal, invLight), 0.0, 1.0);
+    vec3 invLight = lightDirection; // normalize (lightDirection);
+    float diffuse = clamp (dot (VertexNormal, invLight), 0.0, 1.0);
 
-    Color = VertexColor * vec4( vec3(diffuse), 1.0) + ambientColor;  
+    Color = clamp ( VertexColor * vec4( vec3(diffuse), 1.0)
+                    + ambientColor, 0.0, 1.0);  
   }
   TexCoord = VertexTexture;
 

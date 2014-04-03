@@ -248,7 +248,7 @@ genElem ((x,y,z),bid,fs) =
     normList :: [Surface] -> [GLfloat]
     normList = concatMap (\ f ->
       genNormList $ case f of
-        STop -> (0,-1,0)
+        STop -> (0,1,0)
         SBottom -> (0,-1,0)
         SRight -> (1,0,0)
         SLeft -> (-1,0,0)

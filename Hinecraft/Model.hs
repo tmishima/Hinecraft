@@ -55,7 +55,7 @@ blockCatalogData = zip [0 .. ]
   , BlockInfo -- GrassBlockID 
              { textureIndex = [(0,0),(2,0),(3,0),(3,0),(3,0),(3,0)]
              , alpha = False
-             , bcolor = (0.1,0.5,0.1) : replicate 5 (0.5,0.5,0.5)
+             , bcolor = (0.2,0.5,0.2) : replicate 5 (0.5,0.5,0.5)
              , bright = 0
              , shape = Cube
              }
