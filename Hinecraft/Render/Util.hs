@@ -5,22 +5,20 @@
 --
 module Hinecraft.Render.Util
   ( blockNodeVertex
-  , getVertexList
   , drawBackPlane
   , putTextLine
   , drawIcon
-  , loadTexture'
-  , getVertexList'
+  , loadTexture
+  , getVertexList
   )
   where
 
 import Graphics.Rendering.OpenGL 
 import Graphics.Rendering.OpenGL.Raw
 import Control.Monad ( void )
---import qualified Data.Vector.Storable as Vct
 --import Debug.Trace as Dbg
 
-import Graphics.GLUtil as GU
+import qualified Graphics.GLUtil as GU
 
 -- Font
 import Graphics.Rendering.FTGL as Ft
@@ -45,19 +43,19 @@ blockNodeVertex =
   , (  0.5,  0.0, -0.5) -- P11
   ]
 
-loadTexture' :: FilePath -> IO TextureObject
-loadTexture' fn = do
+loadTexture :: FilePath -> IO TextureObject
+loadTexture fn = do
   t <- GU.readTexture fn
   case t of
     Right t' -> do
       textureFilter Texture2D $= ((Nearest, Nothing), Nearest)
-        >> texture2DWrap $= (Repeated, ClampToEdge)
+        >> GU.texture2DWrap $= (Repeated, ClampToEdge)
       return t'
     Left e -> error e
 
-getVertexList' :: Shape -> Surface
+getVertexList :: Shape -> Surface
               -> ([VrtxPos3D],[(GLfloat,GLfloat)])
-getVertexList' Cube f = case f of
+getVertexList Cube f = case f of
   STop    -> ([p7,p6,p5,p4],uvLst)
   SBottom -> ([p0,p1,p2,p3],uvLst)
   SFront  -> ([p6,p7,p1,p0],uvLst)
@@ -71,43 +69,26 @@ getVertexList' Cube f = case f of
              , (1.0,1.0)
              , (0.0,1.0)
              ]
-
-getVertexList :: Shape -> Surface
-              -> [(VrtxPos3D,(GLfloat,GLfloat))]
-getVertexList Cube f = case f of
-  STop    -> zip [p7,p6,p5,p4] uvLst
-  SBottom -> zip [p0,p1,p2,p3] uvLst
-  SFront  -> zip [p6,p7,p1,p0] uvLst
-  SBack   -> zip [p4,p5,p3,p2] uvLst
-  SRight  -> zip [p7,p4,p2,p1] uvLst
-  SLeft   -> zip [p5,p6,p0,p3] uvLst
-  where
-    (p0:p1:p2:p3:p4:p5:p6:p7:_) = blockNodeVertex
-    !uvLst = [ (0.0,0.0)
-             , (1.0,0.0)
-             , (1.0,1.0)
-             , (0.0,1.0)
-             ]
 getVertexList (Half b) f 
   | not b = case f of -- False
-    STop    -> zip [p11,p10,p9,p8] uvLstD
-    SBottom -> zip [p0,p1,p2,p3] uvLstD
-    SFront  -> zip [p10,p11,p1,p0] uvLstD
-    SBack   -> zip [p8,p9,p3,p2] uvLstD
-    SRight  -> zip [p11,p8,p2,p1] uvLstD
-    SLeft   -> zip [p9,p10,p0,p3] uvLstD
+    STop    -> ([p11,p10,p9,p8],uvLstD)
+    SBottom -> ([p0,p1,p2,p3],uvLstD)
+    SFront  -> ([p10,p11,p1,p0],uvLstD)
+    SBack   -> ([p8,p9,p3,p2],uvLstD)
+    SRight  -> ([p11,p8,p2,p1],uvLstD)
+    SLeft   -> ([p9,p10,p0,p3],uvLstD)
   | otherwise = case f of
-    STop    -> zip [p7,p6,p5,p4] uvLstU 
-    SBottom -> zip [p10,p11,p8,p9] uvLstU
-    SFront  -> zip [p6,p7,p11,p10] uvLstU
-    SBack   -> zip [p4,p5,p9,p8] uvLstU
-    SRight  -> zip [p7,p4,p8,p11] uvLstU
-    SLeft   -> zip [p5,p6,p10,p9] uvLstU
+    STop    -> ([p7,p6,p5,p4],uvLstU)
+    SBottom -> ([p10,p11,p8,p9],uvLstU)
+    SFront  -> ([p6,p7,p11,p10],uvLstU)
+    SBack   -> ([p4,p5,p9,p8],uvLstU)
+    SRight  -> ([p7,p4,p8,p11],uvLstU)
+    SLeft   -> ([p5,p6,p10,p9],uvLstU)
   where
-    !(p0:p1:p2:p3:p4:p5:p6:p7:p8:p9:p10:p11:_) = blockNodeVertex
-    !uvLstU = [uv0,uv1,uv2,uv3]
-    !uvLstD = [uv3,uv2,uv4,uv5]
-    !(uv0,uv1,uv2,uv3,uv4,uv5)
+    (p0:p1:p2:p3:p4:p5:p6:p7:p8:p9:p10:p11:_) = blockNodeVertex
+    uvLstU = [uv0,uv1,uv2,uv3]
+    uvLstD = [uv3,uv2,uv4,uv5]
+    (uv0,uv1,uv2,uv3,uv4,uv5)
       = ((0.0,0.0)
         ,(1.0,0.0)
         ,(1.0,0.5)
@@ -155,9 +136,9 @@ putTextLine ft cl sz (x,y) str = preservingMatrix $ do
   rasterPos $ Vertex2 x y
   Ft.renderFont ft str Ft.Front
 
-drawIcon :: WorldResource -> GLfloat -> (GLfloat,GLfloat)
+drawIcon :: TextureObject -> GLfloat -> (GLfloat,GLfloat)
          -> BlockIDNum -> IO ()
-drawIcon wldRes icSz (ox,oy) bID | null texIdx = return ()
+drawIcon tex icSz (ox,oy) bID | null texIdx = return ()
                                  | otherwise = preservingMatrix $ do
   texture Texture2D $= Enabled 
   textureBinding Texture2D $= Just tex
@@ -195,7 +176,6 @@ drawIcon wldRes icSz (ox,oy) bID | null texIdx = return ()
               Half _ -> icSzW / 2.0
               _ -> icSzW 
     !rt = 30.0
-    !tex = blockTexture wldRes
     d2r d = pi * d / 180.0
     !texIdx = textureIndex $ getBlockInfo bID
     ![ct,_,_,cl,cf,_] = bcolor $ getBlockInfo bID

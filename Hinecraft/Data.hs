@@ -109,8 +109,8 @@ tomasChk pos@(px,py,pz) rot (ep,fs) = (ep, choise faceList)
       where !l = filter isJust $ map (\ (n1,n2,n3) ->
                            tomasMollerRaw pos dir n1 n2 n3) ftri
     genNodeList pos' face = genTri $ map ((pos' .+. )
-      . (\ ((a,b,c),_) -> (realToFrac a, realToFrac b, realToFrac c)))
-      $ getVertexList Cube face
+      . (\ (a,b,c) -> (realToFrac a, realToFrac b, realToFrac c)))
+      $ fst $ getVertexList Cube face
     genTri [a1,a2,a3,a4] = [(a1,a2,a3),(a3,a4,a1)]
     i2d (a,b,c) = (fromIntegral a, fromIntegral b, fromIntegral c)
 

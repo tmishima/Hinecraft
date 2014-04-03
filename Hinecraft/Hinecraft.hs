@@ -43,7 +43,7 @@ data RunMode = TitleMode | PlayMode | InventoryMode
   deriving (Eq,Show)
 
 
-initHinecraft :: IO (GLFWHandle, GuiResource,WorldResource)
+initHinecraft :: IO (GLFWHandle, GuiResource)
 initHinecraft = do
   home <- getHomeDirectory
   Dbg.traceIO "Hinecraft Start"
@@ -52,20 +52,19 @@ initHinecraft = do
   initGL
 
   guiRes <- loadGuiResource home winSize
-  wldRes <- loadWorldResouce home
   
-  return $! (glfwHdl,guiRes,wldRes)
+  return $! (glfwHdl,guiRes)
   where
     winSize = (1366,768)
 
-exitHinecraft :: (GLFWHandle, a, b) -> IO ()
-exitHinecraft (glfwHdl,_,_) = do
+exitHinecraft :: (GLFWHandle,a) -> IO ()
+exitHinecraft (glfwHdl,_) = do
   exitGLFW glfwHdl
   Dbg.traceIO "Hinecraft End"
 
-runHinecraft :: (GLFWHandle, GuiResource, WorldResource)
+runHinecraft :: (GLFWHandle, GuiResource)
              -> IO ()
-runHinecraft resouce@(glfwHdl,guiRes,_) = do
+runHinecraft resouce@(glfwHdl,guiRes) = do
   home <- getHomeDirectory
   !tvHdl <- initTitleModeView home guiRes
   !wvHdl <- initWorldView home
@@ -106,13 +105,13 @@ runHinecraft resouce@(glfwHdl,guiRes,_) = do
           --saveSurfaceList f'' home
         else mainLoop ntmstat' nplstat' runMode' (nw',f'',tvHdl,wvHdl)
 
-mainProcess :: (GLFWHandle, GuiResource, WorldResource)
+mainProcess :: (GLFWHandle, GuiResource)
             -> TitleModeState -> PlayModeState -> WorldData
             ->RunMode -> SurfaceList -> WorldViewVHdl
             -> Double
             -> IO ( TitleModeState, PlayModeState, RunMode
                   , SurfaceList, WorldData)
-mainProcess (glfwHdl, guiRes, _) tmstat plstat wld runMode
+mainProcess (glfwHdl, guiRes) tmstat plstat wld runMode
             sufList wvHdl dt = do
   -- Common User input
   mous <- getButtonClick glfwHdl
@@ -403,11 +402,11 @@ guiProcess res (x,y,btn1,_,_) = (chkModeChg,chkExit)
     isExtBtnEntr = chkEntrBtn (f2d extbtnPosOrgn) (f2d extbtnSize)
     chkExit = ( isExtBtnEntr && btn1 , isExtBtnEntr) 
 
-drawView :: ( GLFWHandle, GuiResource, WorldResource)
+drawView :: ( GLFWHandle, GuiResource)
          -> TitleModeState -> PlayModeState -> RunMode
          -> TitleModeHdl -> WorldViewVHdl
          -> IO ()
-drawView (glfwHdl, guiRes, wldRes) tmstat plstat runMode'
+drawView (glfwHdl, guiRes) tmstat plstat runMode'
           tvHdl wvHdl = do
   worldDispList <- getBlockVAOList wvHdl
   winSize <- getWindowSize glfwHdl
@@ -416,7 +415,7 @@ drawView (glfwHdl, guiRes, wldRes) tmstat plstat runMode'
       then -- 2D
         drawTitle winSize guiRes tmstat tvHdl
       else  
-        drawPlay winSize guiRes wldRes usrStat' worldDispList pos plt
+        drawPlay winSize guiRes usrStat' worldDispList pos plt
                  (runMode' == InventoryMode) drgSta' wvHdl
   swapBuff glfwHdl
   where

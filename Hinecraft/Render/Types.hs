@@ -36,13 +36,3 @@ data GuiResource = GuiResource
   , invDlgTbTexture :: TextureObject
   }
 
-data WorldResource = WorldResource
-  { blockTexture :: TextureObject
-  --, skyTexture :: 
-  --, starTexture :: 
-  }
-  deriving (Eq,Show)
-
-
-
-

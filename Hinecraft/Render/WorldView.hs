@@ -4,7 +4,7 @@
 -- License : Apache-2.0
 --
 module Hinecraft.Render.WorldView
-  ( WorldViewVHdl
+  ( WorldViewVHdl (blockTexture)
   , initWorldView
   , drawWorldView
   , renderEnvCube
@@ -42,19 +42,12 @@ data WorldViewVHdl = WorldViewVHdl
   { basicShader :: BasicShaderProg
   , simpleShader :: SimpleShaderProg
   , envCube :: GU.VAO
-  , blockTexture' :: TextureObject
+  , blockTexture :: TextureObject
   , skyTexture :: TextureObject
   , blkVAOList :: IORef WorldVAOList
   , blkCursol :: GU.VAO
   --, starTexture ::
   }
-{- 
-  , whitePlatVAO :: GU.VAO
-  , titlePlatVAO :: [GU.VAO]
-  , startBtnVAO :: GU.VAO
-  , quitBtnVAO :: GU.VAO
-  , envCubeTex :: [TextureObject]
--}
 
 type WorldVAOList = M.Map (Int,Int) [Maybe (Int,GU.VAO)]
 
@@ -65,15 +58,15 @@ updateVAOlist wvhdl sufList = do
   newvao <- foldM fn vao sufList 
   setBlockVAOList wvhdl newvao  
   where
-    fn wvlst ((ij,bNo'),sfs) = do
+    fn wvlst ((ij,bNo'),sfs) = 
       case M.lookup ij wvlst of
         Just d -> do
           case d !! bNo' of
             Just (_,v) -> GU.deleteVAO v
             Nothing -> return ()
           vao <- genChunkVAO wvhdl sfs 
-          let newVAO = (take bNo' d) ++ [vao]
-                       ++ (drop (bNo' + 1) d)
+          let newVAO = take bNo' d ++ [vao]
+                       ++ drop (bNo' + 1) d
           return $! M.update (upfn newVAO) ij wvlst
         Nothing -> return wvlst
     upfn nv _ = Just nv
@@ -83,14 +76,14 @@ getBlockVAOList :: WorldViewVHdl -> IO WorldVAOList
 getBlockVAOList vwHdl = readIORef (blkVAOList vwHdl)
 
 setBlockVAOList :: WorldViewVHdl -> WorldVAOList -> IO ()
-setBlockVAOList vwHdl vaos = writeIORef (blkVAOList vwHdl) vaos
+setBlockVAOList vwHdl = writeIORef (blkVAOList vwHdl)
 
 initWorldView :: FilePath -> IO WorldViewVHdl
 initWorldView home = do
   bsh <- initShaderProgram home
   ssh <- initShaderProgram home
-  blks <- loadTexture' blkPng
-  sky <- loadTexture' skyPng
+  blks <- loadTexture blkPng
+  sky <- loadTexture skyPng
   cb <- genEnvCubeVAO bsh
   vao <- newIORef M.empty 
   bCur <- genBlockCursol ssh
@@ -98,7 +91,7 @@ initWorldView home = do
     { basicShader = bsh
     , simpleShader = ssh
     , envCube = cb
-    , blockTexture' = blks
+    , blockTexture = blks
     , skyTexture = sky
     , blkVAOList = vao
     , blkCursol = bCur
@@ -112,7 +105,7 @@ initWorldVAOList :: WorldViewVHdl
                  -> [((Int, Int), [SurfacePos])] -> IO ()
 initWorldVAOList wvhdl suflst = do
   vao <- M.fromList <$> mapM (\ (ij,slst) -> do
-    ds <- forM slst (\ sfs -> genChunkVAO wvhdl sfs)
+    ds <- forM slst (genChunkVAO wvhdl)
     return (ij,ds)
     ) suflst
   writeIORef (blkVAOList wvhdl) vao
@@ -160,7 +153,7 @@ drawWorldView wvhdl (w,h) vaos usrStat' pos =
     vs = M.toList vaos
     cbVao = envCube wvhdl
     skyTex = skyTexture wvhdl
-    blkTex = blockTexture' wvhdl
+    blkTex = blockTexture wvhdl
     d2f (a,b,c) = (realToFrac a, realToFrac b, realToFrac c)
     (ux,uy,uz) = d2f $ userPos usrStat'
     (urx,ury,_) = d2f $ userRot usrStat' :: (GLfloat,GLfloat,GLfloat)
@@ -173,8 +166,8 @@ genBlockCursol sh = makeSimpShdrVAO sh  vertLst vertClrLst texCdLst
     texCdLst = concat $ replicate (4 * 6) [0.0,1.0]
     extnd v = if v > 0 then v + 0.05 else  v - 0.05
     ajust (a,b,c) = [ extnd a, extnd b, extnd c]
-    vlst = map (fst . getVertexList' Cube ) [STop,SBottom,SFront,SBack
-                                            ,SRight,SLeft]
+    vlst = map (fst . getVertexList Cube ) [STop,SBottom,SFront,SBack
+                                           ,SRight,SLeft]
 
 renderBlockCursol :: SimpleShaderProg -> GU.VAO -> Surface -> IO ()
 renderBlockCursol sh vao s = do
@@ -212,7 +205,7 @@ renderChunk sh (Just (len,vao)) tex = do
     !shprg' = getShaderProgram sh
 
 genChunkVAO :: WorldViewVHdl -> SurfacePos -> IO (Maybe (Int,GU.VAO))
-genChunkVAO wvhdl bsf = genChunkVAO' sh bsf
+genChunkVAO wvhdl = genChunkVAO' sh
   where sh = basicShader wvhdl
 
 genChunkVAO' :: BasicShaderProg -> SurfacePos -> IO (Maybe (Int,GU.VAO))
@@ -264,7 +257,7 @@ genElem ((x,y,z),bid,fs) =
 
     coordList :: [Surface] -> [GLfloat]
     coordList = concatMap (\ f ->
-      let (_,uv) = getVertexList' sp f
+      let (_,uv) = getVertexList sp f
       in genCoordList (case f of
         STop -> tt' 
         SBottom  -> tb'
@@ -275,7 +268,7 @@ genElem ((x,y,z),bid,fs) =
         )
     vertexList :: [Surface] -> [GLfloat]
     vertexList = concatMap (\ f ->
-      let (vs,_) = getVertexList' sp f
+      let (vs,_) = getVertexList sp f
       in genVertLst vs 
         )
 
@@ -290,19 +283,19 @@ genElem ((x,y,z),bid,fs) =
     genNormList (nx,ny,nz) = (concat . replicate 4) [nx,ny,nz]
     genCoordList :: (Int,Int) -> [(GLfloat,GLfloat)]
                  -> [GLfloat]
-    genCoordList (i',j') lst =
+    genCoordList (i',j') =
       concatMap (\ (u,v) -> [i * (1/16) + (1/16) * u
-                        , j * (1/16) + (1/16) * v ]) lst
+                        , j * (1/16) + (1/16) * v ])
       where i = fromIntegral i' ; j = fromIntegral j'
     genVertLst :: [(GLfloat,GLfloat,GLfloat)]
            -> [GLfloat]
-    genVertLst ndlst =
+    genVertLst =
       concatMap (\ (x', y', z') -> 
-               [ (x' + fromIntegral x)
-               , (y' + fromIntegral y)
-               , (z' + fromIntegral z)
+               [ x' + fromIntegral x
+               , y' + fromIntegral y
+               , z' + fromIntegral z
                ]
-               ) ndlst 
+               ) 
 
 renderEnvCube :: BasicShaderProg -> GU.VAO -> TextureObject -> IO ()
 renderEnvCube sh vao tex = do 

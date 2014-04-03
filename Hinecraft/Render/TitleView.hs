@@ -46,11 +46,11 @@ initTitleModeView home res = do
   tvao <- genTitlePlateVAO sh (w,h)
   stbvao <- genStartBtnVAO res sh
   qbvao <- genQuitBtnVAO res sh
-  bktex' <- mapM loadTexture'
+  bktex' <- mapM loadTexture
     [ bkgndPng0 , bkgndPng1 , bkgndPng2
     , bkgndPng3 , bkgndPng4 , bkgndPng5
     ]
-  ttex' <- loadTexture' bkgTtlPng
+  ttex' <- loadTexture bkgTtlPng
   return TitleModeHdl
     { shader = sh
     , cubeVAO = cvao
