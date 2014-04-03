@@ -13,7 +13,7 @@ This is a simple Minecraft Clone (DEMO) written in Haskell.
 
 1. Hinecraftの開発はUbuntu 13.10上で行っています。
 2. ghc ver.7.6.3 cabal 1.18.0.2を使用してビルドしています。
-3. 現バージョン(Ver0.0.0.3)は各種リソース(Texture,Font)のパスが固定されています。
+3. 現バージョン(Ver0.2.x.x)は各種リソース(Texture,Font)のパスが固定されています。
 4. 実行する際には以下の手順が必要です。  
   a. ".Hinecraft" ディレクトリ(Texture,Font関連)をHomeディレクトリへコピーする。  
 
