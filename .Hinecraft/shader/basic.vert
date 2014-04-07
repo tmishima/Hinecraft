@@ -7,6 +7,7 @@ in vec3 VertexNormal;
 
 out vec4 Color;
 out vec2 TexCoord;
+out vec3 Position;
 
 uniform mat3 SclMat;
 uniform mat4 RotMat;
@@ -18,6 +19,7 @@ uniform vec3 lightDirection = vec3 (0,1,0);
 uniform int LightMode;
 
 void main() {
+  vec4 vertPos;
   if (LightMode == 0)
   {
     Color = VertexColor;
@@ -32,8 +34,9 @@ void main() {
                     + ambientColor, 0.0, 1.0);  
   }
   TexCoord = VertexTexture;
-
-  gl_Position = ProjViewMat * RotMat * vec4(SclMat * VertexPosition,1.0);
+  vertPos = ProjViewMat * RotMat * vec4(SclMat * VertexPosition,1.0);
+  Position = vertPos.xyz;
+  gl_Position = vertPos;
 }
 
 

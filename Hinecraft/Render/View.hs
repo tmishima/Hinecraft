@@ -6,7 +6,6 @@
 module Hinecraft.Render.View
   ( ViewMode (..)
   , UserStatus (..)
-  , WorldDispList
   , loadGuiResource
   , initGL
   , setPerspective
@@ -15,7 +14,6 @@ module Hinecraft.Render.View
   , updateDisplay
   , drawTitle
   , drawPlay
-  , WorldVAOList
   --
   ) where
 
@@ -30,7 +28,6 @@ import Graphics.Rendering.OpenGL as GL
 -- Common
 --import Debug.Trace as Dbg
 import Control.Monad (  forM_ {-,when, unless,void,filterM-} )
-import qualified Data.Map as M
 
 import Hinecraft.Model
 import Hinecraft.Types
@@ -45,8 +42,6 @@ import Hinecraft.Render.WorldView
 -- ##################### OpenGL ###########################
 data ViewMode = V2DMode | V3DTitleMode | V3DMode
   deriving (Eq,Show)
-
-type WorldDispList = M.Map (Int,Int) [DisplayList]
 
 drawPlay :: (Int,Int) -> GuiResource
          -> UserStatus -> WorldVAOList 

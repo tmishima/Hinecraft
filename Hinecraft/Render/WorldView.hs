@@ -118,7 +118,7 @@ drawWorldView wvhdl (w,h) vaos usrStat' pos =
                   (fromIntegral h)) $ do
     -- Draw 3D cube
     let prjMat = GU3.projectionMatrix (GU3.deg2rad 60)
-                   (fromIntegral w/ fromIntegral h) 0.1 (2000::GLfloat)
+                   (fromIntegral w/ fromIntegral h) 0.1 (1000::GLfloat)
     setProjViewMat pg prjMat
     setCamParam pg -- $ GU3.dolly (V3 0 (-uy - 1.5) 0)
                    $ GU3.pan ury $ GU3.tilt urx GU3.fpsCamera
@@ -335,7 +335,7 @@ genEnvCubeVAO sh =
     !p7 = [  0.5,  0.5, -0.5]
 
     cubeVert :: [GLfloat]
-    !cubeVert = map (* 2000) $ concat
+    !cubeVert = map (* 1000) $ concat
       [ p6, p7, p1, p0 -- Front
       , p7, p4, p2, p1 -- Right
       , p4, p5, p3, p2 -- Back
