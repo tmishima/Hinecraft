@@ -26,14 +26,16 @@ executable Hinecraft
                      Hinecraft.Render.Util
                      Hinecraft.Render.TitleView
                      Hinecraft.Render.WithSimpleShader
+                     Hinecraft.WithSqlite 
 
   build-depends:       base ==4.6.*
                      , GLFW-b , OpenGL , mtl == 2.*
                      , bytestring == 0.10.*
                      , array , vector , directory , process
-                     , OpenGLRaw , cereal , JuicyPixels , FTGL 
-                     , containers , GLUtil , linear
-                     , containers
+                     , OpenGLRaw , cereal , FTGL 
+                     , containers , GLUtil , linear , text
+                     , persistent , persistent-template
+                     , persistent-sqlite , transformers
 
   if os(windows)
     extra-lib-dirs:    extra_lib_for_Windows7_32bit
@@ -41,5 +43,5 @@ executable Hinecraft
   -- hs-source-dirs:    Hinecraft
   -- ghc-options:         -Wall -threaded
   -- ghc-options:         -Wall -O2 -prof -auto-all -caf-all -fforce-recomp -rtsopts
-  -- ghc-options:         -Wall -O2 -threaded 
-  ghc-options:       -O2 -threaded 
+  -- ghc-options:         -Wall -O2 -threaded  -XEmptyDataDeclspermits
+  ghc-options:       -O2 -threaded

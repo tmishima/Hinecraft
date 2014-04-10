@@ -35,6 +35,7 @@ import Hinecraft.Util
 import Hinecraft.Types
 import Hinecraft.Data
 import Hinecraft.GUI.GLFWWindow 
+import Hinecraft.WithSqlite
 
 main :: IO ()
 main = bracket initHinecraft exitHinecraft runHinecraft
@@ -42,29 +43,31 @@ main = bracket initHinecraft exitHinecraft runHinecraft
 data RunMode = TitleMode | PlayMode | InventoryMode
   deriving (Eq,Show)
 
+type Handls = (GLFWHandle, GuiResource, DBHandle)
 
-initHinecraft :: IO (GLFWHandle, GuiResource)
+initHinecraft :: IO Handls
 initHinecraft = do
   home <- getHomeDirectory
   Dbg.traceIO "Hinecraft Start"
   glfwHdl <- initGLFW winSize
 
   initGL
-
+  dbHdl <- initDB home
   guiRes <- loadGuiResource home winSize
   
-  return $! (glfwHdl,guiRes)
+  return $! (glfwHdl,guiRes,dbHdl)
   where
     winSize = (1366,768)
 
-exitHinecraft :: (GLFWHandle,a) -> IO ()
-exitHinecraft (glfwHdl,_) = do
+exitHinecraft :: Handls -> IO ()
+exitHinecraft (glfwHdl,_,dbHdl) = do
+  exitDB dbHdl
   exitGLFW glfwHdl
   Dbg.traceIO "Hinecraft End"
 
-runHinecraft :: (GLFWHandle, GuiResource)
+runHinecraft :: Handls 
              -> IO ()
-runHinecraft resouce@(glfwHdl,guiRes) = do
+runHinecraft resouce@(glfwHdl,guiRes,_) = do
   home <- getHomeDirectory
   !tvHdl <- initTitleModeView home guiRes
   !wvHdl <- initWorldView home
@@ -105,13 +108,13 @@ runHinecraft resouce@(glfwHdl,guiRes) = do
           --saveSurfaceList f'' home
         else mainLoop ntmstat' nplstat' runMode' (nw',f'',tvHdl,wvHdl)
 
-mainProcess :: (GLFWHandle, GuiResource)
+mainProcess :: Handls
             -> TitleModeState -> PlayModeState -> WorldData
             ->RunMode -> SurfaceList -> WorldViewVHdl
             -> Double
             -> IO ( TitleModeState, PlayModeState, RunMode
                   , SurfaceList, WorldData)
-mainProcess (glfwHdl, guiRes) tmstat plstat wld runMode
+mainProcess (glfwHdl, guiRes, _) tmstat plstat wld runMode
             sufList wvHdl dt = do
   -- Common User input
   mous <- getButtonClick glfwHdl
@@ -402,11 +405,11 @@ guiProcess res (x,y,btn1,_,_) = (chkModeChg,chkExit)
     isExtBtnEntr = chkEntrBtn (f2d extbtnPosOrgn) (f2d extbtnSize)
     chkExit = ( isExtBtnEntr && btn1 , isExtBtnEntr) 
 
-drawView :: ( GLFWHandle, GuiResource)
+drawView :: Handls 
          -> TitleModeState -> PlayModeState -> RunMode
          -> TitleModeHdl -> WorldViewVHdl
          -> IO ()
-drawView (glfwHdl, guiRes) tmstat plstat runMode'
+drawView (glfwHdl, guiRes, _) tmstat plstat runMode'
           tvHdl wvHdl = do
   worldDispList <- getBlockVAOList wvHdl
   winSize <- getWindowSize glfwHdl
