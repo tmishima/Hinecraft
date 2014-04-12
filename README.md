@@ -4,7 +4,7 @@ Hinecraft
 This is a simple Minecraft Clone (DEMO) written in Haskell.
 
 暇だったのでHaskell(OpenGL,GLFW,etc)でMinecraftっぽいものを作ってみました。まだ全然完成してないけど。  
-データの保存機能もなくα版にも満たない状況です。  
+データのRead/Write部分が最適化されていないので、起動時にハングアップしているように見えます。
 
 ![ScreenShot](https://raw.github.com/tmishima/Hinecraft/master/Hinecraft_title.png)
 ![ScreenShot](https://raw.github.com/tmishima/Hinecraft/master/Hinecraft_blocks.png)
