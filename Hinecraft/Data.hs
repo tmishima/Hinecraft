@@ -90,7 +90,7 @@ loadWorldData dbHdl' = do
         writeChunkData dbHdl' $ vec2list (i,j) c
         Dbg.traceIO $ "genChunk " ++ show (i,j)
         return c
-      else return $ map (\ c -> (DVS.replicate (16 ^ 3) 0) DVS.//
+      else return $ map (\ c -> (DVS.replicate (16 ^ 3) airBlockID) DVS.//
                              (map (\ (i',v) -> (gIdx2lIdx i',v)) c)
                     ) cs
     return ((i,j), chunk) 
@@ -103,8 +103,11 @@ vec2list (i,j) cs = concatMap v2l $ zip [0 .. ] cs
   where
     bsize = blockSize chunkParam
     (ox,oz) = (i * bsize, j * bsize)
-    v2l (bid, c) = zip (map (i2pos (ox,bid * bsize,oz)) [0 .. bsize ^ 3])
-                       (DVS.toList c)
+    v2l (bid, c) = snd $ foldl fn (0,[]) (DVS.toList c)
+      where
+        fn (idx,vs) v = if v == airBlockID 
+          then (idx + 1, vs)
+          else (idx + 1, ((i2pos (ox,bid * bsize,oz) idx,v):vs))
 
 loadSurfaceList :: WorldData -> IO SurfaceList
 loadSurfaceList wld = do
