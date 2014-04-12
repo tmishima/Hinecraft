@@ -11,47 +11,47 @@ module Hinecraft.Data
   -- , genSurfaceList
   , setSurfaceList
   , getSurfaceList
-  , loadWorldData
   , getBlockID
   , setBlockID
   , calcReGenArea
-  , saveWorldData
-  , saveSurfaceList
-  , loadSurfaceList
   , calcCursorPos
+  -- 
+  , DataHdl
+  , initData
+  , exitData
+  , getAllSurfaceData
   ) where
 
 import qualified Data.Vector.Unboxed as DVS
 --import qualified Data.Vector as DVS'
 import Control.Applicative
-import Data.Maybe ( fromJust, isJust, catMaybes ) -- ,, mapMaybe
+import Data.Maybe ( fromJust, isJust, catMaybes ) -- , mapMaybe
 import Data.List
 import Data.Ord
 import Data.Tuple
+--import Data.IORef
+import qualified Data.Map as M
+import System.Directory
+
 import Hinecraft.Types
 import Hinecraft.Model
 import Hinecraft.Util
 import Hinecraft.Render.Util
+import Hinecraft.WithSqlite
+
 import Debug.Trace as Dbg
-import qualified Data.Map as M
-import System.Directory
+
+data DataHdl = DataHdl
+  { dbHdl :: DBHandle
+  , wldDat :: (WorldData, SurfaceList)
+  }
 
 type SurfaceList = M.Map (Int,Int) [SurfacePos]
-
-data ChunkParam = ChunkParam
-  { blockSize :: Int
-  , blockNum  :: Int
-  }
-
-chunkParam :: ChunkParam
-chunkParam = ChunkParam
-  { blockSize = 16
-  , blockNum = 8
-  }
 
 data WorldData = WorldData
   { chunkList :: M.Map (Int,Int) Chunk
   }
+
 type Chunk = [DVS.Vector BlockIDNum]
 
 -- | 
@@ -64,9 +64,80 @@ test2 :: DVS'.Vector (Int,Te)
 test2 = DVS'.replicate 3 (0,Te [] 4.0)
 -}
 
-calcCursorPos :: SurfaceList -> UserStatus
+initData :: FilePath -> IO DataHdl
+initData home = do
+  !dbHdl' <- initDB home
+  !wld <- loadWorldData dbHdl'
+  !sfl <- loadSurfaceList wld
+  return DataHdl
+    { dbHdl = dbHdl'
+    , wldDat = (wld,sfl)
+     }
+
+exitData :: DataHdl -> IO ()
+exitData = exitDB . dbHdl
+
+getAllSurfaceData :: DataHdl -> [((Int, Int), [SurfacePos])]
+getAllSurfaceData = M.toList . snd . wldDat 
+
+loadWorldData :: DBHandle -> IO WorldData
+loadWorldData dbHdl' = do
+  chLst <- mapM (\ (i,j) -> do
+    cs <- readChunkData dbHdl' (i,j)
+    chunk <- if and $ map null cs 
+      then do
+        let c = genChunk
+        writeChunkData dbHdl' $ vec2list (i,j) c
+        Dbg.traceIO $ "genChunk " ++ show (i,j)
+        return c
+      else return $ map (\ c -> (DVS.replicate (16 ^ 3) 0) DVS.//
+                             (map (\ (i',v) -> (gIdx2lIdx i',v)) c)
+                    ) cs
+    return ((i,j), chunk) 
+    ) chunkArea
+  Dbg.traceIO "loadWorldData"
+  return $! WorldData { chunkList = M.fromList chLst }
+
+vec2list :: (Int,Int) -> [DVS.Vector Int] -> [(WorldIndex,Int)]
+vec2list (i,j) cs = concatMap v2l $ zip [0 .. ] cs
+  where
+    bsize = blockSize chunkParam
+    (ox,oz) = (i * bsize, j * bsize)
+    v2l (bid, c) = zip (map (i2pos (ox,bid * bsize,oz)) [0 .. bsize ^ 3])
+                       (DVS.toList c)
+
+loadSurfaceList :: WorldData -> IO SurfaceList
+loadSurfaceList wld = do
+  suLst <- mapM (\ (i,j) -> do
+    return ( (i,j),
+                 let c = case getChunk' (chunkList wld) (i,j) of
+                           Just c' -> c'
+                           Nothing -> Dbg.trace "genChunk with surface"
+                                      genChunk
+                 in
+                 map (\ bn -> getSurface' wld c ((i,j),bn)) [0 .. bkNo]
+           )
+    ) chunkArea
+  Dbg.traceIO "loadSurfaceList"
+  return $! M.fromList suLst
+  where
+    !bkNo = blockNum chunkParam - 1
+
+gIdx2lIdx :: WorldIndex -> Int
+gIdx2lIdx (x,y,z) = (bsize ^ (2::Int)) * ly + bsize * lz + lx
+  where
+    (lx,ly,lz) = (x - ox * bsize,y - bsize * div y bsize,z - oz * bsize)
+    (ox,oz) = ( x `div` bsize, z `div` bsize) 
+    bsize = blockSize chunkParam
+
+calcCursorPos :: DataHdl ->  UserStatus
               -> Maybe (WorldIndex,Surface)
-calcCursorPos sufList usr = if null res
+calcCursorPos dtHdl usr = calcCursorPos' suf usr
+  where suf = (snd . wldDat) dtHdl
+
+calcCursorPos' :: SurfaceList -> UserStatus
+              -> Maybe (WorldIndex,Surface)
+calcCursorPos' sufList usr = if null res
     then Nothing
     else Just $ (\ (p,(_,s)) -> (p,s))
                   $ minimumBy (comparing (\ (_,(t,_)) -> t))  $ 
@@ -138,8 +209,12 @@ setSurfaceList sufList ((i,j),bNo) sfs = M.update fn (i,j) sufList
   where
     fn blst = Just $ (take bNo blst) ++ (sfs : drop (bNo + 1) blst)
 
-getSurfaceList :: SurfaceList -> ((Int,Int),Int) -> Maybe SurfacePos
-getSurfaceList sufList ((i,j),bNo) =
+getSurfaceList :: DataHdl -> ((Int,Int),Int) -> Maybe SurfacePos
+getSurfaceList dtHdl pos = getSurfaceList' suf pos
+  where suf = (snd . wldDat) dtHdl
+
+getSurfaceList' :: SurfaceList -> ((Int,Int),Int) -> Maybe SurfacePos
+getSurfaceList' sufList ((i,j),bNo) =
   (\ blst -> blst !! bNo) <$> (M.lookup (i,j) sufList) 
 
 getSurface :: WorldData -> ((Int,Int),Int) -> Maybe SurfacePos 
@@ -154,7 +229,7 @@ getSurface' wld c ((i,j),bkNo) = map (\ (p,(b,f)) -> (p,b,f))
                                    $  M.toList mlst 
   where
     !c' = c !! bkNo
-    clbk (x,y,z) = case getBlockID wld (x + ox, y + oy, z + oz) of
+    clbk (x,y,z) = case getBlockID' wld (x + ox, y + oy, z + oz) of
                      Just v -> v == airBlockID || alpha (getBlockInfo v)
                      Nothing -> False
     (ox,oy,oz) = (i * bsize, bkNo * bsize, j * bsize)
@@ -170,6 +245,13 @@ pos2i (x,y,z) | x < 0 || y < 0 || z < 0 = -1
               | otherwise =  y * (16 * 16) + z * 16 + x
   where
     bsize = blockSize chunkParam - 1
+
+i2pos :: WorldIndex -> Int -> WorldIndex
+i2pos (ox,oy,oz) i = (x + ox, y + oy, z + oz)
+  where
+    bsize = blockSize chunkParam
+    (y, t1) = i `divMod` (bsize * bsize)
+    (z, x ) = t1 `divMod` bsize
 
 chkSuf' :: DVS.Vector BlockIDNum
         -> (WorldIndex -> Bool) -> [((Int, Int, Int),BlockIDNum,Surface)]
@@ -246,53 +328,9 @@ chkSuf'' vec (tag1,tag2) (itr1,itr2) clbk (x,y,z) = concat
                <$> (vec DVS.!? ((pos2i . itr2) (x,y,z))) 
 
 chunkArea :: [(Int,Int)]
-chunkArea = [ (x,z) | x <- [-2,-1 .. 2], z <- [-2,-1 .. 2] ]
+chunkArea = [ (x,z) | x <- [-1,0,1], z <- [-1,0,1] ]
         --  [ (x,z) | x <- [-4,-3 .. 4], z <- [-4,-3 .. 4] ]
         
-saveWorldData :: WorldData -> FilePath -> IO ()
-saveWorldData wld home = do
-  --tmp <- getTemporaryDirectory
-  --let tpath = tmp ++ "/wld0"
-  --createDirWithChk tpath 
-  mapM_ (\ (k,c) -> writeChunkData k c path) chLst
-  where
-    chLst = M.toList $ chunkList wld
-    path = home ++ "/.Hinecraft/userdata/wld0"
-
-loadWorldData :: FilePath -> IO WorldData
-loadWorldData home = do
-  chLst <- mapM (\ (i,j) -> do
-    c <- readChunkData (i,j) path
-    return ((i,j), case c of 
-                     Just c' -> c'
-                     Nothing -> genChunk)
-    ) chunkArea
-  Dbg.traceIO "loadWorldData"
-  return $! WorldData { chunkList = M.fromList chLst }
-  where
-    path = home ++ "/.Hinecraft/userdata/wld0"
-
-loadSurfaceList :: WorldData -> FilePath -> IO SurfaceList
-loadSurfaceList wld home = do
-  suLst <- mapM (\ (i,j) -> do
-    s <- readSurfData (i,j) path
-    return ( (i,j)
-           , if null s 
-               then
-                 let c = case getChunk' (chunkList wld) (i,j) of
-                           Just c' -> c'
-                           Nothing -> genChunk
-                 in
-                 map (\ bn -> getSurface' wld c ((i,j),bn)) [0 .. bkNo]
-               else s
-           )
-    ) chunkArea
-  Dbg.traceIO "loadSurfaceList"
-  return $! M.fromList suLst
-  where
-    path = home ++ "/.Hinecraft/userdata/wld0"
-    !bkNo = blockNum chunkParam - 1
-
 readSurfData :: (Int,Int) -> FilePath -> IO [SurfacePos]
 readSurfData (i,j) path = do
   f <- doesDirectoryExist dpath
@@ -302,47 +340,27 @@ readSurfData (i,j) path = do
   where
     dpath = path ++ "/cuk" ++ show i ++ "_" ++ show j
 
-saveSurfaceList :: SurfaceList -> FilePath -> IO () 
-saveSurfaceList suflst home =
-  mapM_ (\ (k,s) -> writeSurfListData k s path) suLst
+setBlockID :: DataHdl -> WorldIndex -> BlockIDNum -> IO DataHdl
+setBlockID dtHdl pos bid = do
+  setBlockToDB (dbHdl dtHdl) pos bid
+  return DataHdl
+    { dbHdl = dbHdl dtHdl
+    , wldDat = (newWld, newSuf)
+    }
   where
-    suLst = M.toList suflst 
-    path = home ++ "/.Hinecraft/userdata/wld0"
+    (wld,sufList) = wldDat dtHdl
+    newWld = setBlockID' wld pos bid  
+    newSuf = updateSufList newWld sufList pos
 
-writeSurfListData :: (Int,Int) -> [SurfacePos] -> FilePath -> IO ()
-writeSurfListData (i,j) s path = do
-  createDirWithChk dpath
-  writeFile (dpath ++ "/suf") $ show s 
+updateSufList :: WorldData -> SurfaceList -> WorldIndex -> SurfaceList
+updateSufList wld sufList pos = foldr (\ (i,b) sfl
+   -> setSurfaceList sfl (i,b)
+     $ fromJust $ getSurface wld (i,b)) sufList clst 
   where
-    dpath = path ++ "/cuk" ++ show i ++ "_" ++ show j
+    !clst = calcReGenArea pos 
 
-writeChunkData :: (Int,Int) -> Chunk -> FilePath -> IO ()
-writeChunkData (i,j) ch path = do
-  createDirWithChk dpath
-  writeFile (dpath ++ "/blk") $ show ch 
-  where
-    dpath = path ++ "/cuk" ++ show i ++ "_" ++ show j
-
-readChunkData :: (Int,Int) -> FilePath -> IO (Maybe Chunk)
-readChunkData (i,j) path = do
-  f <- doesDirectoryExist dpath
-  if f
-    then do
-      ch <- read <$> readFile (dpath ++ "/blk") 
-      return $! Just ch 
-    else return Nothing
-  where
-    dpath = path ++ "/cuk" ++ show i ++ "_" ++ show j
-
-createDirWithChk :: FilePath -> IO Bool
-createDirWithChk path = do
-  f <- doesDirectoryExist path
-  if f 
-    then return False
-    else createDirectory path >> return True
-
-setBlockID :: WorldData -> WorldIndex -> BlockIDNum -> WorldData
-setBlockID wld (x,y,z) bid = WorldData
+setBlockID' :: WorldData -> WorldIndex -> BlockIDNum -> WorldData
+setBlockID' wld (x,y,z) bid = WorldData
   $ M.update (\ c -> setBlockIDfromChunk c (x,y,z) bid) key clist
   where
     clist = chunkList wld
@@ -360,8 +378,12 @@ setBlockIDfromChunk c (x,y,z) bid = Just $ foldr rep [] $ zip [0 .. ] c
     (ox,oz) = ( x `div` bsize, z `div` bsize) 
     idx = (bsize ^ (2::Int)) * ly + bsize * lz + lx
 
-getBlockID :: WorldData -> WorldIndex -> Maybe BlockIDNum
-getBlockID wld (x,y,z)  
+getBlockID :: DataHdl -> WorldIndex -> Maybe BlockIDNum
+getBlockID hdl idx = getBlockID' wld idx
+  where wld = (fst . wldDat) hdl
+
+getBlockID' :: WorldData -> WorldIndex -> Maybe BlockIDNum
+getBlockID' wld (x,y,z)  
   | (ymin <= y) && (y < ymax ) = case M.lookup (ox,oz) chmap of
        Just c -> (c !! oy) DVS.!? idx 
        Nothing -> Nothing

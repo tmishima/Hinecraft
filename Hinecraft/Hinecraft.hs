@@ -43,7 +43,7 @@ main = bracket initHinecraft exitHinecraft runHinecraft
 data RunMode = TitleMode | PlayMode | InventoryMode
   deriving (Eq,Show)
 
-type Handls = (GLFWHandle, GuiResource, DBHandle)
+type Handls = (GLFWHandle, GuiResource)
 
 initHinecraft :: IO Handls
 initHinecraft = do
@@ -52,29 +52,31 @@ initHinecraft = do
   glfwHdl <- initGLFW winSize
 
   initGL
-  dbHdl <- initDB home
   guiRes <- loadGuiResource home winSize
   
-  return $! (glfwHdl,guiRes,dbHdl)
+  return $! (glfwHdl,guiRes)
   where
     winSize = (1366,768)
 
 exitHinecraft :: Handls -> IO ()
-exitHinecraft (glfwHdl,_,dbHdl) = do
-  exitDB dbHdl
+exitHinecraft (glfwHdl,_) = do
   exitGLFW glfwHdl
   Dbg.traceIO "Hinecraft End"
 
 runHinecraft :: Handls 
              -> IO ()
-runHinecraft resouce@(glfwHdl,guiRes,_) = do
+runHinecraft resouce@(glfwHdl,guiRes) = do
   home <- getHomeDirectory
   !tvHdl <- initTitleModeView home guiRes
   !wvHdl <- initWorldView home
-  !wld <- loadWorldData home
-  !sfl <- loadSurfaceList wld home
-  let !tmstat = TitleModeState (0::Double) False False False
-      !plstat = PlayModeState
+  !dtHdl <- initData home
+  initWorldVAOList wvHdl $ getAllSurfaceData dtHdl
+  _ <- getDeltTime glfwHdl
+  mainLoop (TitleModeState (0::Double) False False False)
+           plstat TitleMode (dtHdl,tvHdl,wvHdl) 
+  exitData dtHdl
+  where
+    !plstat = PlayModeState
         { usrStat = UserStatus
                      { userPos = (0.0,16 * 4 + 1,0.0)
                      , userRot = (0.0,0.0,0.0) 
@@ -86,41 +88,30 @@ runHinecraft resouce@(glfwHdl,guiRes,_) = do
         , curPos = Nothing
         , pallet = replicate 9 airBlockID
         }
-  initWorldVAOList wvHdl $ M.toList sfl
-
-  _ <- getDeltTime glfwHdl
-
-  mainLoop tmstat plstat TitleMode (wld,sfl,tvHdl,wvHdl) 
-  where
-    mainLoop tmstat' plstat' runMode (w',f',tvHdl,wvHdl) = do
+    mainLoop tmstat' plstat' runMode (dtHdl,tvHdl,wvHdl) = do
       pollGLFW
       --threadDelay 10000
       dt <- getDeltTime glfwHdl
       exitflg' <- getExitReqGLFW glfwHdl
-      (ntmstat',nplstat',runMode',f'',nw') <- mainProcess
-                   resouce tmstat' plstat' w' runMode f' wvHdl dt
+      (ntmstat',nplstat',runMode',ndtHdl') <- mainProcess
+                   resouce tmstat' plstat' dtHdl runMode wvHdl dt
       drawView resouce ntmstat' nplstat' runMode' tvHdl wvHdl
       swapBuff glfwHdl
       if exitflg' || isQuit ntmstat'
-        then return () -- do
-          --home <- getHomeDirectory
-          --saveWorldData nw' home  
-          --saveSurfaceList f'' home
-        else mainLoop ntmstat' nplstat' runMode' (nw',f'',tvHdl,wvHdl)
+        then return ()
+        else mainLoop ntmstat' nplstat' runMode' (ndtHdl',tvHdl,wvHdl)
 
 mainProcess :: Handls
-            -> TitleModeState -> PlayModeState -> WorldData
-            ->RunMode -> SurfaceList -> WorldViewVHdl
-            -> Double
+            -> TitleModeState -> PlayModeState -> DataHdl
+            ->RunMode -> WorldViewVHdl -> Double
             -> IO ( TitleModeState, PlayModeState, RunMode
-                  , SurfaceList, WorldData)
-mainProcess (glfwHdl, guiRes, _) tmstat plstat wld runMode
-            sufList wvHdl dt = do
+                  , DataHdl)
+mainProcess (glfwHdl, guiRes) tmstat plstat dtHdl runMode wvHdl dt = do
   -- Common User input
   mous <- getButtonClick glfwHdl
   syskey <- getSystemKeyOpe glfwHdl
   -- 
-  (newMode,newPmstat,newTmstat,newSufList',nw') <- case runMode of
+  (newMode,newPmstat,newTmstat,newHdl') <- case runMode of
     TitleMode -> do
       let !((md,cEt),(exflg',eEt)) = guiProcess guiRes mous -- ### 2D ###
           !r' = (rotW tmstat) + (1.0 * dt)
@@ -130,7 +121,7 @@ mainProcess (glfwHdl, guiRes, _) tmstat plstat wld runMode
             , isExitBtnEntr = eEt
             , isQuit = exflg'
             }
-      return $! (md,plstat,ntstat,sufList,wld)
+      return $! (md,plstat,ntstat,dtHdl)
     PlayMode -> do
       vm <- getCursorMotion glfwHdl
       sm <- getScrollMotion glfwHdl 
@@ -141,26 +132,25 @@ mainProcess (glfwHdl, guiRes, _) tmstat plstat wld runMode
              _ ->  PlayMode
           !u' = usrStat plstat
           !plt = pallet plstat
-          !newStat = calcPlayerMotion wld u' vm mm sm dt
-          !pos = calcCursorPos sufList u'
-      (w',newSufList) <- case setBlock u' mous pos plt of
+          !newStat = calcPlayerMotion dtHdl u' vm mm sm dt
+          !pos = calcCursorPos dtHdl u'
+      newDtHdl' <- case setBlock u' mous pos plt of
         Just (pos',bid) -> do
-          let !newWld = setBlockID wld pos' bid
-              !newSuf = updateSufList newWld sufList pos'
-              !clst = calcReGenArea pos'
+          !newDtHdl <- setBlockID dtHdl pos' bid
+          let !clst = calcReGenArea pos'
               !sflst = map (\ (ij,bNo') ->
                          ((ij,bNo')
-                         , fromJust $ getSurfaceList newSuf (ij,bNo')
+                         , fromJust $ getSurfaceList newDtHdl (ij,bNo')
                          )) clst 
           updateVAOlist wvHdl sflst
-          return $! (newWld,newSuf)
-        Nothing -> return (wld,sufList)
+          return newDtHdl
+        Nothing -> return dtHdl
       return $! ( md
                 , PlayModeState
                        { usrStat = newStat , drgdrpMd = Nothing
                        , drgSta = Nothing , curPos = pos , pallet = plt
                        }
-                , tmstat, newSufList,w')
+                , tmstat, newDtHdl')
     InventoryMode -> do
       winSize <- getWindowSize glfwHdl
       let !md = case syskey of
@@ -177,7 +167,7 @@ mainProcess (glfwHdl, guiRes, _) tmstat plstat wld runMode
                        , curPos = Nothing
                        , pallet = nPlt'
                        }
-      return $! (md,nplstat',tmstat, sufList,wld)
+      return $! (md,nplstat',tmstat, dtHdl)
   when (runMode /= newMode) $ do
     if (newMode == InventoryMode)
       then setMouseBtnMode glfwHdl StateMode
@@ -185,7 +175,7 @@ mainProcess (glfwHdl, guiRes, _) tmstat plstat wld runMode
     setUIMode glfwHdl $ if newMode == PlayMode
       then Mode3D
       else Mode2D
-  return $! (newTmstat,newPmstat,newMode,newSufList',nw')
+  return $! (newTmstat,newPmstat,newMode,newHdl')
 
 
 invMouseOpe :: (Int,Int) -> (Double,Double,Bool,Bool,Bool) -> DragDropMode
@@ -244,13 +234,6 @@ getInventoryIndex (w,h) (x,y) = case (flt (> x) xbordLst , yIdx ) of
              Just a -> Just a
              Nothing -> if chkPltY y then Just 5 else Nothing
 
-updateSufList :: WorldData -> SurfaceList -> WorldIndex -> SurfaceList
-updateSufList wld sufList pos = foldr (\ (i,b) sfl
-   -> setSurfaceList sfl (i,b)
-     $ fromJust $ getSurface wld (i,b)) sufList clst 
-  where
-    !clst = calcReGenArea pos 
-
 setBlock :: UserStatus -> (Double,Double,Bool,Bool,Bool)
          -> Maybe (WorldIndex,Surface) -> [BlockIDNum]
          -> Maybe (WorldIndex,BlockIDNum)
@@ -271,11 +254,11 @@ setBlock ustat (_,_,lb,rb,_) (Just ((cx,cy,cz),fpos)) plt
       SBack   -> (cx,cy,cz + 1)
 
 
-calcPlayerMotion :: WorldData -> UserStatus
+calcPlayerMotion :: DataHdl -> UserStatus
                  -> (Double,Double) -> (Int,Int,Int,Int,Int) -> (Int,Int)
                  -> Double
                  -> UserStatus
-calcPlayerMotion wld usrStat' (mx,my) (f,b,l,r,jmp) (_,sy) dt =
+calcPlayerMotion dtHdl usrStat' (mx,my) (f,b,l,r,jmp) (_,sy) dt =
   UserStatus
     { userPos = ( nx
                 , ny 
@@ -299,44 +282,45 @@ calcPlayerMotion wld usrStat' (mx,my) (f,b,l,r,jmp) (_,sy) dt =
     !w = if jmp == 2
           then 5
           else wo - (9.8 * dt)
-    !(nx,ny,nz) = movePlayer wld (ox,oy,oz) (realToFrac dx
+    !(nx,ny,nz) = movePlayer dtHdl (ox,oy,oz) (realToFrac dx
                                             ,realToFrac dy
                                             ,realToFrac dz)
 
-movePlayer :: WorldData -> Pos' -> Pos' -> Pos'
-movePlayer wld (ox',oy',oz') (dx,dy,dz) =
-  case getBlockID wld (round' tx, round' y' ,round' tz) of
+movePlayer :: DataHdl -> Pos' -> Pos' -> Pos'
+movePlayer dtHdl (ox',oy',oz') (dx,dy,dz) =
+  case getBlockID dtHdl (round' tx, round' y' ,round' tz) of
     Just bid -> if bid == airBlockID || chkHalf bid 
       then if dl < 1
            then (tx,y',tz)
-           else movePlayer wld (tx,y',tz) (dx - dx', dy - dy', dz - dz')
+           else movePlayer dtHdl (tx,y',tz) (dx - dx', dy - dy', dz - dz')
       else case bid'' of
         Just bid' -> if chkHalf bid' && y' + 0.6 > y''
           then if dl < 1
             then (tx,y'',tz)
-            else movePlayer wld (tx,y'',tz) (dx - dx', dy - dy', dz - dz')
+            else movePlayer dtHdl (tx,y'',tz)
+                                  (dx - dx', dy - dy', dz - dz')
           else (ox',y',oz')
         Nothing -> (ox',y',oz')
     Nothing -> (ox',oy',oz') 
   where 
-    bid'' = getBlockID wld (round' ox', round' oy' ,round' oz')
+    bid'' = getBlockID dtHdl (round' ox', round' oy' ,round' oz')
     !dl = sqrt (dx * dx + dz * dz + dy * dy)
     !(dx',dy',dz') = if dl < 1
           then (dx,dy,dz)
           else (dx / dl, dy / dl, dz / dl)
     !(tx,tz) = (ox' + dx', oz' + dz')
-    !y' = calYpos wld (ox',oy',oz') dy'
-    !y'' = calYpos wld (tx,y'+1,tz) (-1)
+    !y' = calYpos dtHdl (ox',oy',oz') dy'
+    !y'' = calYpos dtHdl (tx,y'+1,tz) (-1)
 
-calYpos :: WorldData -> (Double,Double,Double) -> Double -> Double
+calYpos :: DataHdl -> (Double,Double,Double) -> Double -> Double
 calYpos _   (_,y,_) 0 = y
-calYpos wld (x,y,z) dy = if (abs ndy) < 0.001
+calYpos dtHdl (x,y,z) dy = if (abs ndy) < 0.001
     then {-trace (show (y',y0,c,ly,dy,ndy)) -} y'
-    else {- trace (show (y',ndy)) $ -} calYpos wld (x,y',z) ndy
+    else {- trace (show (y',ndy)) $ -} calYpos dtHdl (x,y',z) ndy
   where
     !y0 = fromIntegral $ (round' y :: Int)
     !ly = y - y0
-    !t' = case getBlockID wld (round' x, round' y, round' z) of
+    !t' = case getBlockID dtHdl (round' x, round' y, round' z) of
       Just t -> if t == airBlockID
             then 0
             else if chkHalf t == True then 2 else 1
@@ -409,7 +393,7 @@ drawView :: Handls
          -> TitleModeState -> PlayModeState -> RunMode
          -> TitleModeHdl -> WorldViewVHdl
          -> IO ()
-drawView (glfwHdl, guiRes, _) tmstat plstat runMode'
+drawView (glfwHdl, guiRes) tmstat plstat runMode'
           tvHdl wvHdl = do
   worldDispList <- getBlockVAOList wvHdl
   winSize <- getWindowSize glfwHdl

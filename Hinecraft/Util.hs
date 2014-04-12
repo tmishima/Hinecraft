@@ -5,6 +5,7 @@
 --
 module Hinecraft.Util where
 import Data.List as List
+import System.Directory
 --import Debug.Trace as Dbg
 
 bounded' :: (Ord a) => a -> a -> a -> a
@@ -88,4 +89,11 @@ surfacePlot o@(iox,ioy,ioz) p1@(ip1x,ip1y,ip1z) p2@(ip2x,ip2y,ip2z) =
     !pline1 = linePlot o  p2
     !pline2 = linePlot p1 p3
     !suf = concatMap (uncurry linePlot) $ zip pline1 pline2
+
+createDirWithChk :: FilePath -> IO Bool
+createDirWithChk path = do
+  f <- doesDirectoryExist path
+  if f 
+    then return False
+    else createDirectory path >> return True
 

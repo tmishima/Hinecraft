@@ -8,6 +8,17 @@ module Hinecraft.Types where
 version :: String
 version = "0.2.0"
 
+data ChunkParam = ChunkParam
+  { blockSize :: Int
+  , blockNum  :: Int
+  }
+
+chunkParam :: ChunkParam
+chunkParam = ChunkParam
+  { blockSize = 16
+  , blockNum = 8
+  }
+
 type BlockIDNum = Int
 
 data Shape = Cube | Half Bool | Stairs
