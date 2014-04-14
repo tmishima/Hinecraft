@@ -16,9 +16,11 @@ module Hinecraft.GUI.GLFWWindow
   , swapBuff
   , getExitReqGLFW
   , exitGLFW
+  , toggleFullScreenMode
     --
   , getSystemKeyOpe
   , getMoveKeyOpe
+  , getScreenModeKeyOpe
     --
   , getScrollMotion
   , getCursorMotion
@@ -34,7 +36,8 @@ import Control.Monad ( replicateM, when )
 import Data.IORef
 
 data GLFWHandle = GLFWHandle
-  { winHdl :: Maybe GLFW.Window
+  { winHdl :: IORef (Maybe GLFW.Window,Bool)
+  , winSize :: (Int,Int)
   , mouseStat :: MouseStatusHdl
   , keyStat :: KeyStatusHdl
   , exitFlg :: ProgCtrlStat
@@ -47,15 +50,15 @@ data UIMode = Mode2D | Mode3D
 
 type ProgCtrlStat = IORef Bool 
 
-initGLFW :: (Int,Int) -> IO GLFWHandle
-initGLFW (wWidth,wHight) = do
+initGLFW :: (Int,Int) -> Bool -> IO GLFWHandle
+initGLFW winSize' fullScreenSW = do
   True <- GLFW.init
   GLFW.defaultWindowHints
   GLFW.windowHint $ GLFW.WindowHint'ContextVersionMajor (3::Int)
   --GLFW.windowHint $ GLFW.WindowHint'ContextVersionMinor (3::Int)
   --GLFW.windowHint $ GLFW.WindowHint'OpenGLProfile GLFW.OpenGLProfile'Compat
   --GLFW.windowHint $ GLFW.WindowHint'RefreshRate (60::Int)
-  win <- GLFW.createWindow wWidth wHight "Hinecraft" Nothing Nothing
+  --
   exitFlg' <- newIORef False
   uiMode' <- newIORef Mode2D
 
@@ -64,21 +67,12 @@ initGLFW (wWidth,wHight) = do
   --
   oldTime' <- newIORef 0.0 
   --
-  GLFW.makeContextCurrent win
-  case win of
-    Just win' -> do
-      -- Callback
-      GLFW.setWindowCloseCallback win' (Just $ finishGLFW exitFlg')
-      GLFW.setKeyCallback win' (Just (keyPress keyStat'))
-      GLFW.setCursorPosCallback win'
-                           (Just (setCursorMotion uiMode' mouseStat'))
-      GLFW.setMouseButtonCallback win' (Just (setButtonClick mouseStat'))
-      GLFW.setScrollCallback win' (Just (setScrollMotion mouseStat'))
-    Nothing -> return ()
-
-  --GLFW.swapInterval 5
+  --GLFW.swapInterval 0
+  win <- createDefWindow winSize' fullScreenSW
+                         exitFlg' keyStat' uiMode' mouseStat' 
   return GLFWHandle 
     { winHdl = win
+    , winSize = winSize'
     , mouseStat = mouseStat'
     , keyStat = keyStat'
     , exitFlg = exitFlg'
@@ -86,23 +80,90 @@ initGLFW (wWidth,wHight) = do
     , oldTime = oldTime'
     }
 
+setCallBacktoWin :: GLFW.Window
+                 -> ProgCtrlStat
+                 -> KeyStatusHdl -> IORef UIMode
+                 -> MouseStatusHdl
+                 -> IO ()
+setCallBacktoWin win' exitFlg' keyStat' uiMode' mouseStat' = do
+  GLFW.setWindowCloseCallback win' (Just $ finishGLFW exitFlg')
+  GLFW.setKeyCallback win' (Just (keyPress keyStat'))
+  GLFW.setCursorPosCallback win'
+                       (Just (setCursorMotion uiMode' mouseStat'))
+  GLFW.setMouseButtonCallback win' (Just (setButtonClick mouseStat'))
+  GLFW.setScrollCallback win' (Just (setScrollMotion mouseStat'))
+
+createDefWindow :: (Int, Int) -> Bool -> ProgCtrlStat
+                -> KeyStatusHdl -> IORef UIMode
+                -> MouseStatusHdl
+                -> IO (IORef (Maybe GLFW.Window, Bool))
+createDefWindow (wWidth,wHight) isFullScr exitFlg' keyStat'
+                uiMode' mouseStat' = do
+  win <- if isFullScr
+    then do
+      moni <- GLFW.getPrimaryMonitor 
+      GLFW.createWindow wWidth wHight hinecraftTitle moni Nothing
+    else 
+      GLFW.createWindow wWidth wHight hinecraftTitle Nothing Nothing
+  GLFW.makeContextCurrent win
+  case win of
+    Just win' -> -- Callback
+      setCallBacktoWin win' exitFlg' keyStat' uiMode' mouseStat'
+    Nothing -> return ()
+  newIORef (win, isFullScr)
+
+hinecraftTitle :: String
+hinecraftTitle = "Hinecraft"
+
+toggleFullScreenMode :: GLFWHandle -> IO ()
+toggleFullScreenMode glfwHdl = do
+  winStat <- readIORef $ winHdl glfwHdl
+  case winStat of
+    (Just win,scmd) -> do
+      (wWidth,wHight) <- getWindowSize glfwHdl
+      GLFW.windowShouldClose win
+      GLFW.destroyWindow win
+      newwin' <- if scmd 
+        then
+          GLFW.createWindow wWidth wHight hinecraftTitle Nothing Nothing
+        else do
+          moni <- GLFW.getPrimaryMonitor 
+          GLFW.createWindow wWidth wHight hinecraftTitle moni Nothing
+
+      GLFW.makeContextCurrent newwin'
+
+      case newwin' of
+        Just win' -> -- Callback
+          setCallBacktoWin win' exitFlg' keyStat' uiMode' mouseStat'
+        Nothing -> return ()
+      writeIORef (winHdl glfwHdl) (newwin',not scmd)
+      return ()
+    (Nothing,_) -> return ()
+  where
+    mouseStat' = mouseStat glfwHdl
+    keyStat' = keyStat glfwHdl
+    exitFlg' = exitFlg glfwHdl
+    uiMode' = uiMode glfwHdl
+
 setUIMode :: GLFWHandle -> UIMode -> IO ()
 setUIMode glfwHdl mode = do
   writeIORef ui' mode
-  case winHdl glfwHdl of
-    Just win -> case mode of
+  winStat <- readIORef $ winHdl glfwHdl
+  case winStat of
+    (Just win,_) -> case mode of
       Mode2D -> -- 2D
         GLFW.setCursorInputMode win GLFW.CursorInputMode'Normal
       Mode3D -> 
         GLFW.setCursorInputMode win GLFW.CursorInputMode'Hidden
-    Nothing -> return ()
+    (Nothing,_) -> return ()
   where
     !ui' = uiMode glfwHdl
 
 togleUIMode :: GLFWHandle -> IO ()
-togleUIMode glfwHdl = 
-  case winHdl glfwHdl of
-    Just win -> do
+togleUIMode glfwHdl = do
+  winStat <- readIORef $ winHdl glfwHdl
+  case winStat of
+    (Just win,_) -> do
       md <- readIORef ui'
       nmd <- case md of
         Mode3D -> 
@@ -112,7 +173,7 @@ togleUIMode glfwHdl =
           GLFW.setCursorInputMode win GLFW.CursorInputMode'Hidden
             >> return Mode3D
       writeIORef ui' nmd
-    Nothing -> return ()
+    (Nothing,_) -> return ()
   where
     ui' = uiMode glfwHdl
 
@@ -120,9 +181,11 @@ pollGLFW :: IO ()
 pollGLFW = GLFW.pollEvents
 
 swapBuff :: GLFWHandle -> IO ()
-swapBuff glfwHdl = case winHdl glfwHdl of
-  Just win -> GLFW.swapBuffers win
-  Nothing -> return ()
+swapBuff glfwHdl = do
+  winStat <- readIORef $ winHdl glfwHdl
+  case winStat of
+    (Just win,_) -> GLFW.swapBuffers win
+    (Nothing,_) -> return ()
 
 getExitReqGLFW :: GLFWHandle -> IO Bool
 getExitReqGLFW glfwHdl = readIORef $ exitFlg glfwHdl
@@ -135,20 +198,22 @@ getDeltTime glfwHdl = do
   return $! newTime' - oldTime'
 
 getWindowSize :: GLFWHandle -> IO (Int,Int)
-getWindowSize glfwHdl = case win of
-  Just w -> GLFW.getFramebufferSize w
-  Nothing -> return (0,0)
-  where
-    win = winHdl glfwHdl
+getWindowSize glfwHdl = 
+  return $ winSize glfwHdl
+{-  winStat <- readIORef $ winHdl glfwHdl
+  case winStat of
+    (Just w,_) -> GLFW.getFramebufferSize w
+    (Nothing,_) -> return (0,0)
+-}
 
 exitGLFW :: GLFWHandle -> IO ()
-exitGLFW glfwHdl = case win of 
-    Just win' -> do
+exitGLFW glfwHdl = do
+  winStat <- readIORef $ winHdl glfwHdl
+  case winStat of 
+    (Just win',_) -> do
       GLFW.destroyWindow win'
       GLFW.terminate
-    Nothing -> return ()
-  where
-    win = winHdl glfwHdl
+    (Nothing,_) -> return ()
 
 finishGLFW :: ProgCtrlStat -> GLFW.WindowCloseCallback
 finishGLFW exitflg _ = do
@@ -157,16 +222,17 @@ finishGLFW exitflg _ = do
 
 -- ##################### Keybord ###########################
 data KeyStatusHdl = KeyStatusHdl
-  { fKey   :: IORef Int
-  , bKey   :: IORef Int 
-  , rKey   :: IORef Int
-  , lKey   :: IORef Int
-  , jmpKey :: IORef Int
-  , tolKey :: IORef Int
-  , escKey :: IORef Int
-  , tabKey :: IORef Int
-  , dbg1   :: IORef Int
-  , dbg2   :: IORef Int
+  { fKey     :: IORef Int
+  , bKey     :: IORef Int 
+  , rKey     :: IORef Int
+  , lKey     :: IORef Int
+  , jmpKey   :: IORef Int
+  , tolKey   :: IORef Int
+  , escKey   :: IORef Int
+  , tabKey   :: IORef Int
+  , scrMdKey :: IORef Int
+  , dbg1     :: IORef Int
+  , dbg2     :: IORef Int
   }
 
 getSystemKeyOpe :: GLFWHandle -> IO (Bool, Bool)
@@ -176,6 +242,14 @@ getSystemKeyOpe glfwHdl = do
   tol <- readIORef (tolKey opeKeyS)
   writeIORef (tolKey opeKeyS) 0
   return (esc > 0, tol > 0)
+  where
+    opeKeyS = keyStat glfwHdl   
+
+getScreenModeKeyOpe :: GLFWHandle -> IO Bool
+getScreenModeKeyOpe glfwHdl = do
+  ope <- readIORef (scrMdKey opeKeyS)
+  writeIORef (scrMdKey opeKeyS) 0
+  return (ope > 0)
   where
     opeKeyS = keyStat glfwHdl   
 
@@ -207,16 +281,17 @@ createKeyStatHdl :: IO KeyStatusHdl
 createKeyStatHdl = do
   sl <- replicateM 10 (newIORef (0 :: Int))
   return KeyStatusHdl
-      { fKey   = head sl 
-      , bKey   = sl!!1
-      , rKey   = sl!!2
-      , lKey   = sl!!3
-      , jmpKey = sl!!4
-      , tolKey = sl!!5
-      , escKey = sl!!6
-      , tabKey = sl!!7
-      , dbg1   = sl!!8
-      , dbg2   = sl!!9
+      { fKey      = head sl 
+      , bKey      = sl!!1
+      , rKey      = sl!!2
+      , lKey      = sl!!3
+      , jmpKey    = sl!!4
+      , tolKey    = sl!!5
+      , escKey    = sl!!6
+      , tabKey    = sl!!7
+      , scrMdKey  = sl!!8
+      , dbg1      = sl!!9
+      , dbg2      = sl!!10
       } 
 
 keyPress :: KeyStatusHdl -> GLFW.KeyCallback
@@ -256,6 +331,8 @@ keyPress s _ GLFW.Key'Up     _ GLFW.KeyState'Released _
   = writeIORef (dbg1 s) 1 
 keyPress s _ GLFW.Key'Down   _ GLFW.KeyState'Released _
   = writeIORef (dbg2 s) 1 
+keyPress s _ GLFW.Key'F11    _ GLFW.KeyState'Released _
+  = writeIORef (scrMdKey s) 1
 keyPress _ _ _               _ _                      _
   = return () 
 
@@ -324,12 +401,14 @@ getCursorMotion glfwHdl = do
     opeMus = mouseStat glfwHdl
 
 getCursorPosition :: GLFWHandle -> IO (Double, Double)
-getCursorPosition glfwHdl = case winHdl glfwHdl of 
-    Just w -> do
-      (_,h) <- GLFW.getFramebufferSize w
+getCursorPosition glfwHdl = do
+  winStat <- readIORef $ winHdl glfwHdl
+  case winStat of 
+    (Just w,_) -> do
+      (_,h) <- getWindowSize glfwHdl
       fmap (\ (x,y) -> (x,fromIntegral h - y))
          $ GLFW.getCursorPos w
-    Nothing -> return (0,0)
+    (Nothing,_) -> return (0,0)
 
 setMouseBtnMode :: GLFWHandle -> BottonMode -> IO ()
 setMouseBtnMode glfwHdl = writeIORef (btnMode opeMusS) 
@@ -337,9 +416,11 @@ setMouseBtnMode glfwHdl = writeIORef (btnMode opeMusS)
     opeMusS = mouseStat glfwHdl 
 
 getButtonClick :: GLFWHandle -> IO (Double,Double,Bool,Bool,Bool)
-getButtonClick glfwHdl = case winHdl glfwHdl of 
-    Just w -> do
-      (_,h) <- GLFW.getFramebufferSize w
+getButtonClick glfwHdl = do
+  winStat <- readIORef $ winHdl glfwHdl
+  case winStat of 
+    (Just w,_) -> do
+      (_,h) <- getWindowSize glfwHdl
       (x,y) <- fmap (\ (x,y) -> (x,fromIntegral h - y))
          $ GLFW.getCursorPos w
       btn1 <- readIORef (btn1Clk opeMusS)
@@ -351,7 +432,7 @@ getButtonClick glfwHdl = case winHdl glfwHdl of
           writeIORef (btn2Clk opeMusS) False
           writeIORef (btn3Clk opeMusS) False
       return (x,y,btn1, btn2, btn3)
-    Nothing -> return (0.0,0.0,False, False, False)
+    (Nothing,_) -> return (0.0,0.0,False, False, False)
   where
     opeMusS = mouseStat glfwHdl 
 

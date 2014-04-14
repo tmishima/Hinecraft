@@ -17,7 +17,7 @@
 
 module Main (main) where
 
-import qualified Data.Map as M
+--import qualified Data.Map as M
 import Data.Maybe
 import Debug.Trace as Dbg
 import Control.Exception ( bracket )
@@ -25,6 +25,7 @@ import Control.Monad ( when {-unless,,foldMvoid,filterM-} )
 --import Data.Maybe ( fromJust,isJust ) --,catMaybes )
 import System.Directory ( getHomeDirectory )
 --import Control.Concurrent
+import System.Environment (getArgs)
 
 import Hinecraft.Render.View
 import Hinecraft.Render.Types
@@ -35,7 +36,7 @@ import Hinecraft.Util
 import Hinecraft.Types
 import Hinecraft.Data
 import Hinecraft.GUI.GLFWWindow 
-import Hinecraft.WithSqlite
+--import Hinecraft.WithSqlite
 
 main :: IO ()
 main = bracket initHinecraft exitHinecraft runHinecraft
@@ -47,9 +48,14 @@ type Handls = (GLFWHandle, GuiResource)
 
 initHinecraft :: IO Handls
 initHinecraft = do
-  home <- getHomeDirectory
   Dbg.traceIO "Hinecraft Start"
-  glfwHdl <- initGLFW winSize
+  home <- getHomeDirectory
+  args <- getArgs
+  fullsw <- case args of
+    ("-f":_) -> return True 
+    _ -> return False
+
+  glfwHdl <- initGLFW winSize fullsw
 
   initGL
   guiRes <- loadGuiResource home winSize
@@ -95,8 +101,12 @@ runHinecraft resouce@(glfwHdl,guiRes) = do
       exitflg' <- getExitReqGLFW glfwHdl
       (ntmstat',nplstat',runMode',ndtHdl') <- mainProcess
                    resouce tmstat' plstat' dtHdl runMode wvHdl dt
-      drawView resouce ntmstat' nplstat' runMode' tvHdl wvHdl
-      swapBuff glfwHdl
+      tglWin <- getScreenModeKeyOpe glfwHdl
+      if tglWin
+        then toggleFullScreenMode glfwHdl
+        else do
+          drawView resouce ntmstat' nplstat' runMode' tvHdl wvHdl
+          swapBuff glfwHdl
       if exitflg' || isQuit ntmstat'
         then return ()
         else mainLoop ntmstat' nplstat' runMode' (ndtHdl',tvHdl,wvHdl)
