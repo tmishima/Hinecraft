@@ -1,4 +1,4 @@
-Hinecraft
+﻿Hinecraft
 =========
 
 This is a simple Minecraft Clone (DEMO) written in Haskell.
@@ -30,3 +30,31 @@ http://forum.minecraftuser.jp/viewtopic.php?f=14&t=3132
 対応バージョン：1.7.x  
 配布ページ：http://hashibami.nobody.jp/  
 作者名：ueda  
+
+
+デモアプリのビルド手順(windowsの場合)
+
+
+1.クローンした、作業ディレクトリーへ移動する。
+2.cabal cleanを実行
+3.cabal configureを実行する
+4.エラーメッセージが出た場合
+Config file path source is default config file.
+Config file C:\Users\k10001kk\AppData\Roaming\cabal\config not found.
+Writing default configuration to
+C:\Users\k10001kk\AppData\Roaming\cabal\config
+Warning: The package list for 'hackage.haskell.org' does not exist. Run 'cabal
+update' to download it.
+Resolving dependencies...
+Configuring Hinecraft-0.2.0.0...
+cabal: At least the following dependencies are missing:
+FTGL -any,
+GLFW-b -any,
+GLUtil -any,
+JuicyPixels -any,
+cereal -any,
+linear –any
+
+5.cabal buildを実行する
+
+
