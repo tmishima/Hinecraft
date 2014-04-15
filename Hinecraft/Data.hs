@@ -345,7 +345,9 @@ readSurfData (i,j) path = do
 
 setBlockID :: DataHdl -> WorldIndex -> BlockIDNum -> IO DataHdl
 setBlockID dtHdl pos bid = do
-  setBlockToDB (dbHdl dtHdl) pos bid
+  if bid == airBlockID 
+    then delBlockInDB (dbHdl dtHdl) pos 
+    else setBlockToDB (dbHdl dtHdl) pos bid
   return DataHdl
     { dbHdl = dbHdl dtHdl
     , wldDat = (newWld, newSuf)

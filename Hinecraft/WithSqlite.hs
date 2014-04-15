@@ -9,6 +9,7 @@ module Hinecraft.WithSqlite
   , readChunkData
   , writeChunkData
   , setBlockToDB
+  , delBlockInDB
   )
   where
 
@@ -41,6 +42,7 @@ World
 type Idx = (Int,Int,Int)
 data CmdStream = Load Idx Idx
                | Put Idx Int
+               | Del Idx
                | Store [(Idx,Int)]
                | Exit
                | Init
@@ -77,7 +79,6 @@ initDB home = do
       cmd <- liftIO $ readChan inst
       q <- case cmd of
         Init -> do
-          --_ <- runMigrationSilent migrateTables
           --liftIO $ Dbg.traceIO "DB Init"
           return False
         Exit -> return True
@@ -98,6 +99,13 @@ initDB home = do
               --liftIO $ Dbg.traceIO $ "DB Put = " ++ show (x,y,z,v)
               return ()
           return False
+        Del (x,y,z) -> do
+          blk <- selectList [ WorldX ==. x, WorldY ==. y, WorldZ ==. z] []
+          unless (null blk) $ do
+            delete (entityKey $ head blk)
+            --liftIO $ Dbg.traceIO $ "DB Del = " ++ show (x,y,z)
+            return ()
+          return False
         Store lst -> do
           --liftIO $ Dbg.traceIO "Store"
           _ <- insertMany $ map (\ ((x,y,z),v) -> World x y z v) lst
@@ -107,6 +115,12 @@ initDB home = do
 setBlockToDB :: DBHandle -> Idx -> Int -> IO ()
 setBlockToDB hdl idx val = do
   writeChan cmdst $ Put idx val
+  where
+    cmdst = ist hdl
+
+delBlockInDB :: DBHandle -> Idx -> IO ()
+delBlockInDB hdl idx = do
+  writeChan cmdst $ Del idx
   where
     cmdst = ist hdl
 
