@@ -79,6 +79,13 @@ instance WithShader SimpleShaderProg where
       !cam = GU3.camMatrix GU3.fpsCamera
       !pvMat = prjMat !*! cam
 
+  useShader shd fn = do
+    op <- get currentProgram
+    currentProgram $= Just (program sp)
+    fn shd
+    currentProgram $= op
+    where sp = shprg shd
+
   enableTexture shd flg =
     uniformScalar (getUniform s $ uniTexEnFTag shd) $= if flg then 1 else (0 :: GLint)
     where
@@ -86,18 +93,12 @@ instance WithShader SimpleShaderProg where
 
   getShaderProgram = shprg 
 
-  setProjViewMat shd pvMat = do
-    currentProgram $= Just (program s)
-    asUniform pvMat pvUnifLoc 
-    currentProgram $= Nothing
+  setProjViewMat shd pvMat = asUniform pvMat pvUnifLoc 
     where
       !pvUnifLoc = getUniform s (uniProjViewMTag shd)
       !s = shprg shd
 
-  setCamParam simpShdr cam = do
-    currentProgram $= Just (program sp)
-    GU.asUniform mat rUnifLoc
-    currentProgram $= Nothing
+  setCamParam simpShdr cam = GU.asUniform mat rUnifLoc
     where
       !mat = GU3.camMatrix cam
       !rUnifLoc = GU.getUniform sp (uniRotMTag simpShdr)
@@ -109,6 +110,7 @@ orthoProjMatrix w h = V4 (V4 (2/w) 0 0 (-1)) (V4 0 (2/h) 0 (-1)) (V4 0 0 0 0) (V
 makeSimpShdrVAO :: SimpleShaderProg -> [GLfloat]
                 -> [GLfloat] -> [GLfloat] -> IO VAO
 makeSimpShdrVAO simpShdr vertLst vertClrLst texCdLst = do
+  op <- get currentProgram
   currentProgram $= Just (program sp)
   vao <- makeVAO $ do
     makeBuffer ArrayBuffer vertLst
@@ -123,7 +125,7 @@ makeSimpShdrVAO simpShdr vertLst vertClrLst texCdLst = do
     enableAttrib sp (inTexTag simpShdr)
     setAttrib sp (inTexTag simpShdr) ToFloat (VertexArrayDescriptor 2 Float 0 offset0)
 
-  GL.currentProgram $= Nothing
+  GL.currentProgram $= op
   return vao
   where
     sp = shprg simpShdr

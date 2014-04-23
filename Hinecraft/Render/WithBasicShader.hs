@@ -91,6 +91,13 @@ instance WithShader BasicShaderProg where
       !cam = GU3.camMatrix GU3.fpsCamera
       !pvMat = prjMat !*! cam
 
+  useShader shd fn = do
+    op <- get currentProgram
+    currentProgram $= Just (program sp)
+    fn shd
+    currentProgram $= op
+    where sp = shprg shd
+
   enableTexture shd flg =
     uniformScalar (getUniform s $ uniTexEnFTag shd) $= if flg then 1 else (0 :: GLint)
     where
@@ -98,18 +105,12 @@ instance WithShader BasicShaderProg where
 
   getShaderProgram = shprg 
 
-  setProjViewMat shd pvMat = do
-    currentProgram $= Just (program s)
-    asUniform pvMat pvUnifLoc 
-    currentProgram $= Nothing
+  setProjViewMat shd pvMat = asUniform pvMat pvUnifLoc 
     where
       !pvUnifLoc = getUniform s (uniProjViewMTag shd)
       !s = shprg shd
 
-  setCamParam simpShdr cam = do
-    currentProgram $= Just (program sp)
-    GU.asUniform mat rUnifLoc
-    currentProgram $= Nothing
+  setCamParam simpShdr cam = GU.asUniform mat rUnifLoc
     where
       !mat = GU3.camMatrix cam
       !rUnifLoc = GU.getUniform sp (uniRotMTag simpShdr)
@@ -135,6 +136,7 @@ setColorBlendMode sh md =
 makeBasicShdrVAO :: BasicShaderProg -> [GLfloat]
                 -> [GLfloat] -> [GLfloat] -> [GLfloat] -> IO VAO
 makeBasicShdrVAO simpShdr vertLst vertClrLst vertNrmLst texCdLst = do
+  op <- get currentProgram
   currentProgram $= Just (program sp)
   vb <- makeBuffer ArrayBuffer vertLst
   cb <- makeBuffer ArrayBuffer vertClrLst 
@@ -159,7 +161,7 @@ makeBasicShdrVAO simpShdr vertLst vertClrLst vertNrmLst texCdLst = do
 
   deleteObjectNames [vb,cb,nb,tb]
   
-  GL.currentProgram $= Nothing
+  GL.currentProgram $= op
   return vao
   where
     sp = shprg simpShdr

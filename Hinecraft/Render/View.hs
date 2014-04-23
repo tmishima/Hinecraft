@@ -10,7 +10,6 @@ module Hinecraft.Render.View
   , initGL
   , setPerspective
   , drawBackPlane
-  , putTextLine
   , updateDisplay
   , drawTitle
   , drawPlay
@@ -48,23 +47,25 @@ drawPlay :: (Int,Int) -> GuiResource
          -> Maybe (WorldIndex,Surface)
          -> [BlockIDNum] -> Bool -> DragDropState
          -> WorldViewVHdl 
+         -> DebugInfo
          -> IO ()
 drawPlay (w,h) guiRes usrStat' worldDispList pos plt
-         invSw dragDrop wvHdl = do
+         invSw dragDrop wvHdl dbgInfo = do
 
   -- World
-  drawWorldView wvHdl (w,h) worldDispList usrStat' pos
+  drawWorldView wvHdl (w,h) guiRes worldDispList usrStat' pos
 
   -- HUD
-  renderHUD (w,h) guiRes tex pIndex invSw plt dragDrop
+  renderHUD (w,h) guiRes tex pIndex invSw plt dragDrop dbgInfo
   where
     pIndex =  palletIndex usrStat'
     tex = blockTexture wvHdl
 
 renderHUD :: (Int,Int) -> GuiResource -> TextureObject 
           -> Int -> Bool -> [BlockIDNum] -> DragDropState
+          -> DebugInfo
           -> IO ()
-renderHUD (w,h) guiRes blocktex pIndex invSw plt dragDrop = 
+renderHUD (w,h) guiRes blocktex pIndex invSw plt dragDrop dbgInfo = 
   preservingMatrix $ do
     setPerspective V2DMode w h
     depthMask $= Disabled
@@ -93,10 +94,17 @@ renderHUD (w,h) guiRes blocktex pIndex invSw plt dragDrop =
         $ zip [0.0,1.0 .. ] plt
 
     depthMask $= Enabled
+
+    -- for Debug
+    putTextLine font' (Just (1,1,1)) (Just 20)
+                  (20, 20) ("fps = " ++ (show $ fps dbgInfo)) 
+    putTextLine font' (Just (1,1,1)) (Just 20)
+                  (20, 40) (message dbgInfo) 
   where
     !rate = 2.5
     !(w',h') = (fromIntegral w, fromIntegral h)
     !widTex' = widgetsTexture guiRes
+    !font' = font guiRes
 
 renderInventory :: (Int,Int) -> GuiResource -> TextureObject
                 -> [BlockIDNum] -> DragDropState -> IO ()

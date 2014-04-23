@@ -222,17 +222,17 @@ finishGLFW exitflg _ = do
 
 -- ##################### Keybord ###########################
 data KeyStatusHdl = KeyStatusHdl
-  { fKey     :: IORef Int
-  , bKey     :: IORef Int 
-  , rKey     :: IORef Int
-  , lKey     :: IORef Int
-  , jmpKey   :: IORef Int
-  , tolKey   :: IORef Int
-  , escKey   :: IORef Int
-  , tabKey   :: IORef Int
-  , scrMdKey :: IORef Int
-  , dbg1     :: IORef Int
-  , dbg2     :: IORef Int
+  { fKey       :: IORef Int
+  , bKey       :: IORef Int 
+  , rKey       :: IORef Int
+  , lKey       :: IORef Int
+  , jmpKey     :: IORef Int
+  , tolKey     :: IORef Int
+  , escKey     :: IORef Int
+  , tabKey     :: IORef Int
+  , scrMdKey   :: IORef Int
+  , dbgModeKey :: IORef Int
+  , dbg2       :: IORef Int
   }
 
 getSystemKeyOpe :: GLFWHandle -> IO (Bool, Bool)
@@ -281,17 +281,17 @@ createKeyStatHdl :: IO KeyStatusHdl
 createKeyStatHdl = do
   sl <- replicateM 10 (newIORef (0 :: Int))
   return KeyStatusHdl
-      { fKey      = head sl 
-      , bKey      = sl!!1
-      , rKey      = sl!!2
-      , lKey      = sl!!3
-      , jmpKey    = sl!!4
-      , tolKey    = sl!!5
-      , escKey    = sl!!6
-      , tabKey    = sl!!7
-      , scrMdKey  = sl!!8
-      , dbg1      = sl!!9
-      , dbg2      = sl!!10
+      { fKey       = head sl 
+      , bKey       = sl!!1
+      , rKey       = sl!!2
+      , lKey       = sl!!3
+      , jmpKey     = sl!!4
+      , tolKey     = sl!!5
+      , escKey     = sl!!6
+      , tabKey     = sl!!7
+      , scrMdKey   = sl!!8
+      , dbgModeKey = sl!!9
+      , dbg2       = sl!!10
       } 
 
 keyPress :: KeyStatusHdl -> GLFW.KeyCallback
@@ -327,8 +327,8 @@ keyPress s _ GLFW.Key'Space  _ GLFW.KeyState'Released _
 --  = writeIORef (tabKey s) 1
 --keyPress s _ GLFW.Key'Tab    _ GLFW.KeyState'Released _
 --  = writeIORef (tabKey s) 1
-keyPress s _ GLFW.Key'Up     _ GLFW.KeyState'Released _
-  = writeIORef (dbg1 s) 1 
+keyPress s _ GLFW.Key'F3     _ GLFW.KeyState'Pressed _
+  = writeIORef (dbgModeKey s) 1 
 keyPress s _ GLFW.Key'Down   _ GLFW.KeyState'Released _
   = writeIORef (dbg2 s) 1 
 keyPress s _ GLFW.Key'F11    _ GLFW.KeyState'Released _

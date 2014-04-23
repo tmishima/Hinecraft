@@ -106,6 +106,7 @@ runHinecraft resouce@(glfwHdl,guiRes) = do
         then toggleFullScreenMode glfwHdl
         else do
           drawView resouce ntmstat' nplstat' runMode' tvHdl wvHdl
+                   (DebugInfo (1.0 / dt) "test")
           swapBuff glfwHdl
       if exitflg' || isQuit ntmstat'
         then return ()
@@ -402,9 +403,10 @@ guiProcess res (x,y,btn1,_,_) = (chkModeChg,chkExit)
 drawView :: Handls 
          -> TitleModeState -> PlayModeState -> RunMode
          -> TitleModeHdl -> WorldViewVHdl
+         -> DebugInfo
          -> IO ()
 drawView (glfwHdl, guiRes) tmstat plstat runMode'
-          tvHdl wvHdl = do
+          tvHdl wvHdl dbgInfo = do
   worldDispList <- getBlockVAOList wvHdl
   winSize <- getWindowSize glfwHdl
   updateDisplay $
@@ -414,7 +416,7 @@ drawView (glfwHdl, guiRes) tmstat plstat runMode'
       else  
         drawPlay winSize guiRes usrStat' worldDispList pos plt
                  (runMode' == InventoryMode) drgSta' wvHdl
-  swapBuff glfwHdl
+                 dbgInfo
   where
     usrStat' = usrStat plstat
     pos = curPos plstat

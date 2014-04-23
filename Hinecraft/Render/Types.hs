@@ -24,6 +24,7 @@ class WithShader a where
   getShaderProgram :: a -> ShaderProgram
   setCamParam :: a -> GU3.Camera GLfloat -> IO ()
   enableTexture :: a -> Bool -> IO ()
+  useShader :: a -> (a -> IO ()) -> IO ()
 
 data GuiResource = GuiResource
   { widgetsTexture :: TextureObject
@@ -36,3 +37,7 @@ data GuiResource = GuiResource
   , invDlgTbTexture :: TextureObject
   }
 
+data DebugInfo = DebugInfo
+  { fps :: Double
+  , message :: String
+  }

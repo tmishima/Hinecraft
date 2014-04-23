@@ -7,7 +7,6 @@ module Hinecraft.Render.WorldView
   ( WorldViewVHdl (blockTexture)
   , initWorldView
   , drawWorldView
-  , renderEnvCube
   , genChunkVAO
   , WorldVAOList
   , initWorldVAOList
@@ -110,42 +109,44 @@ initWorldVAOList wvhdl suflst = do
     ) suflst
   writeIORef (blkVAOList wvhdl) vao
 
-drawWorldView :: WorldViewVHdl -> (Int,Int)
+drawWorldView ::  WorldViewVHdl -> (Int,Int)
+              -> GuiResource
               -> WorldVAOList -> UserStatus
               -> Maybe (WorldIndex,Surface) -> IO ()
-drawWorldView wvhdl (w,h) vaos usrStat' pos = 
+drawWorldView wvhdl (w,h) res vaos usrStat' pos = 
   GU.withViewport (Position 0 0) (Size (fromIntegral w)
                   (fromIntegral h)) $ do
     -- Draw 3D cube
-    let prjMat = GU3.projectionMatrix (GU3.deg2rad 60)
-                   (fromIntegral w/ fromIntegral h) 0.1 (1000::GLfloat)
-    setProjViewMat pg prjMat
-    setCamParam pg -- $ GU3.dolly (V3 0 (-uy - 1.5) 0)
-                   $ GU3.pan ury $ GU3.tilt urx GU3.fpsCamera
+    useShader pg $ \ shaderPrg -> do
+    --currentProgram $= Just (GU.program $ getShaderProgram pg)
 
-    renderEnvCube pg cbVao skyTex 
+      setProjViewMat shaderPrg prjMat
+      setCamParam shaderPrg -- $ GU3.dolly (V3 0 (-uy - 1.5) 0)
+                               $ GU3.pan ury $ GU3.tilt urx GU3.fpsCamera
 
-    setCamParam pg $ GU3.pan ury $ GU3.tilt urx
-                   $ GU3.dolly (V3 ux (uy + 1.5) uz)
-                   GU3.fpsCamera
+      renderEnvCube shaderPrg cbVao skyTex 
+
+      setCamParam shaderPrg $ GU3.pan ury $ GU3.tilt urx
+                            $ GU3.dolly (V3 ux (uy + 1.5) uz)
+                            GU3.fpsCamera
      
-    forM_ vs (\ (_,vas) ->
-      mapM_ (\ v -> renderChunk pg v blkTex) vas)
+      forM_ vs (\ (_,vas) ->
+        mapM_ (\ v -> renderChunk shaderPrg v blkTex) vas)
 
     -- Cursol 選択された面を強調
-    case pos of 
-      Just ((px,py,pz),s) -> do
-        --lineWidth    $= 1.2
-        setProjViewMat spg prjMat
-        setCamParam spg 
-                $ GU3.pan ury $ GU3.tilt urx
-                $ GU3.dolly (V3 (ux - fromIntegral px)
-                                ((uy + 1.5) - fromIntegral py)
-                                (uz - fromIntegral pz))
-                GU3.fpsCamera
-        renderBlockCursol spg bCurVAO s
-      Nothing -> return ()
-
+    useShader spg $ \ shaderPrg -> do
+      case pos of 
+        Just ((px,py,pz),s) -> do
+          --lineWidth    $= 1.2
+          setProjViewMat shaderPrg prjMat
+          setCamParam shaderPrg
+                  $ GU3.pan ury $ GU3.tilt urx
+                  $ GU3.dolly (V3 (ux - fromIntegral px)
+                                  ((uy + 1.5) - fromIntegral py)
+                                  (uz - fromIntegral pz))
+                  GU3.fpsCamera
+          renderBlockCursol shaderPrg bCurVAO s
+        Nothing -> return ()
   where
     pg = basicShader wvhdl
     spg = simpleShader wvhdl
@@ -157,6 +158,9 @@ drawWorldView wvhdl (w,h) vaos usrStat' pos =
     d2f (a,b,c) = (realToFrac a, realToFrac b, realToFrac c)
     (ux,uy,uz) = d2f $ userPos usrStat'
     (urx,ury,_) = d2f $ userRot usrStat' :: (GLfloat,GLfloat,GLfloat)
+    font' = font res 
+    prjMat = GU3.projectionMatrix (GU3.deg2rad 60)
+               (fromIntegral w/ fromIntegral h) 0.1 (1000::GLfloat)
 
 genBlockCursol :: SimpleShaderProg -> IO GU.VAO
 genBlockCursol sh = makeSimpShdrVAO sh  vertLst vertClrLst texCdLst
@@ -192,15 +196,11 @@ renderChunk :: BasicShaderProg -> Maybe (Int,GU.VAO)
 renderChunk _ Nothing _ = return ()
 renderChunk _ (Just (0,_)) _ = return ()
 renderChunk sh (Just (len,vao)) tex = do
-  currentProgram $= Just (GU.program shprg')
-  --GL.clientState GL.VertexArray $= GL.Enabled
   setLightMode sh 1
   setColorBlendMode sh 0
   enableTexture sh True
   GU.withVAO vao $ 
     GU.withTextures2D [tex] $ drawArrays Quads 0 $ fromIntegral len * 4
-
-  currentProgram $= Nothing
   where 
     !shprg' = getShaderProgram sh
 
@@ -299,7 +299,7 @@ genElem ((x,y,z),bid,fs) =
 
 renderEnvCube :: BasicShaderProg -> GU.VAO -> TextureObject -> IO ()
 renderEnvCube sh vao tex = do 
-  currentProgram $= Just (GU.program shprg')
+  --currentProgram $= Just (GU.program shprg')
   --GL.clientState GL.VertexArray $= GL.Enabled
   setLightMode sh 0
   setColorBlendMode sh 1
@@ -307,7 +307,7 @@ renderEnvCube sh vao tex = do
   GU.withVAO vao $ 
     GU.withTextures2D [tex] $ drawArrays Quads 0 (4 * 6) 
 
-  currentProgram $= Nothing
+  --currentProgram $= Nothing
   where 
     !shprg' = getShaderProgram sh
 

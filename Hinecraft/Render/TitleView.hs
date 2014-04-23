@@ -77,43 +77,47 @@ drawTitle :: (Int,Int) -> GuiResource -> TitleModeState
 drawTitle (w,h) res stat tvHdl =
   GU.withViewport (Position 0 0) (Size (fromIntegral w) (fromIntegral h)) $ do
     -- Draw 3D cube
-    let prjMat = GU3.projectionMatrix (GU3.deg2rad 90) (fromIntegral w/ fromIntegral h) 0.1 (10::GLfloat)
-    setProjViewMat sh prjMat
-    setCamParam sh $ GU3.pan (realToFrac $ rotW stat) $ GU3.tilt (10::GLfloat) GU3.fpsCamera
+    useShader sh $ \ shaderPrg -> do
+
+      setProjViewMat shaderPrg prjMat
+      setCamParam shaderPrg $ GU3.pan (realToFrac $ rotW stat)
+                            $ GU3.tilt (10::GLfloat) GU3.fpsCamera
     
-    renderTitleCube sh (cubeVAO tvHdl) bkgTex 
+      renderTitleCube shaderPrg (cubeVAO tvHdl) bkgTex 
 
+    useShader sh $ \ shaderPrg -> do
      -- Draw 2D Title
-    depthMask $= Disabled
-    matrixMode $= Projection
-    loadIdentity
-    ortho2D 0 (realToFrac w) 0 (realToFrac h)
-    matrixMode $= Modelview 0
-    loadIdentity
+      depthMask $= Disabled
+      matrixMode $= Projection
+      loadIdentity
+      ortho2D 0 (realToFrac w) 0 (realToFrac h)
+      matrixMode $= Modelview 0
+      loadIdentity
 
-    setProjViewMat sh $ orthoProjMatrix (fromIntegral w) (fromIntegral h)
-    setCamParam sh (GU2.camera2D :: GU2.Camera GLfloat)
+      setProjViewMat shaderPrg $ orthoProjMatrix
+                               (fromIntegral w) (fromIntegral h)
+      setCamParam shaderPrg (GU2.camera2D :: GU2.Camera GLfloat)
 
-    -- White
-    renderPlate sh (whitePlatVAO tvHdl) Nothing
+      -- White
+      renderPlate shaderPrg (whitePlatVAO tvHdl) Nothing
 
-    -- Botton 
-    let si = slcBtnTexCrd $ isModeChgBtnEntr stat
-    renderPlate' sh (startBtnVAO tvHdl) (Just widTex) si
-    putTextLine font' (Just (1,1,1)) (Just 30)
+      -- Botton 
+      let si = slcBtnTexCrd $ isModeChgBtnEntr stat
+      renderPlate' shaderPrg (startBtnVAO tvHdl) (Just widTex) si
+      putTextLine font' (Just (1,1,1)) (Just 30)
                   (590, yPlybtnPos + 20) "Single Player"
     --
-    let qi = slcBtnTexCrd $ isExitBtnEntr stat
-    renderPlate' sh (quitBtnVAO tvHdl) (Just widTex) qi
-    putTextLine font' (Just (1,1,1)) (Just 30)
+      let qi = slcBtnTexCrd $ isExitBtnEntr stat
+      renderPlate' shaderPrg (quitBtnVAO tvHdl) (Just widTex) qi
+      putTextLine font' (Just (1,1,1)) (Just 30)
                   (620 ,yExtbtnPos + 20) "Quit game"
 
     -- Title 
-    mapM_ (\ v -> 
-       renderPlate sh v $ Just $ envTitleTex tvHdl)
-       (titlePlatVAO tvHdl) 
+      mapM_ (\ v -> 
+        renderPlate shaderPrg v $ Just $ envTitleTex tvHdl)
+        (titlePlatVAO tvHdl) 
    
-    putTextLine font' (Just (1,1,1)) (Just 20) (10,10)
+      putTextLine font' (Just (1,1,1)) (Just 20) (10,10)
                       $ "Hinecraft " ++ version
 
     depthMask $= Enabled
@@ -126,6 +130,8 @@ drawTitle (w,h) res stat tvHdl =
     slcBtnTexCrd sw = if sw then 4 else 0
     (_,yPlybtnPos) = widgetPlayBtnPos res
     (_,yExtbtnPos) = widgetExitBtnPos res
+    prjMat = GU3.projectionMatrix (GU3.deg2rad 90)
+                 (fromIntegral w/ fromIntegral h) 0.1 (10::GLfloat)
 
 -- For 2D
 renderPlate :: SimpleShaderProg -> GU.VAO -> Maybe TextureObject -> IO ()
