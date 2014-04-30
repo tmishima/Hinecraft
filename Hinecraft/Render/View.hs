@@ -97,7 +97,7 @@ renderHUD (w,h) guiRes blocktex pIndex invSw plt dragDrop dbgInfo =
 
     -- for Debug
     putTextLine font' (Just (1,1,1)) (Just 20)
-                  (20, 20) ("fps = " ++ (show $ fps dbgInfo)) 
+                  (20, 20) ("fps = " ++ (take 5 $ show $ fps dbgInfo)) 
     putTextLine font' (Just (1,1,1)) (Just 20)
                   (20, 40) (message dbgInfo) 
   where

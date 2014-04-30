@@ -7,6 +7,8 @@ module Hinecraft.Render.TitleView
   ( TitleModeHdl
   , initTitleModeView
   , drawTitle
+  , InitModeState(..)
+  , drawInit
   )
   where
 
@@ -132,6 +134,38 @@ drawTitle (w,h) res stat tvHdl =
     (_,yExtbtnPos) = widgetExitBtnPos res
     prjMat = GU3.projectionMatrix (GU3.deg2rad 90)
                  (fromIntegral w/ fromIntegral h) 0.1 (10::GLfloat)
+
+data InitModeState = InitModeState Double
+  deriving (Eq,Show)
+
+drawInit :: (Int,Int) -> GuiResource -> InitModeState
+          -> TitleModeHdl
+          -> IO ()
+drawInit (w,h) res istat tvHdl =
+  GU.withViewport (Position 0 0) (Size (fromIntegral w) (fromIntegral h)) $ do
+    useShader sh $ \ shaderPrg -> do
+     -- Draw 2D Title
+      depthMask $= Disabled
+      matrixMode $= Projection
+      loadIdentity
+      ortho2D 0 (realToFrac w) 0 (realToFrac h)
+      matrixMode $= Modelview 0
+      loadIdentity
+
+      setProjViewMat shaderPrg $ orthoProjMatrix
+                               (fromIntegral w) (fromIntegral h)
+      setCamParam shaderPrg (GU2.camera2D :: GU2.Camera GLfloat)
+
+      -- White
+      renderPlate shaderPrg (whitePlatVAO tvHdl) Nothing
+      putTextLine font' (Just (1,1,1)) (Just 30)
+                        (fromIntegral w / 2 - 200 ,fromIntegral h / 2)
+                      $ "Loading ......... "
+  where
+    bkgTex = envCubeTex tvHdl
+    widTex = widgetsTexture res
+    sh = shader tvHdl
+    font' = font res
 
 -- For 2D
 renderPlate :: SimpleShaderProg -> GU.VAO -> Maybe TextureObject -> IO ()

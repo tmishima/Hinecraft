@@ -41,7 +41,7 @@ import Hinecraft.GUI.GLFWWindow
 main :: IO ()
 main = bracket initHinecraft exitHinecraft runHinecraft
 
-data RunMode = TitleMode | PlayMode | InventoryMode
+data RunMode = TitleMode | PlayMode | InventoryMode | InitMode
   deriving (Eq,Show)
 
 type Handls = (GLFWHandle, GuiResource)
@@ -76,10 +76,9 @@ runHinecraft resouce@(glfwHdl,guiRes) = do
   !tvHdl <- initTitleModeView home guiRes
   !wvHdl <- initWorldView home
   !dtHdl <- initData home
-  initWorldVAOList wvHdl $ getAllSurfaceData dtHdl
   _ <- getDeltTime glfwHdl
   mainLoop (TitleModeState (0::Double) False False False)
-           plstat TitleMode (dtHdl,tvHdl,wvHdl) 
+           plstat TitleMode (dtHdl,tvHdl,wvHdl) dbgInfo
   exitData dtHdl
   where
     !plstat = PlayModeState
@@ -94,7 +93,15 @@ runHinecraft resouce@(glfwHdl,guiRes) = do
         , curPos = Nothing
         , pallet = replicate 9 airBlockID
         }
-    mainLoop tmstat' plstat' runMode (dtHdl,tvHdl,wvHdl) = do
+    dbgInfo = DebugInfo 0 "debug message"
+    showUsrStat ustat = unwords ["pos = ",prtStr x, prtStr y, prtStr z,
+                                 "rot = ",prtStr r, prtStr s]
+      where
+        prtStr v | abs v < 0.1 = "0.0"
+                 | otherwise = (take 5) $ show v
+        (x,y,z) = userPos $ usrStat ustat
+        (r,s,_) = userRot $ usrStat ustat
+    mainLoop tmstat' plstat' runMode (dtHdl,tvHdl,wvHdl) dbgInfo' = do
       pollGLFW
       --threadDelay 10000
       dt <- getDeltTime glfwHdl
@@ -102,15 +109,19 @@ runHinecraft resouce@(glfwHdl,guiRes) = do
       (ntmstat',nplstat',runMode',ndtHdl') <- mainProcess
                    resouce tmstat' plstat' dtHdl runMode wvHdl dt
       tglWin <- getScreenModeKeyOpe glfwHdl
+      let !newfps = ((fps dbgInfo') * 9.0 / 10.0) + ((1.0 / dt) / 10)
+          !dmsg = showUsrStat nplstat'
+          !newDbgInfo = DebugInfo newfps dmsg 
       if tglWin
         then toggleFullScreenMode glfwHdl
         else do
           drawView resouce ntmstat' nplstat' runMode' tvHdl wvHdl
-                   (DebugInfo (1.0 / dt) "test")
+                   newDbgInfo         
           swapBuff glfwHdl
       if exitflg' || isQuit ntmstat'
         then return ()
-        else mainLoop ntmstat' nplstat' runMode' (ndtHdl',tvHdl,wvHdl)
+        else mainLoop ntmstat' nplstat' runMode'
+                      (ndtHdl',tvHdl,wvHdl) newDbgInfo
 
 mainProcess :: Handls
             -> TitleModeState -> PlayModeState -> DataHdl
@@ -133,6 +144,14 @@ mainProcess (glfwHdl, guiRes) tmstat plstat dtHdl runMode wvHdl dt = do
             , isQuit = exflg'
             }
       return $! (md,plstat,ntstat,dtHdl)
+    InitMode -> do
+      if (isEmpty dtHdl)
+        then return $! (PlayMode,plstat,tmstat,dtHdl)
+        else do
+          dtHdl' <- loadData dtHdl
+          initWorldVAOList wvHdl $ getAllSurfaceData dtHdl'
+          md <- return PlayMode
+          return $! (md,plstat,tmstat,dtHdl')
     PlayMode -> do
       vm <- getCursorMotion glfwHdl
       sm <- getScrollMotion glfwHdl 
@@ -187,7 +206,6 @@ mainProcess (glfwHdl, guiRes) tmstat plstat dtHdl runMode wvHdl dt = do
       then Mode3D
       else Mode2D
   return $! (newTmstat,newPmstat,newMode,newHdl')
-
 
 invMouseOpe :: (Int,Int) -> (Double,Double,Bool,Bool,Bool) -> DragDropMode
             -> [BlockIDNum] -> (DragDropState, DragDropMode, [BlockIDNum])
@@ -368,9 +386,9 @@ playerView dt (frxo,fryo,frzo) (frx,fry,frz) = (rx, ry, rz)
     rx = bounded' 90 (-90) $ realToFrac frxo + frx*dt
     rz = bounded' 90 (-90) $ realToFrac frzo + frz*dt
     try = realToFrac fryo + fry*dt
-    ry | try > 360    = try - 360
-       | try < (-360) = try + 360
-       | otherwise    = try 
+    ry | try >= 180 = -360 + try
+       | try < -180 =  360 + try
+       | otherwise  = try 
 
 playerMotion :: Double -> Double -> Vel' -> Pos' 
 playerMotion dt r0 (v,u,w) = (dx,dy,dz)
@@ -381,7 +399,6 @@ playerMotion dt r0 (v,u,w) = (dx,dy,dz)
     phy r = (pi * r) / 180.0
     nextz (df,ds,r) = (df * cos (phy r)) - (ds * sin (phy r))
     nextx (df,ds,r) = (ds * cos (phy r)) + (df * sin (phy r))
-
 
 guiProcess :: GuiResource -> (Double,Double,Bool,Bool,Bool)
            -> ((RunMode,Bool),(Bool,Bool))
@@ -395,7 +412,7 @@ guiProcess res (x,y,btn1,_,_) = (chkModeChg,chkExit)
     chkEntrBtn (xo,yo) (w,h) =
        xo < x && x < (xo + w) && yo < y && y < (yo + h) 
     isPlyBtnEntr = chkEntrBtn (f2d plybtnPosOrgn) (f2d plybtnSize)
-    chkModeChg = ( if isPlyBtnEntr && btn1 then PlayMode else TitleMode 
+    chkModeChg = ( if isPlyBtnEntr && btn1 then InitMode else TitleMode 
                  , isPlyBtnEntr)
     isExtBtnEntr = chkEntrBtn (f2d extbtnPosOrgn) (f2d extbtnSize)
     chkExit = ( isExtBtnEntr && btn1 , isExtBtnEntr) 
@@ -410,10 +427,12 @@ drawView (glfwHdl, guiRes) tmstat plstat runMode'
   worldDispList <- getBlockVAOList wvHdl
   winSize <- getWindowSize glfwHdl
   updateDisplay $
-    if runMode' == TitleMode
-      then -- 2D
+    case runMode' of
+      TitleMode -> -- 2D
         drawTitle winSize guiRes tmstat tvHdl
-      else  
+      InitMode ->
+        drawInit winSize guiRes (InitModeState 10) tvHdl 
+      _ -> -- 3D
         drawPlay winSize guiRes usrStat' worldDispList pos plt
                  (runMode' == InventoryMode) drgSta' wvHdl
                  dbgInfo

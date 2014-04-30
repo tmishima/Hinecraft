@@ -19,6 +19,8 @@ module Hinecraft.Data
   , DataHdl
   , initData
   , exitData
+  , loadData
+  , isEmpty
   , getAllSurfaceData
   ) where
 
@@ -43,7 +45,7 @@ import Debug.Trace as Dbg
 
 data DataHdl = DataHdl
   { dbHdl :: DBHandle
-  , wldDat :: (WorldData, SurfaceList)
+  , wldDat :: Maybe (WorldData, SurfaceList)
   }
 
 type SurfaceList = M.Map (Int,Int) [SurfacePos]
@@ -67,18 +69,32 @@ test2 = DVS'.replicate 3 (0,Te [] 4.0)
 initData :: FilePath -> IO DataHdl
 initData home = do
   !dbHdl' <- initDB home
-  !wld <- loadWorldData dbHdl'
-  !sfl <- loadSurfaceList wld
   return DataHdl
     { dbHdl = dbHdl'
-    , wldDat = (wld,sfl)
+    , wldDat = Nothing
      }
 
 exitData :: DataHdl -> IO ()
 exitData = exitDB . dbHdl
 
+loadData :: DataHdl -> IO DataHdl
+loadData dhdl = do
+  !wld <- loadWorldData dbHdl'
+  !sfl <- loadSurfaceList wld
+  return DataHdl
+    { dbHdl = dbHdl'
+    , wldDat = Just (wld,sfl)
+     }
+  where
+    dbHdl' = dbHdl dhdl
+
+isEmpty :: DataHdl -> Bool
+isEmpty dhdl = isJust $ wldDat dhdl
+
 getAllSurfaceData :: DataHdl -> [((Int, Int), [SurfacePos])]
-getAllSurfaceData = M.toList . snd . wldDat 
+getAllSurfaceData dhdl = case wldDat dhdl of
+  Just (_,suf) -> M.toList suf  
+  Nothing -> []
 
 loadWorldData :: DBHandle -> IO WorldData
 loadWorldData dbHdl' = do
@@ -136,7 +152,10 @@ gIdx2lIdx (x,y,z) = (bsize ^ (2::Int)) * ly + bsize * lz + lx
 calcCursorPos :: DataHdl ->  UserStatus
               -> Maybe (WorldIndex,Surface)
 calcCursorPos dtHdl usr = calcCursorPos' suf usr
-  where suf = (snd . wldDat) dtHdl
+  where
+    suf = case wldDat dtHdl of
+            Just (_,s) -> s
+            Nothing -> M.empty
 
 calcCursorPos' :: SurfaceList -> UserStatus
               -> Maybe (WorldIndex,Surface)
@@ -153,9 +172,19 @@ calcCursorPos' sufList usr = if null res
     !f'' = filter chkArea (concat f)
     !res = filter chkJustAndFront
             $ map (tomasChk pos rot . (\ (a,_,b) -> (a,b))) f''
-    chkArea ((sx,sy,sz),_,_) = sqrt ( (fromIntegral sx - ux) ^ (2::Int)
-                                  + (fromIntegral sy - uy) ^ (2::Int)
-                                  + (fromIntegral sz - uz) ^ (2::Int)) < 8
+    chkArea ((sx,sy,sz),_,_) = dl < 8 && abs dRotY < 60
+      where
+        (_,uRotY,_) = userRot usr
+        (dsx,dsy,dsz) = ( fromIntegral sx - ux
+                        , fromIntegral sy - uy
+                        , fromIntegral sz - uz
+                        )
+        dl = sqrt ( dsx ^ (2::Int) + dsy ^ (2::Int) + dsz ^ (2::Int))
+        dl' = sqrt ( dsx ^ (2::Int) + dsz ^ (2::Int))
+        (ex,ez) = ( cos $ pi * (uRotY - 270) / 180.0
+                  , sin $ pi * (uRotY - 90) / 180.0)
+        dRotY = (180 / pi) * (acos $ (ex * dsx + ez * dsz) / dl')
+
     chkJustAndFront (_,v) = case v of
                               Just (d,_) -> d > 0
                               Nothing -> False
@@ -214,7 +243,9 @@ setSurfaceList sufList ((i,j),bNo) sfs = M.update fn (i,j) sufList
 
 getSurfaceList :: DataHdl -> ((Int,Int),Int) -> Maybe SurfacePos
 getSurfaceList dtHdl pos = getSurfaceList' suf pos
-  where suf = (snd . wldDat) dtHdl
+  where suf = case wldDat dtHdl of
+                Just (_,s) -> s
+                Nothing -> M.empty
 
 getSurfaceList' :: SurfaceList -> ((Int,Int),Int) -> Maybe SurfacePos
 getSurfaceList' sufList ((i,j),bNo) =
@@ -332,7 +363,7 @@ chkSuf'' vec (tag1,tag2) (itr1,itr2) clbk (x,y,z) = concat
 
 chunkArea :: [(Int,Int)]
 chunkArea = [ (x,z) | x <- [-1,0,1], z <- [-1,0,1] ]
-        --  [ (x,z) | x <- [-4,-3 .. 4], z <- [-4,-3 .. 4] ]
+         -- [ (x,z) | x <- [-4,-3 .. 4], z <- [-4,-3 .. 4] ]
         
 readSurfData :: (Int,Int) -> FilePath -> IO [SurfacePos]
 readSurfData (i,j) path = do
@@ -348,14 +379,17 @@ setBlockID dtHdl pos bid = do
   if bid == airBlockID 
     then delBlockInDB (dbHdl dtHdl) pos 
     else setBlockToDB (dbHdl dtHdl) pos bid
-  return DataHdl
+  return $! DataHdl
     { dbHdl = dbHdl dtHdl
-    , wldDat = (newWld, newSuf)
+    , wldDat = case wldDat dtHdl of
+                 Just (wld,sufList) -> Just $ update wld sufList
+                 Nothing -> Nothing
     }
   where
-    (wld,sufList) = wldDat dtHdl
-    newWld = setBlockID' wld pos bid  
-    newSuf = updateSufList newWld sufList pos
+    update wld sufList = (newWld,newSuf)
+      where
+        newWld = setBlockID' wld pos bid  
+        newSuf = updateSufList newWld sufList pos
 
 updateSufList :: WorldData -> SurfaceList -> WorldIndex -> SurfaceList
 updateSufList wld sufList pos = foldr (\ (i,b) sfl
@@ -384,8 +418,9 @@ setBlockIDfromChunk c (x,y,z) bid = Just $ foldr rep [] $ zip [0 .. ] c
     idx = (bsize ^ (2::Int)) * ly + bsize * lz + lx
 
 getBlockID :: DataHdl -> WorldIndex -> Maybe BlockIDNum
-getBlockID hdl idx = getBlockID' wld idx
-  where wld = (fst . wldDat) hdl
+getBlockID hdl idx =  case wldDat hdl of
+                Just (w,_) -> getBlockID' w idx
+                Nothing -> Nothing
 
 getBlockID' :: WorldData -> WorldIndex -> Maybe BlockIDNum
 getBlockID' wld (x,y,z)  
