@@ -69,7 +69,7 @@ test2 = DVS'.replicate 3 (0,Te [] 4.0)
 initData :: FilePath -> IO DataHdl
 initData home = do
   !dbHdl' <- initDB home
-  return DataHdl
+  return $! DataHdl
     { dbHdl = dbHdl'
     , wldDat = Nothing
      }
@@ -81,7 +81,7 @@ loadData :: DataHdl -> IO DataHdl
 loadData dhdl = do
   !wld <- loadWorldData dbHdl'
   !sfl <- loadSurfaceList wld
-  return DataHdl
+  return $! DataHdl
     { dbHdl = dbHdl'
     , wldDat = Just (wld,sfl)
      }
@@ -188,25 +188,25 @@ calcCursorPos' sufList usr = if null res
     chkJustAndFront (_,v) = case v of
                               Just (d,_) -> d > 0
                               Nothing -> False
-    cblkNo = div (round' uy) (blockSize chunkParam)
+    !cblkNo = div (round' uy) (blockSize chunkParam)
     bplst | cblkNo == 0 = [cblkNo, cblkNo + 1]
           | cblkNo > (blockNum chunkParam) - 2 = [cblkNo - 1, cblkNo]
           | otherwise = [cblkNo - 1, cblkNo, cblkNo + 1]
     (ux,uy,uz) = userPos usr
-    rot = (\ (a,b,c) -> (realToFrac a, realToFrac b, realToFrac c)) $ userRot usr
-    pos = (\ (a,b,c) -> (realToFrac a, realToFrac b + 1.5, realToFrac c)) $ userPos usr
+    !rot = (\ (a,b,c) -> (realToFrac a, realToFrac b, realToFrac c)) $ userRot usr
+    !pos = (\ (a,b,c) -> (realToFrac a, realToFrac b + 1.5, realToFrac c)) $ userPos usr
 
 tomasChk :: Pos' -> Rot' -> (WorldIndex,[Surface])
          -> (WorldIndex,Maybe (Double,Surface)) 
 tomasChk pos@(px,py,pz) rot (ep,fs) = (ep, choise faceList)
   where
-    dir =(\ (x,y,z) -> (x - px, y - py, z - pz))
+    !dir =(\ (x,y,z) -> (x - px, y - py, z - pz))
           $ calcPointer pos rot 1
     choise lst = if null lst 
                    then Nothing
                    else Just $ (\ (Just a,s) -> (a,s))
                                      (minimum $ map swap lst)
-    faceList = filter (\ (_,v) -> isJust v) $ zip fs $
+    !faceList = filter (\ (_,v) -> isJust v) $ zip fs $
                     map (chk . genNodeList (i2d ep)) fs
     chk ftri = if null l then Nothing else minimum l
       where !l = filter isJust $ map (\ (n1,n2,n3) ->
@@ -255,7 +255,7 @@ getSurface :: WorldData -> ((Int,Int),Int) -> Maybe SurfacePos
 getSurface wld (ij,bkNo) =
   (\ c -> getSurface' wld c (ij,bkNo)) <$> (getChunk' clist ij)
   where
-    clist = chunkList wld
+    !clist = chunkList wld
 
 --type SurfacePos = [(WorldIndex,BlockIDNum,[(Surface,Bright)])]
 getSurface' :: WorldData -> Chunk -> ((Int,Int),Int) -> SurfacePos 
@@ -278,43 +278,43 @@ pos2i (x,y,z) | x < 0 || y < 0 || z < 0 = -1
               | x > bsize || y > bsize || z > bsize = -1
               | otherwise =  y * (16 * 16) + z * 16 + x
   where
-    bsize = blockSize chunkParam - 1
+    !bsize = blockSize chunkParam - 1
 
 i2pos :: WorldIndex -> Int -> WorldIndex
 i2pos (ox,oy,oz) i = (x + ox, y + oy, z + oz)
   where
-    bsize = blockSize chunkParam
-    (y, t1) = i `divMod` (bsize * bsize)
-    (z, x ) = t1 `divMod` bsize
+    !bsize = blockSize chunkParam
+    !(y, t1) = i `divMod` (bsize * bsize)
+    !(z, x ) = t1 `divMod` bsize
 
 chkSuf' :: DVS.Vector BlockIDNum
         -> (WorldIndex -> Bool) -> [((Int, Int, Int),BlockIDNum,Surface)]
 chkSuf' chunk clbk = concatMap (\ p -> concat [fb p, rl p, tb p])
                        createIdx
   where
-    fb = chkSuf'' chunk (SBack,SFront)
+    !fb = chkSuf'' chunk (SBack,SFront)
            (\ (x,y,z) -> (x,y,z+1),\ (x,y,z) -> (x,y,z-1)) clbk 
-    rl = chkSuf'' chunk (SRight,SLeft)
+    !rl = chkSuf'' chunk (SRight,SLeft)
            (\ (x,y,z) -> (x+1,y,z),\ (x,y,z) -> (x-1,y,z)) clbk
-    tb = chkSuf'' chunk (STop,SBottom)
+    !tb = chkSuf'' chunk (STop,SBottom)
            (\ (x,y,z) -> (x,y+1,z),\ (x,y,z) -> (x,y-1,z)) clbk
 
 createIdx :: [(Int,Int,Int)]
 createIdx = evv ++ odv ++ nub (sb' ++ st' ++ sf' ++ sa' ++ sr' ++ sl')
   where
-    bsize = blockSize chunkParam - 1
-    ev = [2 , 4 .. bsize - 1]
-    od = [1 , 3 .. bsize - 1]
-    evp = [(x,z) | x <- ev, z <- ev] ++ [(x,z) | x <- od, z <- od]
-    odp = [(x,z) | x <- ev, z <- od] ++ [(x,z) | x <- od, z <- ev]
-    evv = [(x,y,z) | (x,z) <- evp , y <- ev]
-    odv = [(x,y,z) | (x,z) <- odp , y <- od]
-    sb' = [ (x,0,z) | x <- [0 .. bsize], z <- [0 .. bsize]]
-    st' = [ (x,bsize,z) | x <- [0 .. bsize], z <- [0 .. bsize]]
-    sf' = [ (x,y,bsize) | x <- [0 .. bsize], y <- [0 .. bsize]]
-    sa' = [ (x,y,0) | x <- [0 .. bsize], y <- [0 .. bsize]]
-    sr' = [ (bsize,y,z) | z <- [0 .. bsize], y <- [0 .. bsize]]
-    sl' = [ (0,y,z) | z <- [0 .. bsize], y <- [0 .. bsize]]
+    !bsize = blockSize chunkParam - 1
+    !ev = [2 , 4 .. bsize - 1]
+    !od = [1 , 3 .. bsize - 1]
+    !evp = [(x,z) | x <- ev, z <- ev] ++ [(x,z) | x <- od, z <- od]
+    !odp = [(x,z) | x <- ev, z <- od] ++ [(x,z) | x <- od, z <- ev]
+    !evv = [(x,y,z) | (x,z) <- evp , y <- ev]
+    !odv = [(x,y,z) | (x,z) <- odp , y <- od]
+    !sb' = [ (x,0,z) | x <- [0 .. bsize], z <- [0 .. bsize]]
+    !st' = [ (x,bsize,z) | x <- [0 .. bsize], z <- [0 .. bsize]]
+    !sf' = [ (x,y,bsize) | x <- [0 .. bsize], y <- [0 .. bsize]]
+    !sa' = [ (x,y,0) | x <- [0 .. bsize], y <- [0 .. bsize]]
+    !sr' = [ (bsize,y,z) | z <- [0 .. bsize], y <- [0 .. bsize]]
+    !sl' = [ (0,y,z) | z <- [0 .. bsize], y <- [0 .. bsize]]
 
 chkSuf'' :: DVS.Vector BlockIDNum -> (Surface, Surface)
      -> ((Int, Int, Int) -> WorldIndex, (Int, Int, Int) -> WorldIndex)
@@ -351,14 +351,14 @@ chkSuf'' vec (tag1,tag2) (itr1,itr2) clbk (x,y,z) = concat
                          else []
                    ]
   where
-    ownfill = (\ v -> (v,v == airBlockID)) (vec DVS.! (pos2i (x,y,z)))
-    fill1 = (\ v -> (v,v == airBlockID || alpha (getBlockInfo v)))
+    !ownfill = (\ v -> (v,v == airBlockID)) (vec DVS.! (pos2i (x,y,z)))
+    !fill1 = (\ v -> (v,v == airBlockID || alpha (getBlockInfo v)))
                <$> (vec DVS.!? ((pos2i . itr1) (x,y,z))) 
-    fill1' = (\ v -> (v,v == airBlockID))
+    !fill1' = (\ v -> (v,v == airBlockID))
                <$> (vec DVS.!? ((pos2i . itr1) (x,y,z))) 
-    fill2 = (\ v -> (v,v == airBlockID || alpha (getBlockInfo v)))
+    !fill2 = (\ v -> (v,v == airBlockID || alpha (getBlockInfo v)))
                <$> (vec DVS.!? ((pos2i . itr2) (x,y,z))) 
-    fill2' = (\ v -> (v,v == airBlockID))
+    !fill2' = (\ v -> (v,v == airBlockID))
                <$> (vec DVS.!? ((pos2i . itr2) (x,y,z))) 
 
 chunkArea :: [(Int,Int)]
@@ -372,7 +372,7 @@ readSurfData (i,j) path = do
     then read <$> readFile (dpath ++ "/suf") 
     else return []
   where
-    dpath = path ++ "/cuk" ++ show i ++ "_" ++ show j
+    !dpath = path ++ "/cuk" ++ show i ++ "_" ++ show j
 
 setBlockID :: DataHdl -> WorldIndex -> BlockIDNum -> IO DataHdl
 setBlockID dtHdl pos bid = do
@@ -388,8 +388,8 @@ setBlockID dtHdl pos bid = do
   where
     update wld sufList = (newWld,newSuf)
       where
-        newWld = setBlockID' wld pos bid  
-        newSuf = updateSufList newWld sufList pos
+        !newWld = setBlockID' wld pos bid  
+        !newSuf = updateSufList newWld sufList pos
 
 updateSufList :: WorldData -> SurfaceList -> WorldIndex -> SurfaceList
 updateSufList wld sufList pos = foldr (\ (i,b) sfl
@@ -402,9 +402,9 @@ setBlockID' :: WorldData -> WorldIndex -> BlockIDNum -> WorldData
 setBlockID' wld (x,y,z) bid = WorldData
   $ M.update (\ c -> setBlockIDfromChunk c (x,y,z) bid) key clist
   where
-    clist = chunkList wld
-    key = ( x `div` bsize, z `div` bsize)
-    bsize = blockSize chunkParam
+    !clist = chunkList wld
+    !key = ( x `div` bsize, z `div` bsize)
+    !bsize = blockSize chunkParam
 
 setBlockIDfromChunk :: Chunk -> WorldIndex -> BlockIDNum -> Maybe Chunk
 setBlockIDfromChunk c (x,y,z) bid = Just $ foldr rep [] $ zip [0 .. ] c
@@ -412,10 +412,10 @@ setBlockIDfromChunk c (x,y,z) bid = Just $ foldr rep [] $ zip [0 .. ] c
     rep (i,d) ds = if i == div y bsize
       then (d DVS.// [(idx,bid)]):ds
       else d:ds 
-    bsize = blockSize chunkParam
-    (lx,ly,lz) = (x - ox * bsize,y - bsize * div y bsize,z - oz * bsize)
-    (ox,oz) = ( x `div` bsize, z `div` bsize) 
-    idx = (bsize ^ (2::Int)) * ly + bsize * lz + lx
+    !bsize = blockSize chunkParam
+    !(lx,ly,lz) = (x - ox * bsize,y - bsize * div y bsize,z - oz * bsize)
+    !(ox,oz) = ( x `div` bsize, z `div` bsize) 
+    !idx = (bsize ^ (2::Int)) * ly + bsize * lz + lx
 
 getBlockID :: DataHdl -> WorldIndex -> Maybe BlockIDNum
 getBlockID hdl idx =  case wldDat hdl of
@@ -429,12 +429,12 @@ getBlockID' wld (x,y,z)
        Nothing -> Nothing
   | otherwise = Nothing
   where
-    (ymin,ymax) = (0,blockSize chunkParam * blockNum chunkParam)
+    !(ymin,ymax) = (0,blockSize chunkParam * blockNum chunkParam)
     !bsize = blockSize chunkParam
     !(ox,oy,oz) = (div x bsize,div y bsize,div z bsize) 
     !chmap = chunkList wld
-    (lx,ly,lz) = (x - ox * bsize, y - oy * bsize, z - oz * bsize)
-    idx = (bsize * bsize) * ly + bsize * lz + lx
+    !(lx,ly,lz) = (x - ox * bsize, y - oy * bsize, z - oz * bsize)
+    !idx = (bsize * bsize) * ly + bsize * lz + lx
 
 -- |
 --
@@ -449,8 +449,8 @@ calcReGenArea (x,y,z) = if null blknos
     !blknos | mod y bsize == 0 && bNo > 0 = [bNo - 1]
             | mod y bsize == bsize - 1 && bNo < blkNum - 1 = [bNo + 1]
             | otherwise = []
-    org = (x `div` bsize, z `div` bsize)
-    chkIdx = nub $ map (\ (x',z') -> (x' `div` bsize, z' `div` bsize))
+    !org = (x `div` bsize, z `div` bsize)
+    !chkIdx = nub $ map (\ (x',z') -> (x' `div` bsize, z' `div` bsize))
                [(x,z),(x+1,z),(x-1,z),(x,z+1),(x,z-1)]
 
 genChunk :: Chunk
