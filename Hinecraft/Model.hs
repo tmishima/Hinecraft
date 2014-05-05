@@ -164,6 +164,14 @@ blockCatalogData = zip [0 .. ]
              , bright = 0
              , shape = Cube
              }
+  , BlockInfo -- Grass
+             { textureIndex = [(12,0),(12,0)]
+             , alpha = True
+             , bcolor = replicate 2 (0.5,0.5,0.5)
+             , bright = 0
+             , shape = Cross
+             }
+
   ]
   -- | PressurePlates
   -- | Chest

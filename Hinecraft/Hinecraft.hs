@@ -55,10 +55,10 @@ initHinecraft = do
     ("-f":_) -> return True 
     _ -> return False
 
-  glfwHdl <- initGLFW winSize fullsw
+  !glfwHdl <- initGLFW winSize fullsw
 
   initGL
-  guiRes <- loadGuiResource home winSize
+  !guiRes <- loadGuiResource home winSize
   
   return $! (glfwHdl,guiRes)
   where
@@ -106,7 +106,7 @@ runHinecraft resouce@(glfwHdl,guiRes) = do
       --threadDelay 10000
       dt <- getDeltTime glfwHdl
       exitflg' <- getExitReqGLFW glfwHdl
-      (ntmstat',nplstat',runMode',ndtHdl') <- mainProcess
+      !(ntmstat',nplstat',runMode',ndtHdl') <- mainProcess
                    resouce tmstat' plstat' dtHdl runMode wvHdl dt
       tglWin <- getScreenModeKeyOpe glfwHdl
       let !newfps = ((fps dbgInfo') * 9.0 / 10.0) + ((1.0 / dt) / 10)
@@ -130,8 +130,8 @@ mainProcess :: Handls
                   , DataHdl)
 mainProcess (glfwHdl, guiRes) tmstat plstat dtHdl runMode wvHdl dt = do
   -- Common User input
-  mous <- getButtonClick glfwHdl
-  syskey <- getSystemKeyOpe glfwHdl
+  !mous <- getButtonClick glfwHdl
+  !syskey <- getSystemKeyOpe glfwHdl
   -- 
   (newMode,newPmstat,newTmstat,newHdl') <- case runMode of
     TitleMode -> do
@@ -148,14 +148,14 @@ mainProcess (glfwHdl, guiRes) tmstat plstat dtHdl runMode wvHdl dt = do
       if (isEmpty dtHdl)
         then return $! (PlayMode,plstat,tmstat,dtHdl)
         else do
-          dtHdl' <- loadData dtHdl
+          !dtHdl' <- loadData dtHdl
           initWorldVAOList wvHdl $ getAllSurfaceData dtHdl'
-          md <- return PlayMode
+          !md <- return PlayMode
           return $! (md,plstat,tmstat,dtHdl')
     PlayMode -> do
-      vm <- getCursorMotion glfwHdl
-      sm <- getScrollMotion glfwHdl 
-      mm <- getMoveKeyOpe glfwHdl
+      !vm <- getCursorMotion glfwHdl
+      !sm <- getScrollMotion glfwHdl 
+      !mm <- getMoveKeyOpe glfwHdl
       let !md = case syskey of
              (True,_) -> TitleMode
              (False,True) -> InventoryMode
@@ -173,7 +173,7 @@ mainProcess (glfwHdl, guiRes) tmstat plstat dtHdl runMode wvHdl dt = do
                          , fromJust $ getSurfaceList newDtHdl (ij,bNo')
                          )) clst 
           updateVAOlist wvHdl sflst
-          return newDtHdl
+          return $! newDtHdl
         Nothing -> return dtHdl
       return $! ( md
                 , PlayModeState
@@ -228,7 +228,7 @@ invMouseOpe (w,h) (x,y, btn, _, _) drgMd plt =
                    , plt)
                  else (Nothing,drgMd, plt)
   where
-    (x',y') = (realToFrac x, realToFrac y)
+    !(x',y') = (realToFrac x, realToFrac y)
     newPallet i b = (take i plt) ++ (b : (drop (i + 1) plt))
     bid' = case getInventoryIndex (w,h) (x,y) of
              Just (i,j) -> let !idx = j * 9 + i
@@ -243,23 +243,23 @@ getInventoryIndex (w,h) (x,y) = case (flt (> x) xbordLst , yIdx ) of
                                   (_,Nothing) -> Nothing
                                   (Just i,Just j) -> Just (i,j)
   where
-    (w',h') = (fromIntegral w, fromIntegral h)
-    (dotW,dotH) = rectDotSize inventoryParam
-    (invOx,invOy) = ( (w' - rate * fromIntegral dotW) * 0.5
-                    , (h' - rate * fromIntegral dotH) * 0.5)
-    (icloX,icloY) = iconListOrg inventoryParam
-    (_,ploY) = palletOrg inventoryParam
-    rate = projectionRate inventoryParam
-    itvl = iconListItvl inventoryParam
-    xbordLst = [ invOx + (icloX + (itvl * i)) * rate | i <- [0 .. 9]]
-    ybordLst = [ invOy + (icloY - (itvl * i)) * rate | i <- [-1 .. 4]]
+    !(w',h') = (fromIntegral w, fromIntegral h)
+    !(dotW,dotH) = rectDotSize inventoryParam
+    !(invOx,invOy) = ( (w' - rate * fromIntegral dotW) * 0.5
+                     , (h' - rate * fromIntegral dotH) * 0.5)
+    !(icloX,icloY) = iconListOrg inventoryParam
+    !(_,ploY) = palletOrg inventoryParam
+    !rate = projectionRate inventoryParam
+    !itvl = iconListItvl inventoryParam
+    !xbordLst = [ invOx + (icloX + (itvl * i)) * rate | i <- [0 .. 9]]
+    !ybordLst = [ invOy + (icloY - (itvl * i)) * rate | i <- [-1 .. 4]]
     flt f lst =  case break f lst of
       ([],_) -> Nothing
       (_,[]) -> Nothing
       (a,_) -> Just $ (length a) - 1
     chkPltY y' = (invOy + (ploY * rate)) < y'
                 &&  y' < (invOy + (ploY + itvl - 2) * rate)
-    yIdx = case flt (< y) ybordLst of
+    !yIdx = case flt (< y) ybordLst of
              Just a -> Just a
              Nothing -> if chkPltY y then Just 5 else Nothing
 
@@ -273,8 +273,8 @@ setBlock ustat (_,_,lb,rb,_) (Just ((cx,cy,cz),fpos)) plt
   | lb = Just ((cx,cy,cz),airBlockID)
   | otherwise = Nothing
   where
-    idx = palletIndex ustat 
-    setPos = case fpos of
+    !idx = palletIndex ustat 
+    !setPos = case fpos of
       STop    -> (cx,cy + 1,cz)
       SBottom -> (cx,cy - 1,cz)
       SRight  -> (cx + 1,cy,cz)
@@ -297,9 +297,9 @@ calcPlayerMotion dtHdl usrStat' (mx,my) (f,b,l,r,jmp) (_,sy) dt =
     , userVel = (0.0,w,0.0)
     }
   where
-    (ox,oy,oz) = userPos usrStat'
-    (orx,ory,orz) = userRot usrStat'
-    (_,wo,_) = userVel usrStat'
+    !(ox,oy,oz) = userPos usrStat'
+    !(orx,ory,orz) = userRot usrStat'
+    !(_,wo,_) = userVel usrStat'
     !(nrx,nry,nrz) = playerView dt ( realToFrac orx
                                    , realToFrac ory
                                    , realToFrac orz)
@@ -332,7 +332,7 @@ movePlayer dtHdl (ox',oy',oz') (dx,dy,dz) =
         Nothing -> (ox',y',oz')
     Nothing -> (ox',oy',oz') 
   where 
-    bid'' = getBlockID dtHdl (round' ox', round' oy' ,round' oz')
+    !bid'' = getBlockID dtHdl (round' ox', round' oy' ,round' oz')
     !dl = sqrt (dx * dx + dz * dz + dy * dy)
     !(dx',dy',dz') = if dl < 1
           then (dx,dy,dz)
@@ -383,19 +383,19 @@ chkHalf bid = case shape $ getBlockInfo bid of
 playerView :: Double -> Pos' -> Pos' -> Pos' 
 playerView dt (frxo,fryo,frzo) (frx,fry,frz) = (rx, ry, rz) 
   where
-    rx = bounded' 90 (-90) $ realToFrac frxo + frx*dt
-    rz = bounded' 90 (-90) $ realToFrac frzo + frz*dt
-    try = realToFrac fryo + fry*dt
-    ry | try >= 180 = -360 + try
-       | try < -180 =  360 + try
-       | otherwise  = try 
+    !rx = bounded' 90 (-90) $ realToFrac frxo + frx*dt
+    !rz = bounded' 90 (-90) $ realToFrac frzo + frz*dt
+    !try = realToFrac fryo + fry*dt
+    !ry | try >= 180 = -360 + try
+        | try < -180 =  360 + try
+        | otherwise  = try 
 
 playerMotion :: Double -> Double -> Vel' -> Pos' 
 playerMotion dt r0 (v,u,w) = (dx,dy,dz)
   where
-    dx = dt * nextx (v,u,r0)    -- right/left
-    dy = dt * w                 -- up/down
-    dz = dt * nextz (v,u,r0)    -- head
+    !dx = dt * nextx (v,u,r0)    -- right/left
+    !dy = dt * w                 -- up/down
+    !dz = dt * nextz (v,u,r0)    -- head
     phy r = (pi * r) / 180.0
     nextz (df,ds,r) = (df * cos (phy r)) - (ds * sin (phy r))
     nextx (df,ds,r) = (ds * cos (phy r)) + (df * sin (phy r))
@@ -404,18 +404,18 @@ guiProcess :: GuiResource -> (Double,Double,Bool,Bool,Bool)
            -> ((RunMode,Bool),(Bool,Bool))
 guiProcess res (x,y,btn1,_,_) = (chkModeChg,chkExit)
   where
-    plybtnPosOrgn = widgetPlayBtnPos res
-    plybtnSize = widgetPlayBtnSiz res
-    extbtnPosOrgn = widgetExitBtnPos res
-    extbtnSize = widgetExitBtnSiz res
+    !plybtnPosOrgn = widgetPlayBtnPos res
+    !plybtnSize = widgetPlayBtnSiz res
+    !extbtnPosOrgn = widgetExitBtnPos res
+    !extbtnSize = widgetExitBtnSiz res
     f2d (a,b) = (realToFrac a, realToFrac b) -- GLfloat to Double
     chkEntrBtn (xo,yo) (w,h) =
        xo < x && x < (xo + w) && yo < y && y < (yo + h) 
-    isPlyBtnEntr = chkEntrBtn (f2d plybtnPosOrgn) (f2d plybtnSize)
-    chkModeChg = ( if isPlyBtnEntr && btn1 then InitMode else TitleMode 
+    !isPlyBtnEntr = chkEntrBtn (f2d plybtnPosOrgn) (f2d plybtnSize)
+    !chkModeChg = ( if isPlyBtnEntr && btn1 then InitMode else TitleMode 
                  , isPlyBtnEntr)
-    isExtBtnEntr = chkEntrBtn (f2d extbtnPosOrgn) (f2d extbtnSize)
-    chkExit = ( isExtBtnEntr && btn1 , isExtBtnEntr) 
+    !isExtBtnEntr = chkEntrBtn (f2d extbtnPosOrgn) (f2d extbtnSize)
+    !chkExit = ( isExtBtnEntr && btn1 , isExtBtnEntr) 
 
 drawView :: Handls 
          -> TitleModeState -> PlayModeState -> RunMode
@@ -424,8 +424,8 @@ drawView :: Handls
          -> IO ()
 drawView (glfwHdl, guiRes) tmstat plstat runMode'
           tvHdl wvHdl dbgInfo = do
-  worldDispList <- getBlockVAOList wvHdl
-  winSize <- getWindowSize glfwHdl
+  !worldDispList <- getBlockVAOList wvHdl
+  !winSize <- getWindowSize glfwHdl
   updateDisplay $
     case runMode' of
       TitleMode -> -- 2D
@@ -437,9 +437,9 @@ drawView (glfwHdl, guiRes) tmstat plstat runMode'
                  (runMode' == InventoryMode) drgSta' wvHdl
                  dbgInfo
   where
-    usrStat' = usrStat plstat
-    pos = curPos plstat
-    drgSta' = drgSta plstat
-    plt = pallet plstat
+    !usrStat' = usrStat plstat
+    !pos = curPos plstat
+    !drgSta' = drgSta plstat
+    !plt = pallet plstat
 --
 

@@ -95,6 +95,18 @@ getVertexList (Half b) f
         ,(0.0,0.5)
         ,(1.0,1.0)
         ,(0.0,1.0))
+getVertexList Cross _ = ([p6,p4,p2,p0,p7,p5,p3,p1],uvLst)
+  where
+    (p0:p1:p2:p3:p4:p5:p6:p7:_) = blockNodeVertex
+    !uvLst = [ (0.0,0.0)
+             , (1.0,0.0)
+             , (1.0,1.0)
+             , (0.0,1.0)
+             , (0.0,0.0)
+             , (1.0,0.0)
+             , (1.0,1.0)
+             , (0.0,1.0)
+             ]
 
 drawBackPlane :: VrtxPos2D -> (GLfloat,GLfloat)
               -> Maybe TextureObject -> (GLfloat,GLfloat) -> (GLfloat,GLfloat)

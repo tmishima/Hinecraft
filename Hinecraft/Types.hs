@@ -21,7 +21,7 @@ chunkParam = ChunkParam
 
 type BlockIDNum = Int
 
-data Shape = Cube | Half Bool | Stairs
+data Shape = Cube | Half Bool | Stairs | Cross
   deriving (Eq,Show,Ord)
 
 type BlockCatalog = [BlockIDNum]

@@ -53,8 +53,8 @@ type WorldVAOList = M.Map (Int,Int) [Maybe (Int,GU.VAO)]
 updateVAOlist :: WorldViewVHdl -> [(((Int, Int), Int),SurfacePos)]
               -> IO ()
 updateVAOlist wvhdl sufList = do
-  vao <- getBlockVAOList wvhdl
-  newvao <- foldM fn vao sufList 
+  !vao <- getBlockVAOList wvhdl
+  !newvao <- foldM fn vao sufList 
   setBlockVAOList wvhdl newvao  
   where
     fn wvlst ((ij,bNo'),sfs) = 
@@ -79,14 +79,14 @@ setBlockVAOList vwHdl = writeIORef (blkVAOList vwHdl)
 
 initWorldView :: FilePath -> IO WorldViewVHdl
 initWorldView home = do
-  bsh <- initShaderProgram home
-  ssh <- initShaderProgram home
-  blks <- loadTexture blkPng
-  sky <- loadTexture skyPng
-  cb <- genEnvCubeVAO bsh
-  vao <- newIORef M.empty 
-  bCur <- genBlockCursol ssh
-  return WorldViewVHdl 
+  !bsh <- initShaderProgram home
+  !ssh <- initShaderProgram home
+  !blks <- loadTexture blkPng
+  !sky <- loadTexture skyPng
+  !cb <- genEnvCubeVAO bsh
+  !vao <- newIORef M.empty 
+  !bCur <- genBlockCursol ssh
+  return $! WorldViewVHdl 
     { basicShader = bsh
     , simpleShader = ssh
     , envCube = cb
@@ -96,14 +96,14 @@ initWorldView home = do
     , blkCursol = bCur
     }
   where
-    blkPng = home ++ "/.Hinecraft/terrain.png"
-    skyPng = home ++ "/.Hinecraft/mcpatcher/sky/world0/cloud1.png"
+    !blkPng = home ++ "/.Hinecraft/terrain.png"
+    !skyPng = home ++ "/.Hinecraft/mcpatcher/sky/world0/cloud1.png"
     --starPng = home ++ "/.Hinecraft/mcpatcher/sky/world0/star1.png"
 
 initWorldVAOList :: WorldViewVHdl 
                  -> [((Int, Int), [SurfacePos])] -> IO ()
 initWorldVAOList wvhdl suflst = do
-  vao <- M.fromList <$> mapM (\ (ij,slst) -> do
+  !vao <- M.fromList <$> mapM (\ (ij,slst) -> do
     ds <- forM slst (genChunkVAO wvhdl)
     return (ij,ds)
     ) suflst
@@ -148,29 +148,29 @@ drawWorldView wvhdl (w,h) res vaos usrStat' pos =
           renderBlockCursol shaderPrg bCurVAO s
         Nothing -> return ()
   where
-    pg = basicShader wvhdl
-    spg = simpleShader wvhdl
-    bCurVAO = blkCursol wvhdl
-    vs = M.toList vaos
-    cbVao = envCube wvhdl
-    skyTex = skyTexture wvhdl
-    blkTex = blockTexture wvhdl
+    !pg = basicShader wvhdl
+    !spg = simpleShader wvhdl
+    !bCurVAO = blkCursol wvhdl
+    !vs = M.toList vaos
+    !cbVao = envCube wvhdl
+    !skyTex = skyTexture wvhdl
+    !blkTex = blockTexture wvhdl
     d2f (a,b,c) = (realToFrac a, realToFrac b, realToFrac c)
-    (ux,uy,uz) = d2f $ userPos usrStat'
-    (urx,ury,_) = d2f $ userRot usrStat' :: (GLfloat,GLfloat,GLfloat)
-    font' = font res 
-    prjMat = GU3.projectionMatrix (GU3.deg2rad 60)
+    !(ux,uy,uz) = d2f $ userPos usrStat'
+    !(urx,ury,_) = d2f $ userRot usrStat' :: (GLfloat,GLfloat,GLfloat)
+    !font' = font res 
+    !prjMat = GU3.projectionMatrix (GU3.deg2rad 60)
                (fromIntegral w/ fromIntegral h) 0.1 (1000::GLfloat)
 
 genBlockCursol :: SimpleShaderProg -> IO GU.VAO
 genBlockCursol sh = makeSimpShdrVAO sh  vertLst vertClrLst texCdLst
   where
-    vertLst = concatMap ajust $ concat vlst
-    vertClrLst = concat $ replicate (4 * 6) [0.1,0.1,0.1,1.0]
-    texCdLst = concat $ replicate (4 * 6) [0.0,1.0]
+    !vertLst = concatMap ajust $ concat vlst
+    !vertClrLst = concat $ replicate (4 * 6) [0.1,0.1,0.1,1.0]
+    !texCdLst = concat $ replicate (4 * 6) [0.0,1.0]
     extnd v = if v > 0 then v + 0.05 else  v - 0.05
     ajust (a,b,c) = [ extnd a, extnd b, extnd c]
-    vlst = map (fst . getVertexList Cube ) [STop,SBottom,SFront,SBack
+    !vlst = map (fst . getVertexList Cube ) [STop,SBottom,SFront,SBack
                                            ,SRight,SLeft]
 
 renderBlockCursol :: SimpleShaderProg -> GU.VAO -> Surface -> IO ()
@@ -206,7 +206,7 @@ renderChunk sh (Just (len,vao)) tex = do
 
 genChunkVAO :: WorldViewVHdl -> SurfacePos -> IO (Maybe (Int,GU.VAO))
 genChunkVAO wvhdl = genChunkVAO' sh
-  where sh = basicShader wvhdl
+  where !sh = basicShader wvhdl
 
 genChunkVAO' :: BasicShaderProg -> SurfacePos -> IO (Maybe (Int,GU.VAO))
 genChunkVAO' _ [] = return Nothing
@@ -217,7 +217,7 @@ genChunkVAO' sh bsf = do
                       (concat coordlst)
   return $! Just (ndnum, vao)
   where
-    (clrlst, normlst, coordlst, vertlst, ndnum) = foldr 
+    !(clrlst, normlst, coordlst, vertlst, ndnum) = foldr 
       (\ e (cs,ns,cds,vs,s) -> let (c,n,cd,v,num) = genElem e
                              in (c:cs,n:ns,cd:cds,v:vs,num+s)
                              ) ([],[],[],[],0) bsf
@@ -229,9 +229,9 @@ genElem ((x,y,z),bid,fs) =
     ( colorList fs, normList fs, coordList fs
     , vertexList fs ,4 * length fs)
   where
-    sp = shape $ getBlockInfo bid
+    !sp = shape $ getBlockInfo bid
     -- Top | Bottom | Right | Left | Front | Back
-    [tt',tb',tr',tl',tf',tba'] = case textureIndex $ getBlockInfo bid of
+    ![tt',tb',tr',tl',tf',tba'] = case textureIndex $ getBlockInfo bid of
       [] -> replicate 6 (0,0)
       ti -> ti
 
