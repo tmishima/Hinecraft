@@ -35,23 +35,31 @@ http://forum.minecraftuser.jp/viewtopic.php?f=14&t=3132
 デモアプリのビルド手順(windowsの場合)
 
 
-1.クローンした、作業ディレクトリーへ移動する。
+1、source treeを起動してビルドするフォルダーをダウンロードする。
+
+　１、新規クローンを作成する
+
+　２、元のパスにhttps://github.com/tmishima/Hinecraft.gitを指定する
+
+　３、保存先のパスにそれ専用のフォルダーを作成して、それを指定する。
 
 
-2.cabal cleanを実行
+2、コマンドでビルドを始める。
 
+　１、コマンドを起動して保存パスに指定したディレクトリーへ移動する。
 
-3.cabal configureを実行する
+　２、cabal cleanを実行
 
+　３、cabal configureを実行する
 
-4.エラーメッセージが出た場合
-
+　　３－１.エラーメッセージが出た場合
 
 Config file path source is default config file.
 
 Config file C:\Users\k10001kk\AppData\Roaming\cabal\config not found.
 
 Writing default configuration to
+
 
 C:\Users\k10001kk\AppData\Roaming\cabal\config
 
@@ -77,6 +85,8 @@ cereal -any,
 
 linear –any
 
-5.cabal buildを実行する
+　４.cabal buildを実行する。実行が成功すると、実行ファイルが出来る。
+
+　５、実行ファイルを保存パスのフォルダーに移動。
 
 
