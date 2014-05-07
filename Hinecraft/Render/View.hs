@@ -126,6 +126,7 @@ renderInventory (w,h) guiRes tex plt dragDrop = preservingMatrix $ do
         , pltOy + ((icloY + 1) - itvl * liNo) * rate)) ib))
       [ (0, zip [0.0,1.0 .. ] $ take 9 blockCatalog)
       , (1, zip [0.0,1.0 .. ] $ take 9 $ drop 9 blockCatalog)
+      , (2, zip [0.0,1.0 .. ] $ take 9 $ drop 18 blockCatalog)
       ]
   -- pallet
   mapM_ (\ (p,ib) -> drawIcon tex (realToFrac $ icSz * rate)

@@ -14,6 +14,7 @@ data BlockInfo = BlockInfo
   , bcolor :: [(Double,Double,Double)]
   , bright :: Int
   , shape :: Shape
+  , isCollision :: Bool
   }
   deriving (Eq,Show,Ord)
 
@@ -37,6 +38,7 @@ blockCatalogData = zip [0 .. ]
              , bcolor = replicate 6 (1.0,1.0,1.0)
              , bright = 0
              , shape = Cube
+             , isCollision = True
              }
   , BlockInfo -- StoneBlockID 
              { textureIndex = replicate 6 (8,2)
@@ -44,6 +46,7 @@ blockCatalogData = zip [0 .. ]
              , bcolor = replicate 6 (0.5,0.5,0.5)
              , bright = 0
              , shape = Cube
+             , isCollision = True
              }
   , BlockInfo -- DirtBlockID 
              { textureIndex = replicate 6 (2,0)
@@ -51,6 +54,7 @@ blockCatalogData = zip [0 .. ]
              , bcolor = replicate 6 (0.5,0.5,0.5)
              , bright = 0
              , shape = Cube
+             , isCollision = True
              }
   , BlockInfo -- GrassBlockID 
              { textureIndex = [(0,0),(2,0),(3,0),(3,0),(3,0),(3,0)]
@@ -58,6 +62,7 @@ blockCatalogData = zip [0 .. ]
              , bcolor = (136/255,192/255,74/255) : replicate 5 (0.5,0.5,0.5)
              , bright = 0
              , shape = Cube
+             , isCollision = True
              }
   , BlockInfo -- GlassBlockID 
              { textureIndex = replicate 6 (1,3)
@@ -65,6 +70,7 @@ blockCatalogData = zip [0 .. ]
              , bcolor = replicate 6 (0.5,0.5,0.5)
              , bright = 0
              , shape = Cube
+             , isCollision = True
              }
   , BlockInfo -- WoodBlockID 
              { textureIndex = [(5,1),(5,1),(4,1),(4,1),(4,1),(4,1)]
@@ -72,6 +78,7 @@ blockCatalogData = zip [0 .. ]
              , bcolor = replicate 6 (0.5,0.5,0.5)
              , bright = 0
              , shape = Cube
+             , isCollision = True
              }
   , BlockInfo -- GlowBlockID 
              { textureIndex = replicate 6 (4,13)
@@ -79,6 +86,7 @@ blockCatalogData = zip [0 .. ]
              , bcolor = replicate 6 (1.0,1.0,1.0)
              , bright = 15
              , shape = Cube
+             , isCollision = True
              }
   , BlockInfo -- PlankBlockID 
              { textureIndex = replicate 6 (6,13)
@@ -86,6 +94,7 @@ blockCatalogData = zip [0 .. ]
              , bcolor = replicate 6 (0.5,0.5,0.5)
              , bright = 0
              , shape = Cube
+             , isCollision = True
              }
   , BlockInfo -- PlankHalfBlockID 
              { textureIndex = replicate 6 (6,13)
@@ -93,6 +102,7 @@ blockCatalogData = zip [0 .. ]
              , bcolor = replicate 6 (0.5,0.5,0.5)
              , bright = 0
              , shape = Half False
+             , isCollision = True
              }
   , BlockInfo --StonebrickBlockID 
              { textureIndex = replicate 6 (6,3)
@@ -100,6 +110,7 @@ blockCatalogData = zip [0 .. ]
              , bcolor = replicate 6 (0.5,0.5,0.5)
              , bright = 0
              , shape = Cube
+             , isCollision = True
              }
   , BlockInfo -- CobbleStoneBlockID 
              { textureIndex = replicate 6 (0,1)
@@ -107,6 +118,7 @@ blockCatalogData = zip [0 .. ]
              , bcolor = replicate 6 (0.5,0.5,0.5)
              , bright = 0
              , shape = Cube
+             , isCollision = True
              }
   , BlockInfo -- GravelBlockID 
              { textureIndex = replicate 6 (3,1)
@@ -114,6 +126,7 @@ blockCatalogData = zip [0 .. ]
              , bcolor = replicate 6 (0.5,0.5,0.5)
              , bright = 0
              , shape = Cube
+             , isCollision = True
              }
   ,BlockInfo -- SandBlockID 
              { textureIndex = replicate 6 (2,1)
@@ -121,6 +134,7 @@ blockCatalogData = zip [0 .. ]
              , bcolor = replicate 6 (0.5,0.5,0.5)
              , bright = 0
              , shape = Cube
+             , isCollision = True
              }
   , BlockInfo -- BrickBlockID 
              { textureIndex = replicate 6 (7,0)
@@ -128,6 +142,7 @@ blockCatalogData = zip [0 .. ]
              , bcolor = replicate 6 (0.5,0.5,0.5)
              , bright = 0
              , shape = Cube
+             , isCollision = True
              }
   , BlockInfo -- LeavesBlockID 
              { textureIndex = replicate 6 (4,3)
@@ -135,6 +150,7 @@ blockCatalogData = zip [0 .. ]
              , bcolor = replicate 6 (0.2,0.7,0.2)
              , bright = 0
              , shape = Cube
+             , isCollision = True
              }
   , BlockInfo --RedWoolBlockID 
              { textureIndex = replicate 6 (1,8)
@@ -142,6 +158,7 @@ blockCatalogData = zip [0 .. ]
              , bcolor = replicate 6 (0.5,0.5,0.5)
              , bright = 0
              , shape = Cube
+             , isCollision = True
              }
   , BlockInfo -- BlueWoolBlockID
              { textureIndex = replicate 6 (1,11)
@@ -149,6 +166,7 @@ blockCatalogData = zip [0 .. ]
              , bcolor = replicate 6 (0.5,0.5,0.5)
              , bright = 0
              , shape = Cube
+             , isCollision = True
              }
   , BlockInfo -- Pumpkin
              { textureIndex = [(6,6),(6,6),(6,7),(6,7),(7,7),(6,7)]
@@ -156,6 +174,7 @@ blockCatalogData = zip [0 .. ]
              , bcolor = replicate 6 (0.5,0.5,0.5)
              , bright = 0
              , shape = Cube
+             , isCollision = True
              }
   , BlockInfo -- Melon 
              { textureIndex = [(9,8),(9,8),(8,8),(8,8),(8,8),(8,8)]
@@ -163,13 +182,23 @@ blockCatalogData = zip [0 .. ]
              , bcolor = replicate 6 (0.5,0.5,0.5)
              , bright = 0
              , shape = Cube
+             , isCollision = True
              }
-  , BlockInfo -- Grass
-             { textureIndex = [(12,0),(12,0)]
+  , BlockInfo -- Flower1 
+             { textureIndex = [(12,0)]
              , alpha = True
-             , bcolor = replicate 2 (0.5,0.5,0.5)
+             , bcolor = [(0.5,0.5,0.5)]
              , bright = 0
              , shape = Cross
+             , isCollision = False
+             }
+  , BlockInfo -- Flower2 
+             { textureIndex = [(13,0)]
+             , alpha = True
+             , bcolor = [(0.5,0.5,0.5)]
+             , bright = 0
+             , shape = Cross
+             , isCollision = False
              }
 
   ]

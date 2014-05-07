@@ -24,7 +24,7 @@ import Control.Exception ( bracket )
 import Control.Monad ( when {-unless,,foldMvoid,filterM-} )
 --import Data.Maybe ( fromJust,isJust ) --,catMaybes )
 import System.Directory ( getHomeDirectory )
---import Control.Concurrent
+import Control.Concurrent
 import System.Environment (getArgs)
 
 import Hinecraft.Render.View
@@ -103,7 +103,7 @@ runHinecraft resouce@(glfwHdl,guiRes) = do
         (r,s,_) = userRot $ usrStat ustat
     mainLoop tmstat' plstat' runMode (dtHdl,tvHdl,wvHdl) dbgInfo' = do
       pollGLFW
-      --threadDelay 10000
+      threadDelay 10000
       dt <- getDeltTime glfwHdl
       exitflg' <- getExitReqGLFW glfwHdl
       !(ntmstat',nplstat',runMode',ndtHdl') <- mainProcess
@@ -318,7 +318,8 @@ calcPlayerMotion dtHdl usrStat' (mx,my) (f,b,l,r,jmp) (_,sy) dt =
 movePlayer :: DataHdl -> Pos' -> Pos' -> Pos'
 movePlayer dtHdl (ox',oy',oz') (dx,dy,dz) =
   case getBlockID dtHdl (round' tx, round' y' ,round' tz) of
-    Just bid -> if bid == airBlockID || chkHalf bid 
+    Just bid -> if bid == airBlockID || chkHalf bid ||
+                   not ( isCollision $ getBlockInfo bid)
       then if dl < 1
            then (tx,y',tz)
            else movePlayer dtHdl (tx,y',tz) (dx - dx', dy - dy', dz - dz')
@@ -350,7 +351,8 @@ calYpos dtHdl (x,y,z) dy = if (abs ndy) < 0.001
     !y0 = fromIntegral $ (round' y :: Int)
     !ly = y - y0
     !t' = case getBlockID dtHdl (round' x, round' y, round' z) of
-      Just t -> if t == airBlockID
+      Just t -> if t == airBlockID  || 
+                   not ( isCollision $ getBlockInfo t)
             then 0
             else if chkHalf t == True then 2 else 1
       Nothing -> 0

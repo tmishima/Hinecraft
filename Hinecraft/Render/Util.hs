@@ -95,14 +95,10 @@ getVertexList (Half b) f
         ,(0.0,0.5)
         ,(1.0,1.0)
         ,(0.0,1.0))
-getVertexList Cross _ = ([p6,p4,p2,p0,p7,p5,p3,p1],uvLst)
+getVertexList Cross _ = ([p6,p4,p2,p0,p7,p5,p3,p1], uvLst ++ uvLst)
   where
     (p0:p1:p2:p3:p4:p5:p6:p7:_) = blockNodeVertex
     !uvLst = [ (0.0,0.0)
-             , (1.0,0.0)
-             , (1.0,1.0)
-             , (0.0,1.0)
-             , (0.0,0.0)
              , (1.0,0.0)
              , (1.0,1.0)
              , (0.0,1.0)
@@ -150,47 +146,66 @@ putTextLine ft cl sz (x,y) str = preservingMatrix $ do
 
 drawIcon :: TextureObject -> GLfloat -> (GLfloat,GLfloat)
          -> BlockIDNum -> IO ()
-drawIcon tex icSz (ox,oy) bID | null texIdx = return ()
-                                 | otherwise = preservingMatrix $ do
-  texture Texture2D $= Enabled 
-  textureBinding Texture2D $= Just tex
+drawIcon tex icSz (ox,oy) bID
+  | null texIdx = return ()
+  | shape (getBlockInfo bID) == Cross = preservingMatrix $ do
+      texture Texture2D $= Enabled 
+      textureBinding Texture2D $= Just tex
+      let (tt:_) = texIdx
+          (ct:_) = bcolor $ getBlockInfo bID
+      
+      renderPrimitive Quads $ do
+        -- top 
+        setColor 1.0 ct
+        mapM_ drawf $ zip (calcUV tt)
+          [ (ox - icSzW, oy + icSzH + icSz / 2)
+          , (ox + icSzW, oy + icSzH + icSz / 2)
+          , (ox + icSzW, oy - icSzH + icSz / 2)
+          , (ox - icSzW, oy - icSzH + icSz / 2)
+          ]
+  | otherwise = preservingMatrix $ do
+      texture Texture2D $= Enabled 
+      textureBinding Texture2D $= Just tex
+    
+      let ![tt,_,_,tl,tf,_] = texIdx
+          ![ct,_,_,cl,cf,_] = bcolor $ getBlockInfo bID
+      
+      renderPrimitive Quads $ do
+        -- top 
+        setColor 1.3 ct
+        mapM_ drawf $ zip (calcUV tt)
+          [ (ox, oy + icSzH)
+          , (ox + icSzW, oy + icSzH + icSzW * (sin.d2r) rt)
+          , (ox, oy + icSzH + icSzW * (sin.d2r) 2 * rt)
+          , (ox - icSzW, oy + icSzH + icSzW * (sin.d2r) rt)
+          ]
+        -- left 
+        setColor 1.0 cl 
+        mapM_ drawf $ zip (calcUV tl)
+          [ (ox, oy + icSzH)
+          , (ox + icSzW, oy + icSzH + icSzW * (sin.d2r) rt)
+          , (ox + icSzW, oy + icSzW * (sin.d2r) rt)
+          , (ox, oy)
+          ]
+        -- front 
+        setColor 1.0 cf 
+        mapM_ drawf $ zip (calcUV tf)
+          [ (ox - icSzW, oy + icSzH + icSzW * (sin.d2r) rt)
+          , (ox, oy + icSzH)
+          , (ox, oy)
+          , (ox - icSzW, oy + icSzW * (sin.d2r) rt)
+          ]
 
-  let ![tt,_,_,tl,tf,_] = texIdx
-  renderPrimitive Quads $ do
-    -- top 
-    setColor 1.3 ct
-    mapM_ drawf $ zip (calcUV tt)
-      [ (ox, oy + icSzH)
-      , (ox + icSzW, oy + icSzH + icSzW * (sin.d2r) rt)
-      , (ox, oy + icSzH + icSzW * (sin.d2r) 2 * rt)
-      , (ox - icSzW, oy + icSzH + icSzW * (sin.d2r) rt)
-      ]
-    -- left 
-    setColor 1.0 cl 
-    mapM_ drawf $ zip (calcUV tl)
-      [ (ox, oy + icSzH)
-      , (ox + icSzW, oy + icSzH + icSzW * (sin.d2r) rt)
-      , (ox + icSzW, oy + icSzW * (sin.d2r) rt)
-      , (ox, oy)
-      ]
-    -- front 
-    setColor 1.0 cf 
-    mapM_ drawf $ zip (calcUV tf)
-      [ (ox - icSzW, oy + icSzH + icSzW * (sin.d2r) rt)
-      , (ox, oy + icSzH)
-      , (ox, oy)
-      , (ox - icSzW, oy + icSzW * (sin.d2r) rt)
-      ]
   where
+    !texIdx = textureIndex $ getBlockInfo bID
     !icSzW = icSz / 2.2
     !icSzH = case shape $ getBlockInfo bID of
               Cube -> icSzW
               Half _ -> icSzW / 2.0
+              Cross -> icSzW
               _ -> icSzW 
     !rt = 30.0
     d2r d = pi * d / 180.0
-    !texIdx = textureIndex $ getBlockInfo bID
-    ![ct,_,_,cl,cf,_] = bcolor $ getBlockInfo bID
     setColor :: Double -> (Double,Double,Double) -> IO () 
     setColor c (r,g,b) =
       color $ Color3 (realToFrac (c * r)) (realToFrac (c * g))

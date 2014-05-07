@@ -225,15 +225,13 @@ genChunkVAO' sh bsf = do
 
 genElem :: (WorldIndex, BlockIDNum, [Surface])
         -> ([GLfloat],[GLfloat],[GLfloat],[GLfloat],Int)
-genElem ((x,y,z),bid,fs) =
-    ( colorList fs, normList fs, coordList fs
-    , vertexList fs ,4 * length fs)
+genElem ((x,y,z),bid,fs)
+  | sp == Cross = ( colorListCross, normListCross, coordListCross
+                  , vertexListCross, 4 * 2)
+  | otherwise =   ( colorList fs, normList fs, coordList fs
+                  , vertexList fs ,4 * length fs)
   where
     !sp = shape $ getBlockInfo bid
-    -- Top | Bottom | Right | Left | Front | Back
-    ![tt',tb',tr',tl',tf',tba'] = case textureIndex $ getBlockInfo bid of
-      [] -> replicate 6 (0,0)
-      ti -> ti
 
     colorList :: [Surface] -> [GLfloat]
     colorList = concatMap (\ f ->
@@ -245,6 +243,9 @@ genElem ((x,y,z),bid,fs) =
         SFront -> 4
         SBack -> 5)
 
+    colorListCross :: [GLfloat]
+    colorListCross = concatMap (genColorList . setColor) [0,0]
+
     normList :: [Surface] -> [GLfloat]
     normList = concatMap (\ f ->
       genNormList $ case f of
@@ -255,26 +256,45 @@ genElem ((x,y,z),bid,fs) =
         SFront -> (0,0,-1) 
         SBack -> (0,0,1))
 
+    normListCross :: [GLfloat]
+    normListCross = concatMap genNormList [(1,1,1),(-1,1,1)]
+
     coordList :: [Surface] -> [GLfloat]
     coordList = concatMap (\ f ->
       let (_,uv) = getVertexList sp f
       in genCoordList (case f of
-        STop -> tt' 
-        SBottom  -> tb'
-        SRight -> tf'
-        SLeft -> tba'
-        SFront -> tr'
-        SBack -> tl' ) uv
+        STop -> getTxid 0 
+        SBottom  -> getTxid 1
+        SRight -> getTxid 2
+        SLeft -> getTxid 3
+        SFront -> getTxid 4
+        SBack -> getTxid 5 ) uv
         )
+      where
+        texLst = textureIndex $ getBlockInfo bid
+        -- Top | Bottom | Right | Left | Front | Back
+        getTxid i | i < length texLst = texLst !! i
+                  | otherwise = (0,0)
+
+    coordListCross :: [GLfloat]
+    coordListCross =  genCoordList texLst $ snd $ getVertexList sp STop 
+      where texLst = head $ textureIndex $ getBlockInfo bid
+
     vertexList :: [Surface] -> [GLfloat]
     vertexList = concatMap (\ f ->
       let (vs,_) = getVertexList sp f
       in genVertLst vs 
         )
 
+    vertexListCross :: [GLfloat]
+    vertexListCross = genVertLst $ fst $ getVertexList sp STop 
+
     d2fv3 :: (Double,Double,Double) -> VrtxPos3D 
     d2fv3 (a,b,c) = ( realToFrac a, realToFrac b, realToFrac c)
-    setColor i = d2fv3 $ bcolor (getBlockInfo bid) !! i
+    setColor i | i < length colorLst = d2fv3 $ colorLst !! i
+               | otherwise = (1.0,1.0,1.0)
+      where colorLst = bcolor (getBlockInfo bid)
+
     genColorList :: (GLfloat,GLfloat,GLfloat)
                  -> [GLfloat]
     genColorList (r,g,b) = (concat . replicate 4) [r,g,b,1.0]
