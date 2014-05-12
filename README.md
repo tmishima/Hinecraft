@@ -32,10 +32,10 @@ http://forum.minecraftuser.jp/viewtopic.php?f=14&t=3132
 作者名：ueda  
 
 
-デモアプリのビルド手順(windowsの場合)
+#デモアプリのビルド手順(windowsの場合)
 
 
-1、source treeを起動してビルドするフォルダーをダウンロードする。
+##1、source treeを起動してビルドするフォルダーをダウンロードする。
 
 　１、新規クローンを作成する
 
@@ -44,11 +44,11 @@ http://forum.minecraftuser.jp/viewtopic.php?f=14&t=3132
 　３、保存先のパスにそれ専用のフォルダーを作成して、それを指定する。
 
 
-2、コマンドでビルドを始める。
+##2、コマンドでビルドを始める。
 
 　１、コマンドを起動して保存パスに指定したディレクトリーへ移動する。
 
-　２、cabal cleanを実行
+　２、`cabal clean`を実行
 
 　３、cabal configureを実行する
 
