@@ -6,7 +6,9 @@
 
   
   1. 新規クローンを作成する
+  
   2.元のパスに<https://github.com/tmishima/Hinecraft.git>を指定する
+  
   3.保存先のパスにそれ専用のフォルダーを作成して、それを指定する。
 
 
@@ -16,43 +18,49 @@
 
 　2.`cabal clean`を実行
 
-　3.cabal configureを実行する
+　3.`cabal configure`を実行する
 
-　　３－１.エラーメッセージが出た場合
+　　3-1.エラーメッセージが出た場合
+      注釈＊１
+      
 
-Config file path source is default config file.
+　4.cabal buildを実行する。実行が成功すると、実行ファイルが出来る。
 
-Config file C:\Users\k10001kk\AppData\Roaming\cabal\config not found.
-
-Writing default configuration to
+　5.実行ファイルを保存パスのフォルダーに移動。
 
 
-C:\Users\k10001kk\AppData\Roaming\cabal\config
+  注釈＊１
+  Config file path source is default config file.
+  
+    Config file C:\Users\k10001kk\AppData\Roaming\cabal\config not found.
 
-Warning: The package list for 'hackage.haskell.org' does not exist. Run 'cabal
+    Writing default configuration to
 
-update' to download it.
+    C:\Users\k10001kk\AppData\Roaming\cabal\config
 
-Resolving dependencies...
+    Warning: The package list for 'hackage.haskell.org' does not exist. Run 'cabal
 
-Configuring Hinecraft-0.2.0.0...
+    update' to download it.
 
-cabal: At least the following dependencies are missing:
+    Resolving dependencies...
 
-FTGL -any,
+    Configuring Hinecraft-0.2.0.0...
 
-GLFW-b -any,
+    cabal: At least the following dependencies are missing:
+  
+    FTGL -any,
 
-GLUtil -any,
+    GLFW-b -any,
 
-JuicyPixels -any,
+    GLUtil -any,
 
-cereal -any,
+    JuicyPixels -any,
 
-linear –any
+    cereal -any,
 
-　４.cabal buildを実行する。実行が成功すると、実行ファイルが出来る。
+    linear –any
 
-　５、実行ファイルを保存パスのフォルダーに移動。
+
+
 
 
