@@ -21,16 +21,17 @@
 　3.`cabal configure`を実行する
 
 　　3-1.エラーメッセージが出た場合
-      注釈＊１
+      注釈１
       
 
-　4.cabal buildを実行する。実行が成功すると、実行ファイルが出来る。
+　4.`cabal build`を実行する。実行が成功すると、distフォルダーに実行ファイルが出来る。
 
 　5.実行ファイルを保存パスのフォルダーに移動。
 
 
-  注釈＊１
-  Config file path source is default config file.
+  注釈１
+  
+    Config file path source is default config file.
   
     Config file C:\Users\k10001kk\AppData\Roaming\cabal\config not found.
 
