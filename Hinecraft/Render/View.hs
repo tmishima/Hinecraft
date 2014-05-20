@@ -37,7 +37,6 @@ import Hinecraft.Render.TitleView
 import Hinecraft.Render.WorldView
 
 -- Define
-
 -- ##################### OpenGL ###########################
 data ViewMode = V2DMode | V3DTitleMode | V3DMode
   deriving (Eq,Show)
@@ -219,6 +218,8 @@ loadGuiResource home (w,h) = do
 
 updateDisplay :: IO () -> IO ()
 updateDisplay drawFn = do
+  blend             $= Enabled
+  blendFunc         $= (SrcAlpha, OneMinusSrcAlpha)
   clear [ColorBuffer,DepthBuffer]
   drawFn
   flush
