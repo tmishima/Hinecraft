@@ -103,7 +103,8 @@ runHinecraft resouce@(glfwHdl,guiRes) = do
         (r,s,_) = userRot $ usrStat ustat
     mainLoop tmstat' plstat' runMode (dtHdl,tvHdl,wvHdl) dbgInfo' = do
       pollGLFW
-      threadDelay 10000
+      --threadDelay 10000
+      --threadDelay 1000
       dt <- getDeltTime glfwHdl
       exitflg' <- getExitReqGLFW glfwHdl
       !(ntmstat',nplstat',runMode',ndtHdl') <- mainProcess

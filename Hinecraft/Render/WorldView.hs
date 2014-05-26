@@ -24,6 +24,8 @@ import qualified Graphics.GLUtil.Camera3D as GU3
 --import qualified Graphics.GLUtil.Camera2D as GU2
 --import Linear ( M44 ) --  eye4
 import Linear.V3
+import Linear.V4
+import Linear.Matrix
 import qualified Data.Map as M
 import Control.Monad (  forM_, forM , foldM {-,when, unless,void-} )
 --import Debug.Trace as Dbg
@@ -45,6 +47,7 @@ data WorldViewVHdl = WorldViewVHdl
   , skyTexture :: TextureObject
   , blkVAOList :: IORef WorldVAOList
   , blkCursol :: GU.VAO
+  , shadowBuf :: (TextureObject,FramebufferObject)
   --, starTexture ::
   }
 
@@ -77,6 +80,35 @@ getBlockVAOList vwHdl = readIORef (blkVAOList vwHdl)
 setBlockVAOList :: WorldViewVHdl -> WorldVAOList -> IO ()
 setBlockVAOList vwHdl = writeIORef (blkVAOList vwHdl)
 
+shadowMapSize :: TextureSize2D
+shadowMapSize = TextureSize2D 512 512
+
+makeShadowBuff :: IO (TextureObject,FramebufferObject)
+makeShadowBuff = do
+  activeTexture $= TextureUnit 1
+ 
+  b <- genObjectName :: IO TextureObject
+  textureBinding Texture2D $= Just b
+  texImage2D Texture2D NoProxy 0 DepthComponent'
+             shadowMapSize 0
+             (PixelData DepthComponent UnsignedByte GU.offset0) -- nullPtr)
+  textureFilter Texture2D $= ((Nearest, Nothing), Nearest)
+  textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
+  textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
+  textureBorderColor Texture2D $= Color4 1.0 0.0 0.0 (0.0::GLfloat)
+  textureCompareMode Texture2D $= Just Less
+
+  f <- genObjectName :: IO FramebufferObject
+  bindFramebuffer Framebuffer $= f
+  framebufferTexture2D Framebuffer DepthAttachment Texture2D b 0
+  drawBuffer $= NoBuffers
+  readBuffer $= NoBuffers
+
+  bindFramebuffer Framebuffer $= defaultFramebufferObject
+  activeTexture $= TextureUnit 0
+  GU.printErrorMsg "GLerror [make FB]"
+  return (b,f)
+
 initWorldView :: FilePath -> IO WorldViewVHdl
 initWorldView home = do
   !bsh <- initShaderProgram home
@@ -86,6 +118,7 @@ initWorldView home = do
   !cb <- genEnvCubeVAO bsh
   !vao <- newIORef M.empty 
   !bCur <- genBlockCursol ssh
+  !sbf <- makeShadowBuff
   return $! WorldViewVHdl 
     { basicShader = bsh
     , simpleShader = ssh
@@ -94,6 +127,7 @@ initWorldView home = do
     , skyTexture = sky
     , blkVAOList = vao
     , blkCursol = bCur
+    , shadowBuf = sbf
     }
   where
     !blkPng = home ++ "/.Hinecraft/terrain.png"
@@ -109,36 +143,105 @@ initWorldVAOList wvhdl suflst = do
     ) suflst
   writeIORef (blkVAOList wvhdl) vao
 
+drawShadoWorldView :: BasicShaderProg -> WorldViewVHdl 
+                   -> WorldVAOList -> M44 GLfloat
+                   -> IO ()
+drawShadoWorldView pg wvhdl vaos mvpMat = do
+  --activeTexture $= TextureUnit 1
+  -- Draw 3D cube
+  bindFramebuffer Framebuffer $= fbo
+  colorMask $= (Color4 Disabled Disabled Disabled Disabled)
+
+  --useShader pg $ \ shaderPrg -> do
+    --textureBinding Texture2D $= Just tbo 
+    --GL.clientState GL.VertexArray $= GL.Enabled
+  setShadowSW pg 1
+
+  cullFace $= Just Front 
+
+  GL.clear [GL.ColorBuffer, GL.DepthBuffer]
+
+  -- ### draw skybox ###
+  -- setMVPMatrix shaderPrg mvpMat
+  setMVPMatrix pg mvpMat
+   
+  forM_ vs (\ (_,vas) ->
+    mapM_ (\ v -> renderChunkS pg v) vas)
+    -- mapM_ (\ v -> renderChunkS shaderPrg v) vas)
+
+  setShadowSW pg 0
+
+  --activeTexture $= TextureUnit 0
+  bindFramebuffer Framebuffer $= defaultFramebufferObject
+  where
+    !vs = M.toList vaos
+    !(tbo,fbo) = shadowBuf wvhdl
+
 drawWorldView ::  WorldViewVHdl -> (Int,Int)
               -> GuiResource
               -> WorldVAOList -> UserStatus
               -> Maybe (WorldIndex,Surface) -> IO ()
-drawWorldView wvhdl (w,h) res vaos usrStat' pos = 
-  GU.withViewport (Position 0 0) (Size (fromIntegral w)
+drawWorldView wvhdl (w,h) res vaos usrStat' pos = do
+  let !dpMat = GU3.projectionMatrix (GU3.deg2rad 10) 1.0 200.0
+                                    (600::GLfloat)
+      !dvMat = GU3.camMatrix $ GU3.tilt (-90::GLfloat)
+                             -- $ GU3.dolly (V3 ux 400 uz)
+                             $ GU3.dolly (V3 0 400 (0::GLfloat))
+                             GU3.fpsCamera
+      !mMat = V4 (V4 1.0 0.0 0.0 0.0)
+                 (V4 0.0 1.0 0.0 0.0)
+                 (V4 0.0 0.0 1.0 0.0)
+                 (V4 0.0 0.0 0.0 1.0)
+      !shadowMat = (dpMat !*! dvMat !*! mMat)
+      !pMat = GU3.projectionMatrix (GU3.deg2rad 60)
+               (fromIntegral w/ fromIntegral h) 0.1 (1000::GLfloat)
+      !vMats = GU3.camMatrix $ GU3.pan ury $ GU3.tilt urx
+                             GU3.fpsCamera
+      !vMatp = GU3.camMatrix $ GU3.pan ury $ GU3.tilt urx
+                             $ GU3.dolly (V3 ux (uy + 1.5) uz)
+                             GU3.fpsCamera
+      !bMat = V4 (V4 0.5 0.0 0.0 0.5)
+                 (V4 0.0 0.5 0.0 0.5)
+                 (V4 0.0 0.0 0.5 0.5)
+                 (V4 0.0 0.0 0.0 1.0)
+      !mvpMats = pMat !*! vMats !*! mMat
+      !mvpMatp = pMat !*! vMatp !*! mMat
+      !tMat = bMat !*! shadowMat
+  useShader pg $ \ shaderPrg -> do
+
+    GU.withViewport (Position 0 0) (Size (fromIntegral 512)
+                  (fromIntegral 512)) $ do
+      drawShadoWorldView pg wvhdl vaos shadowMat
+
+    GU.withViewport (Position 0 0) (Size (fromIntegral w)
                   (fromIntegral h)) $ do
     -- Draw 3D cube
-    useShader pg $ \ shaderPrg -> do
-    --currentProgram $= Just (GU.program $ getShaderProgram pg)
+      GL.clear [GL.ColorBuffer, GL.DepthBuffer]
 
-      setProjViewMat shaderPrg prjMat
-      setCamParam shaderPrg -- $ GU3.dolly (V3 0 (-uy - 1.5) 0)
-                               $ GU3.pan ury $ GU3.tilt urx GU3.fpsCamera
+      cullFace $= Just Back  --Just Front Just FrontAndBack -- 
+      cullFace $= Nothing
+      colorMask $= (Color4 Enabled Enabled Enabled Enabled)
+
+      setTextureUnitUniform shaderPrg
+
+      -- ### draw skybox ###
+      setMVPMatrix shaderPrg mvpMats
 
       renderEnvCube shaderPrg cbVao skyTex 
 
-      setCamParam shaderPrg $ GU3.pan ury $ GU3.tilt urx
-                            $ GU3.dolly (V3 ux (uy + 1.5) uz)
-                            GU3.fpsCamera
-     
+      -- ### draw grund ###
+      setTMatrix shaderPrg tMat
+      setMVPMatrix shaderPrg mvpMatp
+      let tex = [(blkTex,0),(tbo,1)] 
       forM_ vs (\ (_,vas) ->
-        mapM_ (\ v -> renderChunk shaderPrg v blkTex) vas)
+        mapM_ (\ v -> renderChunk shaderPrg v tex) vas)
 
     -- Cursol 選択された面を強調
     useShader spg $ \ shaderPrg -> do
       case pos of 
         Just ((px,py,pz),s) -> do
-          --lineWidth    $= 1.2
-          setProjViewMat shaderPrg prjMat
+          lineWidth    $= 0.5
+          setProjViewMat shaderPrg pMat
           setCamParam shaderPrg
                   $ GU3.pan ury $ GU3.tilt urx
                   $ GU3.dolly (V3 (ux - fromIntegral px)
@@ -148,6 +251,7 @@ drawWorldView wvhdl (w,h) res vaos usrStat' pos =
           renderBlockCursol shaderPrg bCurVAO s
         Nothing -> return ()
   where
+    !(tbo,_) = shadowBuf wvhdl
     !pg = basicShader wvhdl
     !spg = simpleShader wvhdl
     !bCurVAO = blkCursol wvhdl
@@ -159,8 +263,6 @@ drawWorldView wvhdl (w,h) res vaos usrStat' pos =
     !(ux,uy,uz) = d2f $ userPos usrStat'
     !(urx,ury,_) = d2f $ userRot usrStat' :: (GLfloat,GLfloat,GLfloat)
     !font' = font res 
-    !prjMat = GU3.projectionMatrix (GU3.deg2rad 60)
-               (fromIntegral w/ fromIntegral h) 0.1 (1000::GLfloat)
 
 genBlockCursol :: SimpleShaderProg -> IO GU.VAO
 genBlockCursol sh = makeSimpShdrVAO sh  vertLst vertClrLst texCdLst
@@ -192,7 +294,7 @@ renderBlockCursol sh vao s = do
       SLeft -> 20
 
 renderChunk :: BasicShaderProg -> Maybe (Int,GU.VAO) 
-            -> TextureObject -> IO ()
+            -> [(TextureObject,GLuint)] -> IO ()
 renderChunk _ Nothing _ = return ()
 renderChunk _ (Just (0,_)) _ = return ()
 renderChunk sh (Just (len,vao)) tex = do
@@ -200,9 +302,19 @@ renderChunk sh (Just (len,vao)) tex = do
   setColorBlendMode sh 0
   enableTexture sh True
   GU.withVAO vao $ 
-    GU.withTextures2D [tex] $ drawArrays Quads 0 $ fromIntegral len * 4
-  where 
-    !shprg' = getShaderProgram sh
+    GU.withTexturesAt Texture2D tex $
+      drawArrays Quads 0 $ fromIntegral len * 4
+
+renderChunkS :: BasicShaderProg -> Maybe (Int,GU.VAO) 
+            -> IO ()
+renderChunkS _ Nothing = return ()
+renderChunkS _ (Just (0,_)) = return ()
+renderChunkS sh (Just (len,vao)) = do
+  setLightMode sh 0
+  setColorBlendMode sh 0
+  enableTexture sh False 
+  GU.withVAO vao $ 
+     drawArrays Quads 0 $ fromIntegral len * 4
 
 genChunkVAO :: WorldViewVHdl -> SurfacePos -> IO (Maybe (Int,GU.VAO))
 genChunkVAO wvhdl = genChunkVAO' sh

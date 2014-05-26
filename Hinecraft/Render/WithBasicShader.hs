@@ -9,15 +9,21 @@ module Hinecraft.Render.WithBasicShader
   , orthoProjMatrix
   , setLightMode
   , setColorBlendMode
+  , setModelMatrix
+  , setMVPMatrix
+  , setTMatrix
+  , setShadowSW
+  , setTextureUnitUniform
   )
   where
 
 -- OpenGL
 import Graphics.Rendering.OpenGL as GL
 import Graphics.GLUtil as GU
-import qualified Graphics.GLUtil.Camera3D as GU3
+--import qualified Graphics.GLUtil.Camera3D as GU3
 --import Control.Exception ( bracket )
 
+import Linear.V4
 import Linear
 
 import Hinecraft.Render.Types
@@ -29,13 +35,14 @@ data BasicShaderProg = BasicShaderProg
   , inTexTag :: String
   , inVertNormTag :: String
   , outFragTag :: String
-  , uniProjViewMTag :: String      
-  , uniRotMTag :: String
-  , uniScaleMTag :: String
+  , uniMMatTag :: String      
+  , uniMVPMTag :: String
+  , uniTMatTag :: String
   , uniTexEnFTag :: String
-  , uniTexUnitTag :: String
   , uniClrBlndTag :: String
   , uniLightMdTag :: String
+  , uniShadwMdTag :: String
+  , uniTexUnitTags :: [String]
   }
 
 instance WithShader BasicShaderProg where
@@ -50,10 +57,13 @@ instance WithShader BasicShaderProg where
     -- set Defualt param to uniform
     currentProgram $= Just (program sp)
 
-    asUniform pvMat $ getUniform sp uniProjViewMTag' 
-    GU.asUniform (GU3.camMatrix (GU3.fpsCamera :: GU3.Camera GLfloat)) (getUniform sp uniRotMTag')
-    uniformMat (getUniform sp uniScaleMTag') $= ( [[1.0,0,0],[0,1.0,0],[0,0,1.0]]:: [[GLfloat]])
+    asUniform eMat $ getUniform sp uniMMatrixTag' 
+    asUniform eMat $ getUniform sp uniMvpMatrixTag'
+    asUniform eMat $ getUniform sp uniTMatrixTag' 
     uniformScalar (getUniform sp uniTexEnFTag') $= (0 :: GLint)
+
+    uniformScalar (getUniform sp (uniTexUnitTags' !! 0)) $= (0 :: GLint)
+    uniformScalar (getUniform sp (uniTexUnitTags' !! 1)) $= (1 :: GLint)
 
     currentProgram $= Nothing
 
@@ -64,13 +74,14 @@ instance WithShader BasicShaderProg where
              , inTexTag = inTexTag'
              , inVertNormTag = inVertNormTag'
              , outFragTag = outFragTag'
-             , uniProjViewMTag = uniProjViewMTag'
-             , uniRotMTag = uniRotMTag'
-             , uniScaleMTag = uniScaleMTag'
+             , uniMMatTag = uniMMatrixTag'
+             , uniMVPMTag = uniMvpMatrixTag'
+             , uniTMatTag = uniTMatrixTag'
              , uniTexEnFTag = uniTexEnFTag'
-             , uniTexUnitTag = uniTexUnitTag'
-             , uniClrBlndTag = uniClrBlndTag'
-             , uniLightMdTag = uniLightMdTag'
+             , uniClrBlndTag = "ColorBlandType"
+             , uniLightMdTag = "LightMode"
+             , uniShadwMdTag = "ShadowSW"
+             , uniTexUnitTags = uniTexUnitTags'
              }
     where
       !vertFn = home ++ "/.Hinecraft/shader/basic.vert"
@@ -80,16 +91,15 @@ instance WithShader BasicShaderProg where
       !inTexTag'         = "VertexTexture"
       !inVertNormTag'    = "VertexNormal"
       !outFragTag'       = "FragColor"
-      !uniProjViewMTag'  = "ProjViewMat"
-      !uniRotMTag'       = "RotMat" 
-      !uniScaleMTag'     = "SclMat"
+      !uniMMatrixTag'    = "mMatrix"
+      !uniMvpMatrixTag'  = "mvpMatrix" 
+      !uniTMatrixTag'    = "tMatrix"
       !uniTexEnFTag'     = "TexEnbFlg"
-      !uniTexUnitTag'    = "TexUnit"
-      !uniClrBlndTag'    = "ColorBlandType"
-      !uniLightMdTag'    = "LightMode"
-      !prjMat = GU3.projectionMatrix (GU3.deg2rad 60) 1.0 0.1 (1000::GLfloat)
-      !cam = GU3.camMatrix GU3.fpsCamera
-      !pvMat = prjMat !*! cam
+      !uniTexUnitTags'   = ["TexUnit", "ShadowMap"]
+      !eMat =  V4 (V4 1.0 0.0 0.0 0.0)
+                  (V4 0.0 1.0 0.0 0.0)
+                  (V4 0.0 0.0 1.0 0.0)
+                  (V4 0.0 0.0 0.0 1.0) :: M44 GLfloat
 
   useShader shd fn = do
     op <- get currentProgram
@@ -105,16 +115,23 @@ instance WithShader BasicShaderProg where
 
   getShaderProgram = shprg 
 
-  setProjViewMat shd pvMat = asUniform pvMat pvUnifLoc 
-    where
-      !pvUnifLoc = getUniform s (uniProjViewMTag shd)
-      !s = shprg shd
+setModelMatrix :: BasicShaderProg -> M44 GLfloat -> IO ()
+setModelMatrix shd mMat = asUniform mMat mMUnifLoc 
+  where
+    !mMUnifLoc = getUniform s (uniMMatTag shd)
+    !s = shprg shd
 
-  setCamParam simpShdr cam = GU.asUniform mat rUnifLoc
-    where
-      !mat = GU3.camMatrix cam
-      !rUnifLoc = GU.getUniform sp (uniRotMTag simpShdr)
-      !sp = shprg simpShdr
+setMVPMatrix :: BasicShaderProg -> M44 GLfloat -> IO ()
+setMVPMatrix shd mvpMat = asUniform mvpMat mvpMUnifLoc
+  where
+    !mvpMUnifLoc = GU.getUniform sp (uniMVPMTag shd)
+    !sp = shprg shd
+
+setTMatrix :: BasicShaderProg -> M44 GLfloat -> IO ()
+setTMatrix shd tMat = asUniform tMat tMUnifLoc
+  where
+    !tMUnifLoc = GU.getUniform sp (uniTMatTag shd)
+    !sp = shprg shd
 
 orthoProjMatrix :: GLfloat -> GLfloat -> M44 GLfloat
 orthoProjMatrix w h = V4 (V4 (2/w) 0 0 (-1)) (V4 0 (2/h) 0 (-1)) (V4 0 0 0 0) (V4 0 0 0 1)
@@ -125,6 +142,23 @@ setLightMode sh md =
     $= (fromIntegral md::GLint)
   where
     sp = shprg sh
+
+setShadowSW :: BasicShaderProg -> Int -> IO ()
+setShadowSW sh md = 
+  uniformScalar (getUniform sp $ uniShadwMdTag sh)
+    $= (fromIntegral md::GLint)
+  where
+    sp = shprg sh
+
+setTextureUnitUniform :: BasicShaderProg -> IO ()
+setTextureUnitUniform sh = do
+  asUniform (0::GLint) tunit0
+  asUniform (1::GLint) tunit1
+  where
+    sp = shprg sh
+    [tTag,sTag] = uniTexUnitTags sh
+    tunit0 = getUniform sp tTag
+    tunit1 = getUniform sp sTag
 
 setColorBlendMode :: BasicShaderProg -> Int -> IO ()
 setColorBlendMode sh md =

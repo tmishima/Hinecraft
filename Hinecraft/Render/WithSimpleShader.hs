@@ -7,6 +7,8 @@ module Hinecraft.Render.WithSimpleShader
   ( SimpleShaderProg
   , makeSimpShdrVAO
   , orthoProjMatrix
+  , setProjViewMat
+  , setCamParam
   )
   where
 
@@ -93,19 +95,21 @@ instance WithShader SimpleShaderProg where
 
   getShaderProgram = shprg 
 
-  setProjViewMat shd pvMat = asUniform pvMat pvUnifLoc 
-    where
-      !pvUnifLoc = getUniform s (uniProjViewMTag shd)
-      !s = shprg shd
-
-  setCamParam simpShdr cam = GU.asUniform mat rUnifLoc
-    where
-      !mat = GU3.camMatrix cam
-      !rUnifLoc = GU.getUniform sp (uniRotMTag simpShdr)
-      !sp = shprg simpShdr
-
 orthoProjMatrix :: GLfloat -> GLfloat -> M44 GLfloat
 orthoProjMatrix w h = V4 (V4 (2/w) 0 0 (-1)) (V4 0 (2/h) 0 (-1)) (V4 0 0 0 0) (V4 0 0 0 1)
+
+setProjViewMat :: SimpleShaderProg -> M44 GLfloat -> IO ()
+setProjViewMat shd pvMat = asUniform pvMat pvUnifLoc 
+  where
+    !pvUnifLoc = getUniform s (uniProjViewMTag shd)
+    !s = shprg shd
+
+setCamParam :: SimpleShaderProg -> GU3.Camera GLfloat -> IO ()
+setCamParam simpShdr cam = GU.asUniform mat rUnifLoc
+  where
+    !mat = GU3.camMatrix cam
+    !rUnifLoc = GU.getUniform sp (uniRotMTag simpShdr)
+    !sp = shprg simpShdr
 
 makeSimpShdrVAO :: SimpleShaderProg -> [GLfloat]
                 -> [GLfloat] -> [GLfloat] -> IO VAO
@@ -113,15 +117,15 @@ makeSimpShdrVAO simpShdr vertLst vertClrLst texCdLst = do
   op <- get currentProgram
   currentProgram $= Just (program sp)
   vao <- makeVAO $ do
-    makeBuffer ArrayBuffer vertLst
+    _ <- makeBuffer ArrayBuffer vertLst
     enableAttrib sp (inVertTag simpShdr)
     setAttrib sp (inVertTag simpShdr) ToFloat (VertexArrayDescriptor 3 Float 0 offset0)
 
-    makeBuffer ArrayBuffer vertClrLst 
+    _ <- makeBuffer ArrayBuffer vertClrLst 
     enableAttrib sp (inVertClrTag simpShdr)
     setAttrib sp (inVertClrTag simpShdr) ToFloat (VertexArrayDescriptor 4 Float 0 offset0)
     
-    makeBuffer ArrayBuffer texCdLst
+    _ <- makeBuffer ArrayBuffer texCdLst
     enableAttrib sp (inTexTag simpShdr)
     setAttrib sp (inTexTag simpShdr) ToFloat (VertexArrayDescriptor 2 Float 0 offset0)
 

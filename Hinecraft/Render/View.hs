@@ -66,6 +66,8 @@ renderHUD :: (Int,Int) -> GuiResource -> TextureObject
           -> IO ()
 renderHUD (w,h) guiRes blocktex pIndex invSw plt dragDrop dbgInfo = 
   preservingMatrix $ do
+    activeTexture $= TextureUnit 0
+
     setPerspective V2DMode w h
     depthMask $= Disabled
 

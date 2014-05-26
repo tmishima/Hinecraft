@@ -25,7 +25,7 @@ module Hinecraft.Data
   ) where
 
 import qualified Data.Vector.Unboxed as DVS
---import qualified Data.Vector as DVS'
+import qualified Data.Vector as DVS'
 import Control.Applicative
 import Data.Maybe ( fromJust, isJust, catMaybes ) -- , mapMaybe
 import Data.List
@@ -55,6 +55,18 @@ data WorldData = WorldData
   }
 
 type Chunk = [DVS.Vector BlockIDNum]
+
+data CellInfo = CellInfo
+  { blockID :: BlockIDNum
+  , cellType :: Int
+  , baseFace :: Surface
+  }
+  deriving (Show,Eq,Ord)
+
+type ChunkN = [DVS'.Vector CellInfo]
+
+test = DVS'.replicate 3 $ CellInfo 0 0 SFront
+
 
 -- | 
 
