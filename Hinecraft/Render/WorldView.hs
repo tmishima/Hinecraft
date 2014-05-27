@@ -216,26 +216,26 @@ drawWorldView wvhdl (w,h) res vaos usrStat' pos = do
     GU.withViewport (Position 0 0) (Size (fromIntegral w)
                   (fromIntegral h)) $ do
     -- Draw 3D cube
-      GL.clear [GL.ColorBuffer, GL.DepthBuffer]
-
-      cullFace $= Just Back  --Just Front Just FrontAndBack -- 
-      cullFace $= Nothing
       colorMask $= (Color4 Enabled Enabled Enabled Enabled)
+      GL.clear [GL.ColorBuffer, GL.DepthBuffer]
 
       setTextureUnitUniform shaderPrg
 
       -- ### draw skybox ###
+      cullFace $= Nothing
       setMVPMatrix shaderPrg mvpMats
 
       renderEnvCube shaderPrg cbVao skyTex 
 
       -- ### draw grund ###
+      cullFace $= Just Back  --Just Front Just FrontAndBack -- 
       setTMatrix shaderPrg tMat
       setMVPMatrix shaderPrg mvpMatp
       let tex = [(blkTex,0),(tbo,1)] 
       forM_ vs (\ (_,vas) ->
         mapM_ (\ v -> renderChunk shaderPrg v tex) vas)
 
+      cullFace $= Nothing
     -- Cursol 選択された面を強調
     useShader spg $ \ shaderPrg -> do
       case pos of 

@@ -24,6 +24,7 @@ uniform sampler2D ShadowMap;
 uniform vec3 LightPosition = vec3 (0,400,0);
 uniform float MaterialShininess = 0.5;
 
+/*
 vec3 phongModelDiffAndSpec()
 {
     vec3 n = Normal;
@@ -40,6 +41,8 @@ vec3 phongModelDiffAndSpec()
 
     return clamp (diffuse + spec, vec3(0.0,0.0,0.0), vec3(0.8,0.8,0.8));
 }
+*/
+uniform vec3 lightDirection = vec3 (0.0,1.0,0.0);
 
 void RenderPass ()
 {
@@ -51,7 +54,10 @@ void RenderPass ()
   vec4 tColor;
   vec4 shadowCoordinateWdivide = ShadowCoord / ShadowCoord.w ;
   vec3 ambient = vec3 (0.1,0.1,0.1);
-  vec3 diffAndSpec = phongModelDiffAndSpec();
+  //vec3 diffAndSpec = phongModelDiffAndSpec();
+  vec3  invLight = lightDirection;
+  float diffuse  = clamp(dot(Normal, invLight), 0.1, 1.0);
+  vec3 diffAndSpec = Color.rgb * vec3(diffuse); 
   float distanceFromLight = texture (ShadowMap,shadowCoordinateWdivide.st).z;
   float shadow = 1.0;
 		
