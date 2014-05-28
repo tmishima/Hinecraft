@@ -147,27 +147,20 @@ drawShadoWorldView :: BasicShaderProg -> WorldViewVHdl
                    -> WorldVAOList -> M44 GLfloat
                    -> IO ()
 drawShadoWorldView pg wvhdl vaos mvpMat = do
-  --activeTexture $= TextureUnit 1
-  -- Draw 3D cube
   bindFramebuffer Framebuffer $= fbo
   colorMask $= (Color4 Disabled Disabled Disabled Disabled)
 
-  --useShader pg $ \ shaderPrg -> do
-    --textureBinding Texture2D $= Just tbo 
-    --GL.clientState GL.VertexArray $= GL.Enabled
   setShadowSW pg 1
-
   cullFace $= Just Front 
-
   GL.clear [GL.ColorBuffer, GL.DepthBuffer]
 
-  -- ### draw skybox ###
-  -- setMVPMatrix shaderPrg mvpMat
   setMVPMatrix pg mvpMat
-   
+
+  setLightMode pg 0
+  setColorBlendMode pg 0
+  enableTexture pg False  
   forM_ vs (\ (_,vas) ->
     mapM_ (\ v -> renderChunkS pg v) vas)
-    -- mapM_ (\ v -> renderChunkS shaderPrg v) vas)
 
   setShadowSW pg 0
 
@@ -182,35 +175,9 @@ drawWorldView ::  WorldViewVHdl -> (Int,Int)
               -> WorldVAOList -> UserStatus
               -> Maybe (WorldIndex,Surface) -> IO ()
 drawWorldView wvhdl (w,h) res vaos usrStat' pos = do
-  let !dpMat = GU3.projectionMatrix (GU3.deg2rad 10) 1.0 200.0
-                                    (600::GLfloat)
-      !dvMat = GU3.camMatrix $ GU3.tilt (-90::GLfloat)
-                             -- $ GU3.dolly (V3 ux 400 uz)
-                             $ GU3.dolly (V3 0 400 (0::GLfloat))
-                             GU3.fpsCamera
-      !mMat = V4 (V4 1.0 0.0 0.0 0.0)
-                 (V4 0.0 1.0 0.0 0.0)
-                 (V4 0.0 0.0 1.0 0.0)
-                 (V4 0.0 0.0 0.0 1.0)
-      !shadowMat = (dpMat !*! dvMat !*! mMat)
-      !pMat = GU3.projectionMatrix (GU3.deg2rad 60)
-               (fromIntegral w/ fromIntegral h) 0.1 (1000::GLfloat)
-      !vMats = GU3.camMatrix $ GU3.pan ury $ GU3.tilt urx
-                             GU3.fpsCamera
-      !vMatp = GU3.camMatrix $ GU3.pan ury $ GU3.tilt urx
-                             $ GU3.dolly (V3 ux (uy + 1.5) uz)
-                             GU3.fpsCamera
-      !bMat = V4 (V4 0.5 0.0 0.0 0.5)
-                 (V4 0.0 0.5 0.0 0.5)
-                 (V4 0.0 0.0 0.5 0.5)
-                 (V4 0.0 0.0 0.0 1.0)
-      !mvpMats = pMat !*! vMats !*! mMat
-      !mvpMatp = pMat !*! vMatp !*! mMat
-      !tMat = bMat !*! shadowMat
   useShader pg $ \ shaderPrg -> do
-
-    GU.withViewport (Position 0 0) (Size (fromIntegral 512)
-                  (fromIntegral 512)) $ do
+    GU.withViewport (Position 0 0)
+                    (Size (fromIntegral shW) (fromIntegral shH)) $ do
       drawShadoWorldView pg wvhdl vaos shadowMat
 
     GU.withViewport (Position 0 0) (Size (fromIntegral w)
@@ -218,8 +185,6 @@ drawWorldView wvhdl (w,h) res vaos usrStat' pos = do
     -- Draw 3D cube
       colorMask $= (Color4 Enabled Enabled Enabled Enabled)
       GL.clear [GL.ColorBuffer, GL.DepthBuffer]
-
-      setTextureUnitUniform shaderPrg
 
       -- ### draw skybox ###
       cullFace $= Nothing
@@ -231,6 +196,10 @@ drawWorldView wvhdl (w,h) res vaos usrStat' pos = do
       cullFace $= Just Back  --Just Front Just FrontAndBack -- 
       setTMatrix shaderPrg tMat
       setMVPMatrix shaderPrg mvpMatp
+      setLightMode shaderPrg 1
+      setColorBlendMode shaderPrg 0
+      enableTexture shaderPrg True
+
       let tex = [(blkTex,0),(tbo,1)] 
       forM_ vs (\ (_,vas) ->
         mapM_ (\ v -> renderChunk shaderPrg v tex) vas)
@@ -251,6 +220,7 @@ drawWorldView wvhdl (w,h) res vaos usrStat' pos = do
           renderBlockCursol shaderPrg bCurVAO s
         Nothing -> return ()
   where
+    TextureSize2D shW shH = shadowMapSize
     !(tbo,_) = shadowBuf wvhdl
     !pg = basicShader wvhdl
     !spg = simpleShader wvhdl
@@ -262,7 +232,31 @@ drawWorldView wvhdl (w,h) res vaos usrStat' pos = do
     d2f (a,b,c) = (realToFrac a, realToFrac b, realToFrac c)
     !(ux,uy,uz) = d2f $ userPos usrStat'
     !(urx,ury,_) = d2f $ userRot usrStat' :: (GLfloat,GLfloat,GLfloat)
-    !font' = font res 
+    !dpMat = GU3.projectionMatrix (GU3.deg2rad 10) 1.0 200.0
+                                    (600::GLfloat)
+    !dvMat = GU3.camMatrix $ GU3.tilt (-90::GLfloat)
+                           -- $ GU3.dolly (V3 ux 400 uz)
+                           $ GU3.dolly (V3 0 400 (0::GLfloat))
+                           GU3.fpsCamera
+    !mMat = V4 (V4 1.0 0.0 0.0 0.0)
+               (V4 0.0 1.0 0.0 0.0)
+               (V4 0.0 0.0 1.0 0.0)
+               (V4 0.0 0.0 0.0 1.0)
+    !shadowMat = (dpMat !*! dvMat !*! mMat)
+    !pMat = GU3.projectionMatrix (GU3.deg2rad 60)
+             (fromIntegral w/ fromIntegral h) 0.1 (1000::GLfloat)
+    !vMats = GU3.camMatrix $ GU3.pan ury $ GU3.tilt urx
+                           GU3.fpsCamera
+    !vMatp = GU3.camMatrix $ GU3.pan ury $ GU3.tilt urx
+                           $ GU3.dolly (V3 ux (uy + 1.5) uz)
+                           GU3.fpsCamera
+    !mvpMats = pMat !*! vMats !*! mMat
+    !mvpMatp = pMat !*! vMatp !*! mMat
+    !tMat = bMat !*! shadowMat
+    !bMat = V4 (V4 0.5 0.0 0.0 0.5)
+               (V4 0.0 0.5 0.0 0.5)
+               (V4 0.0 0.0 0.5 0.5)
+               (V4 0.0 0.0 0.0 1.0)
 
 genBlockCursol :: SimpleShaderProg -> IO GU.VAO
 genBlockCursol sh = makeSimpShdrVAO sh  vertLst vertClrLst texCdLst
@@ -297,11 +291,7 @@ renderChunk :: BasicShaderProg -> Maybe (Int,GU.VAO)
             -> [(TextureObject,GLuint)] -> IO ()
 renderChunk _ Nothing _ = return ()
 renderChunk _ (Just (0,_)) _ = return ()
-renderChunk sh (Just (len,vao)) tex = do
-  setLightMode sh 1
-  setColorBlendMode sh 0
-  enableTexture sh True
-  GU.withVAO vao $ 
+renderChunk sh (Just (len,vao)) tex = GU.withVAO vao $ 
     GU.withTexturesAt Texture2D tex $
       drawArrays Quads 0 $ fromIntegral len * 4
 
@@ -309,11 +299,7 @@ renderChunkS :: BasicShaderProg -> Maybe (Int,GU.VAO)
             -> IO ()
 renderChunkS _ Nothing = return ()
 renderChunkS _ (Just (0,_)) = return ()
-renderChunkS sh (Just (len,vao)) = do
-  setLightMode sh 0
-  setColorBlendMode sh 0
-  enableTexture sh False 
-  GU.withVAO vao $ 
+renderChunkS sh (Just (len,vao)) = GU.withVAO vao $ 
      drawArrays Quads 0 $ fromIntegral len * 4
 
 genChunkVAO :: WorldViewVHdl -> SurfacePos -> IO (Maybe (Int,GU.VAO))

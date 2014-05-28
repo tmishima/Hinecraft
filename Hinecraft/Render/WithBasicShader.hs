@@ -13,7 +13,6 @@ module Hinecraft.Render.WithBasicShader
   , setMVPMatrix
   , setTMatrix
   , setShadowSW
-  , setTextureUnitUniform
   )
   where
 
@@ -42,7 +41,6 @@ data BasicShaderProg = BasicShaderProg
   , uniClrBlndTag :: String
   , uniLightMdTag :: String
   , uniShadwMdTag :: String
-  , uniTexUnitTags :: [String]
   }
 
 instance WithShader BasicShaderProg where
@@ -60,10 +58,9 @@ instance WithShader BasicShaderProg where
     asUniform eMat $ getUniform sp uniMMatrixTag' 
     asUniform eMat $ getUniform sp uniMvpMatrixTag'
     asUniform eMat $ getUniform sp uniTMatrixTag' 
-    uniformScalar (getUniform sp uniTexEnFTag') $= (0 :: GLint)
-
-    uniformScalar (getUniform sp (uniTexUnitTags' !! 0)) $= (0 :: GLint)
-    uniformScalar (getUniform sp (uniTexUnitTags' !! 1)) $= (1 :: GLint)
+    asUniform (0 :: GLint) $ getUniform sp uniTexEnFTag'
+    asUniform (0::GLint) $ getUniform sp "TexUnit"
+    asUniform (1::GLint) $ getUniform sp "ShadowMap"
 
     currentProgram $= Nothing
 
@@ -81,7 +78,6 @@ instance WithShader BasicShaderProg where
              , uniClrBlndTag = "ColorBlandType"
              , uniLightMdTag = "LightMode"
              , uniShadwMdTag = "ShadowSW"
-             , uniTexUnitTags = uniTexUnitTags'
              }
     where
       !vertFn = home ++ "/.Hinecraft/shader/basic.vert"
@@ -95,7 +91,6 @@ instance WithShader BasicShaderProg where
       !uniMvpMatrixTag'  = "mvpMatrix" 
       !uniTMatrixTag'    = "tMatrix"
       !uniTexEnFTag'     = "TexEnbFlg"
-      !uniTexUnitTags'   = ["TexUnit", "ShadowMap"]
       !eMat =  V4 (V4 1.0 0.0 0.0 0.0)
                   (V4 0.0 1.0 0.0 0.0)
                   (V4 0.0 0.0 1.0 0.0)
@@ -149,16 +144,6 @@ setShadowSW sh md =
     $= (fromIntegral md::GLint)
   where
     sp = shprg sh
-
-setTextureUnitUniform :: BasicShaderProg -> IO ()
-setTextureUnitUniform sh = do
-  asUniform (0::GLint) tunit0
-  asUniform (1::GLint) tunit1
-  where
-    sp = shprg sh
-    [tTag,sTag] = uniTexUnitTags sh
-    tunit0 = getUniform sp tTag
-    tunit1 = getUniform sp sTag
 
 setColorBlendMode :: BasicShaderProg -> Int -> IO ()
 setColorBlendMode sh md =
