@@ -13,13 +13,14 @@ module Hinecraft.Render.WithBasicShader
   , setMVPMatrix
   , setTMatrix
   , setShadowSW
+  , setGlobalLightParam
   )
   where
 
 -- OpenGL
 import Graphics.Rendering.OpenGL as GL
 import Graphics.GLUtil as GU
---import qualified Graphics.GLUtil.Camera3D as GU3
+import qualified Graphics.GLUtil.Camera3D as GU3
 --import Control.Exception ( bracket )
 
 import Linear.V4
@@ -41,6 +42,7 @@ data BasicShaderProg = BasicShaderProg
   , uniClrBlndTag :: String
   , uniLightMdTag :: String
   , uniShadwMdTag :: String
+  , uniGLhtVecTag :: String
   }
 
 instance WithShader BasicShaderProg where
@@ -61,6 +63,8 @@ instance WithShader BasicShaderProg where
     asUniform (0 :: GLint) $ getUniform sp uniTexEnFTag'
     asUniform (0::GLint) $ getUniform sp "TexUnit"
     asUniform (1::GLint) $ getUniform sp "ShadowMap"
+    asUniform (V3 0.0 1.0 (0.0:: GLfloat))
+             $ getUniform sp uniGLhtVecTag'
 
     currentProgram $= Nothing
 
@@ -78,6 +82,7 @@ instance WithShader BasicShaderProg where
              , uniClrBlndTag = "ColorBlandType"
              , uniLightMdTag = "LightMode"
              , uniShadwMdTag = "ShadowSW"
+             , uniGLhtVecTag = uniGLhtVecTag'
              }
     where
       !vertFn = home ++ "/.Hinecraft/shader/basic.vert"
@@ -91,6 +96,7 @@ instance WithShader BasicShaderProg where
       !uniMvpMatrixTag'  = "mvpMatrix" 
       !uniTMatrixTag'    = "tMatrix"
       !uniTexEnFTag'     = "TexEnbFlg"
+      !uniGLhtVecTag'    = "GlobalLightVec"
       !eMat =  V4 (V4 1.0 0.0 0.0 0.0)
                   (V4 0.0 1.0 0.0 0.0)
                   (V4 0.0 0.0 1.0 0.0)
@@ -136,6 +142,15 @@ setLightMode sh md =
   uniformScalar (getUniform sp $ uniLightMdTag sh)
     $= (fromIntegral md::GLint)
   where
+    sp = shprg sh
+
+setGlobalLightParam ::  BasicShaderProg -> GLfloat -> IO () 
+setGlobalLightParam sh deg = asUniform vec $ getUniform sp tag
+  where
+    vec = V3 (0.0:: GLfloat) y z 
+    z = cos $ GU3.deg2rad deg
+    y = sin $ GU3.deg2rad deg
+    tag =  uniGLhtVecTag sh
     sp = shprg sh
 
 setShadowSW :: BasicShaderProg -> Int -> IO ()

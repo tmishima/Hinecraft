@@ -26,6 +26,8 @@ import Control.Monad ( when {-unless,,foldMvoid,filterM-} )
 import System.Directory ( getHomeDirectory )
 import Control.Concurrent
 import System.Environment (getArgs)
+import Data.Time
+import Data.IORef
 
 import Hinecraft.Render.View
 import Hinecraft.Render.Types
@@ -76,9 +78,10 @@ runHinecraft resouce@(glfwHdl,guiRes) = do
   !tvHdl <- initTitleModeView home guiRes
   !wvHdl <- initWorldView home
   !dtHdl <- initData home
+  !sHdl <- initSunProcess
   _ <- getDeltTime glfwHdl
   mainLoop (TitleModeState (0::Double) False False False)
-           plstat TitleMode (dtHdl,tvHdl,wvHdl) dbgInfo
+           plstat TitleMode (dtHdl,tvHdl,wvHdl) sHdl dbgInfo
   exitData dtHdl
   where
     !plstat = PlayModeState
@@ -93,7 +96,7 @@ runHinecraft resouce@(glfwHdl,guiRes) = do
         , curPos = Nothing
         , pallet = replicate 9 airBlockID
         }
-    dbgInfo = DebugInfo 0 "debug message"
+    dbgInfo = DebugInfo 0 []
     showUsrStat ustat = unwords ["pos = ",prtStr x, prtStr y, prtStr z,
                                  "rot = ",prtStr r, prtStr s]
       where
@@ -101,28 +104,48 @@ runHinecraft resouce@(glfwHdl,guiRes) = do
                  | otherwise = (take 5) $ show v
         (x,y,z) = userPos $ usrStat ustat
         (r,s,_) = userRot $ usrStat ustat
-    mainLoop tmstat' plstat' runMode (dtHdl,tvHdl,wvHdl) dbgInfo' = do
+    mainLoop tmstat' plstat' runMode (dtHdl,tvHdl,wvHdl) sHdl dbgInfo' = do
       pollGLFW
       --threadDelay 10000
       --threadDelay 1000
       dt <- getDeltTime glfwHdl
       exitflg' <- getExitReqGLFW glfwHdl
+      sunDeg <- getSunDeg sHdl
       !(ntmstat',nplstat',runMode',ndtHdl') <- mainProcess
                    resouce tmstat' plstat' dtHdl runMode wvHdl dt
       tglWin <- getScreenModeKeyOpe glfwHdl
       let !newfps = ((fps dbgInfo') * 9.0 / 10.0) + ((1.0 / dt) / 10)
-          !dmsg = showUsrStat nplstat'
-          !newDbgInfo = DebugInfo newfps dmsg 
+          !dmsg1 = showUsrStat nplstat'
+          !dmsg2 = unwords [ "sun deg = ", take 5 $ show sunDeg ]
+          !newDbgInfo = DebugInfo newfps [dmsg1 , dmsg2]
       if tglWin
         then toggleFullScreenMode glfwHdl
         else do
-          drawView resouce ntmstat' nplstat' runMode' tvHdl wvHdl
+          drawView resouce ntmstat' nplstat' runMode' tvHdl wvHdl sunDeg
                    newDbgInfo         
           swapBuff glfwHdl
       if exitflg' || isQuit ntmstat'
         then return ()
         else mainLoop ntmstat' nplstat' runMode'
-                      (ndtHdl',tvHdl,wvHdl) newDbgInfo
+                      (ndtHdl',tvHdl,wvHdl) sHdl newDbgInfo
+
+type SunHdl = IORef Double
+
+initSunProcess :: IO SunHdl
+initSunProcess = do
+  o <- newIORef 0.0
+  forkIO $ sunProcess o
+  return o
+
+sunProcess :: SunHdl -> IO ()
+sunProcess hdl = do
+  t <- fmap utctDayTime getCurrentTime
+  writeIORef hdl $ (fromIntegral (mod (floor t) 3600)) / 10.0
+  threadDelay 500000
+  sunProcess hdl
+
+getSunDeg :: SunHdl -> IO Double
+getSunDeg hdl = readIORef hdl
 
 mainProcess :: Handls
             -> TitleModeState -> PlayModeState -> DataHdl
@@ -422,12 +445,11 @@ guiProcess res (x,y,btn1,_,_) = (chkModeChg,chkExit)
 
 drawView :: Handls 
          -> TitleModeState -> PlayModeState -> RunMode
-         -> TitleModeHdl -> WorldViewVHdl
+         -> TitleModeHdl -> WorldViewVHdl -> Double
          -> DebugInfo
          -> IO ()
 drawView (glfwHdl, guiRes) tmstat plstat runMode'
-          tvHdl wvHdl dbgInfo = do
-  !worldDispList <- getBlockVAOList wvHdl
+          tvHdl wvHdl sunDeg dbgInfo = do
   !winSize <- getWindowSize glfwHdl
   updateDisplay $
     case runMode' of
@@ -435,14 +457,20 @@ drawView (glfwHdl, guiRes) tmstat plstat runMode'
         drawTitle winSize guiRes tmstat tvHdl
       InitMode ->
         drawInit winSize guiRes (InitModeState 10) tvHdl 
-      _ -> -- 3D
-        drawPlay winSize guiRes usrStat' worldDispList pos plt
-                 (runMode' == InventoryMode) drgSta' wvHdl
-                 dbgInfo
+      _ -> do -- 3D
+        !vaolst <- getBlockVAOList wvHdl
+        drawWorldView wvHdl winSize guiRes vaolst usrStat' pos sunDeg
+        -- HUD
+        renderHUD winSize guiRes tex pIndex invSw plt drgSta' dbgInfo
   where
     !usrStat' = usrStat plstat
     !pos = curPos plstat
     !drgSta' = drgSta plstat
     !plt = pallet plstat
+    !pIndex =  palletIndex usrStat'
+    !tex = blockTexture wvHdl
+    !invSw = runMode' == InventoryMode
+
+
 --
 

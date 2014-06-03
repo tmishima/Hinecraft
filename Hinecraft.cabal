@@ -32,7 +32,7 @@ executable Hinecraft
                      , GLFW-b , OpenGL , mtl == 2.*
                      , bytestring == 0.10.*
                      , array , vector , directory , process
-                     , OpenGLRaw , cereal , FTGL 
+                     , OpenGLRaw , cereal , FTGL , time
                      , containers , GLUtil , linear , text
                      , persistent , persistent-template
                      , persistent-sqlite , transformers

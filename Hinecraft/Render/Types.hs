@@ -37,5 +37,5 @@ data GuiResource = GuiResource
 
 data DebugInfo = DebugInfo
   { fps :: Double
-  , message :: String
+  , message :: [String]
   }

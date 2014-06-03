@@ -11,8 +11,7 @@ module Hinecraft.Render.View
   , setPerspective
   , drawBackPlane
   , updateDisplay
-  , drawTitle
-  , drawPlay
+  , renderHUD
   --
   ) where
 
@@ -40,25 +39,6 @@ import Hinecraft.Render.WorldView
 -- ##################### OpenGL ###########################
 data ViewMode = V2DMode | V3DTitleMode | V3DMode
   deriving (Eq,Show)
-
-drawPlay :: (Int,Int) -> GuiResource
-         -> UserStatus -> WorldVAOList 
-         -> Maybe (WorldIndex,Surface)
-         -> [BlockIDNum] -> Bool -> DragDropState
-         -> WorldViewVHdl 
-         -> DebugInfo
-         -> IO ()
-drawPlay (w,h) guiRes usrStat' worldDispList pos plt
-         invSw dragDrop wvHdl dbgInfo = do
-
-  -- World
-  drawWorldView wvHdl (w,h) guiRes worldDispList usrStat' pos
-
-  -- HUD
-  renderHUD (w,h) guiRes tex pIndex invSw plt dragDrop dbgInfo
-  where
-    pIndex =  palletIndex usrStat'
-    tex = blockTexture wvHdl
 
 renderHUD :: (Int,Int) -> GuiResource -> TextureObject 
           -> Int -> Bool -> [BlockIDNum] -> DragDropState
@@ -99,8 +79,8 @@ renderHUD (w,h) guiRes blocktex pIndex invSw plt dragDrop dbgInfo =
     -- for Debug
     putTextLine font' (Just (1,1,1)) (Just 20)
                   (20, 20) ("fps = " ++ (take 5 $ show $ fps dbgInfo)) 
-    putTextLine font' (Just (1,1,1)) (Just 20)
-                  (20, 40) (message dbgInfo) 
+    forM_ (zip (message dbgInfo) [0 .. ]) (\ (msg,i) -> do
+      putTextLine font' (Just (1,1,1)) (Just 20) (20, 40 + 20 * i) msg) 
   where
     !rate = 2.5
     !(w',h') = (fromIntegral w, fromIntegral h)

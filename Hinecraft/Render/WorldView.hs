@@ -173,8 +173,8 @@ drawShadoWorldView pg wvhdl vaos mvpMat = do
 drawWorldView ::  WorldViewVHdl -> (Int,Int)
               -> GuiResource
               -> WorldVAOList -> UserStatus
-              -> Maybe (WorldIndex,Surface) -> IO ()
-drawWorldView wvhdl (w,h) res vaos usrStat' pos = do
+              -> Maybe (WorldIndex,Surface) -> Double -> IO ()
+drawWorldView wvhdl (w,h) res vaos usrStat' pos sunDeg = do
   useShader pg $ \ shaderPrg -> do
     GU.withViewport (Position 0 0)
                     (Size (fromIntegral shW) (fromIntegral shH)) $ do
@@ -193,6 +193,7 @@ drawWorldView wvhdl (w,h) res vaos usrStat' pos = do
       renderEnvCube shaderPrg cbVao skyTex 
 
       -- ### draw grund ###
+      setGlobalLightParam shaderPrg sunDeg'
       cullFace $= Just Back  --Just Front Just FrontAndBack -- 
       setTMatrix shaderPrg tMat
       setMVPMatrix shaderPrg mvpMatp
@@ -232,11 +233,16 @@ drawWorldView wvhdl (w,h) res vaos usrStat' pos = do
     d2f (a,b,c) = (realToFrac a, realToFrac b, realToFrac c)
     !(ux,uy,uz) = d2f $ userPos usrStat'
     !(urx,ury,_) = d2f $ userRot usrStat' :: (GLfloat,GLfloat,GLfloat)
-    !dpMat = GU3.projectionMatrix (GU3.deg2rad 10) 1.0 200.0
-                                    (600::GLfloat)
-    !dvMat = GU3.camMatrix $ GU3.tilt (-90::GLfloat)
+    !dpMat = GU3.projectionMatrix (GU3.deg2rad 15) 1.0 (sunLen - 100)
+                                  (sunLen + 100)
+    !sunDeg' | sunDeg > 0 && sunDeg < 180 =  180 - (realToFrac sunDeg)
+             | otherwise = 0 ::GLfloat
+    !sunLen = 400 :: GLfloat
+    !sunY = sunLen * (sin $ GU3.deg2rad sunDeg')
+    !sunZ = sunLen * (cos $ GU3.deg2rad sunDeg')
+    !dvMat = GU3.camMatrix $ GU3.tilt (-sunDeg')
                            -- $ GU3.dolly (V3 ux 400 uz)
-                           $ GU3.dolly (V3 0 400 (0::GLfloat))
+                           $ GU3.dolly (V3 (0::GLfloat) sunY sunZ)
                            GU3.fpsCamera
     !mMat = V4 (V4 1.0 0.0 0.0 0.0)
                (V4 0.0 1.0 0.0 0.0)
