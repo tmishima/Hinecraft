@@ -147,6 +147,7 @@ drawShadoWorldView :: BasicShaderProg -> WorldViewVHdl
                    -> WorldVAOList -> M44 GLfloat
                    -> IO ()
 drawShadoWorldView pg wvhdl vaos mvpMat = do
+  alphaFunc         $= Nothing
   bindFramebuffer Framebuffer $= fbo
   colorMask $= (Color4 Disabled Disabled Disabled Disabled)
 
@@ -166,6 +167,7 @@ drawShadoWorldView pg wvhdl vaos mvpMat = do
 
   --activeTexture $= TextureUnit 0
   bindFramebuffer Framebuffer $= defaultFramebufferObject
+  alphaFunc         $= Just (Greater, 0.2)
   where
     !vs = M.toList vaos
     !(tbo,fbo) = shadowBuf wvhdl
