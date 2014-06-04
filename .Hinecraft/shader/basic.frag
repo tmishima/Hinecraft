@@ -22,6 +22,7 @@ uniform int LightMode = 0;
 
 uniform sampler2D ShadowMap;
 uniform vec3 GlobalLightVec = vec3 (0.0,1.0,0.0);
+uniform vec3 ambient = vec3(0.2,0.2,0.2);
 
 void RenderPass ()
 {
@@ -30,25 +31,20 @@ void RenderPass ()
   float fogFactor = (FogMaxDist - dist) / (FogMaxDist - FogMinDist);
   fogFactor = clamp ( fogFactor, 0.0, 1.0);
   vec4 txc = texture (TexUnit, TexCoord);
-  vec4 tColor;
+  vec4 tColor = Color;
   vec4 shadowCoordinateWdivide = ShadowCoord / ShadowCoord.w ;
-  float diffuse  = clamp(dot(Normal, GlobalLightVec), 0.4, 0.8);
-  vec3 diffAndSpec = Color.rgb * vec3(diffuse); 
+  float diffuse  = clamp(dot(Normal, GlobalLightVec), 0.0, 0.8);
   float distanceFromLight = texture (ShadowMap,shadowCoordinateWdivide.st).z;
   float shadow = 1.0;
 		
   // Used to lower moire pattern and self-shadowing
   shadowCoordinateWdivide.z += 0.00005;
 
-  if (LightMode == 0)  
-  {
-    tColor = Color; 
-  }
-  else
+  if (LightMode != 0)  
   {
     if (ShadowCoord.w > 0.0)
       shadow = distanceFromLight < shadowCoordinateWdivide.z ? 0.5 : 1.0 ;
-    tColor = vec4(diffAndSpec * shadow , 1.0);
+    tColor = vec4( Color.rgb * diffuse * shadow + ambient , 1.0);
   }
 
   if (TexEnbFlg > 0)
