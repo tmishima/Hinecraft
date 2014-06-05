@@ -145,8 +145,9 @@ initWorldVAOList wvhdl suflst = do
 
 drawShadoWorldView :: BasicShaderProg -> WorldViewVHdl 
                    -> WorldVAOList -> M44 GLfloat
+                   -> [(TextureObject,GLuint)] 
                    -> IO ()
-drawShadoWorldView pg wvhdl vaos mvpMat = do
+drawShadoWorldView pg wvhdl vaos mvpMat tex = do
   alphaFunc         $= Nothing
   bindFramebuffer Framebuffer $= fbo
   colorMask $= (Color4 Disabled Disabled Disabled Disabled)
@@ -160,12 +161,14 @@ drawShadoWorldView pg wvhdl vaos mvpMat = do
   setLightMode pg 0
   setColorBlendMode pg 0
   enableTexture pg False  
+
+  activeTexture $= TextureUnit 0
   forM_ vs (\ (_,vas) ->
-    mapM_ (\ v -> renderChunkS pg v) vas)
+    mapM_ (\ v -> renderChunk pg v tex) vas)
+    --mapM_ (\ v -> renderChunkS pg v) vas)
 
   setShadowSW pg 0
 
-  --activeTexture $= TextureUnit 0
   bindFramebuffer Framebuffer $= defaultFramebufferObject
   alphaFunc         $= Just (Greater, 0.2)
   where
@@ -180,7 +183,7 @@ drawWorldView wvhdl (w,h) res vaos usrStat' pos sunDeg = do
   useShader pg $ \ shaderPrg -> do
     GU.withViewport (Position 0 0)
                     (Size (fromIntegral shW) (fromIntegral shH)) $ do
-      drawShadoWorldView pg wvhdl vaos shadowMat
+      drawShadoWorldView pg wvhdl vaos shadowMat tex2
 
     GU.withViewport (Position 0 0) (Size (fromIntegral w)
                   (fromIntegral h)) $ do
@@ -203,7 +206,6 @@ drawWorldView wvhdl (w,h) res vaos usrStat' pos sunDeg = do
       setColorBlendMode shaderPrg 0
       enableTexture shaderPrg True
 
-      let tex = [(blkTex,0),(tbo,1)] 
       forM_ vs (\ (_,vas) ->
         mapM_ (\ v -> renderChunk shaderPrg v tex) vas)
 
@@ -225,13 +227,15 @@ drawWorldView wvhdl (w,h) res vaos usrStat' pos sunDeg = do
   where
     TextureSize2D shW shH = shadowMapSize
     !(tbo,_) = shadowBuf wvhdl
+    !blkTex = blockTexture wvhdl
+    !tex = [(blkTex,0),(tbo,1)] 
+    !tex2 = [(blkTex,0)] 
     !pg = basicShader wvhdl
     !spg = simpleShader wvhdl
     !bCurVAO = blkCursol wvhdl
     !vs = M.toList vaos
     !cbVao = envCube wvhdl
     !skyTex = skyTexture wvhdl
-    !blkTex = blockTexture wvhdl
     d2f (a,b,c) = (realToFrac a, realToFrac b, realToFrac c)
     !(ux,uy,uz) = d2f $ userPos usrStat'
     !(urx,ury,_) = d2f $ userRot usrStat' :: (GLfloat,GLfloat,GLfloat)

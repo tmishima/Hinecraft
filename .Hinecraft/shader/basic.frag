@@ -65,8 +65,16 @@ void RenderPass ()
 }
 
 void main(){
+  float alpha = texture( TexUnit, TexCoord).a;
+
   if ( ShadowSW == 0 ) {
      RenderPass ();
+  }
+  else
+  {
+    if(alpha < 0.5)
+      discard;
+  //  gl_FragDepth = gl_FragCoord.z;
   }
 }
 
