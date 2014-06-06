@@ -12,9 +12,11 @@ maintainer:          tetsuya.mishima@gmail.com
 -- copyright:           
 category:            System
 build-type:          Simple
-cabal-version:       >=1.8
+cabal-version:       >=1.10
 
 executable Hinecraft
+  Default-Language:  Haskell2010
+  Hs-Source-Dirs:    .
   main-is:           Hinecraft/Hinecraft.hs
   other-modules:     Hinecraft.Types,
                      Hinecraft.GUI.GLFWWindow
@@ -27,7 +29,7 @@ executable Hinecraft
                      Hinecraft.Render.TitleView
                      Hinecraft.Render.WithSimpleShader
                      Hinecraft.WithSqlite 
-
+                     Hinecraft.DB.WithSqlite3 
   build-depends:       base ==4.6.*
                      , GLFW-b , OpenGL , mtl == 2.*
                      , bytestring == 0.10.*
@@ -45,3 +47,18 @@ executable Hinecraft
   -- ghc-options:         -Wall -O2 -prof -auto-all -caf-all -fforce-recomp -rtsopts
   -- ghc-options:         -Wall -O2 -threaded  -XEmptyDataDeclspermits
   ghc-options:       -O2 -threaded
+
+Test-Suite spec
+  Type:                 exitcode-stdio-1.0
+  Default-Language:     Haskell2010
+  Hs-Source-Dirs:       test, .
+  Ghc-Options:          -Wall
+  Main-Is:              Spec.hs
+  Other-Modules:        WithSqlite3Spec
+  Build-Depends:        base
+                      , hspec >= 1.3
+                      , text , directory , sqlite-simple
+                     -- , QuickCheck
+
+
+
