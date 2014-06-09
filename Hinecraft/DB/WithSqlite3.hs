@@ -20,6 +20,8 @@ import Control.Monad
 import qualified Data.Text as T
 --import Database.SQLite.Simple.FromRow
 
+import Debug.Trace as Dbg
+
 type ChunkIdx = (Int,Int,Int)
 type BlockID = Int
 type Index = Int
@@ -28,9 +30,6 @@ type Index = Int
 
 dbfunc1 :: Int
 dbfunc1 = 1
-
-dbfunc2 :: IO Bool
-dbfunc2 = return True
 
 -- ######### Chunk Table ##########
 
@@ -67,6 +66,17 @@ checkChunkData conn (i,j,k) = do
           \     and j_index = ? \
           \     and k_index = ? "
 
+_getChunkID :: Connection -> ChunkIdx -> IO (Maybe Int)
+_getChunkID conn (i,j,k) = do
+  r <- query conn sql (i,j,k) :: IO [ChunkIDField]
+  return $ case r of
+    [] -> Nothing
+    ((ChunkIDField i):_) -> Just i 
+  where
+    sql = " Select ChunkID from ChunkTable \
+          \   where i_index = ? \
+          \     and j_index = ? \
+          \     and k_index = ? "
 
 -- ######### BlockInfo Table ##########
 
@@ -162,11 +172,21 @@ getChunkBlock conn (i,j,k) = do
           \                         and k_index = ? )"
     f2l (ChunkBlockField p v) = (p,v)
 
-{-
+
 setBlocksToChunk :: Connection -> ChunkIdx -> [(Index,BlockID)] -> IO ()
 setBlocksToChunk _ _ [] = return ()
-addBlocksToChunk conn cidx vlst = undefined
-
+setBlocksToChunk conn cidx vlst = do
+  cid <- _getChunkID conn cidx
+  case cid of
+    Nothing -> return ()
+    Just ci' -> do
+      execute_ conn $ sql ci'
+  where
+    sql cid = Query $ T.pack $ "INSERT INTO BlockPosTable select "
+        ++ show cid ++ ",1,2"
+        ++ " union select " 
+        ++ show cid ++ ",3,2;"
+{-
   execute conn sql (i,j,k)
   where
     vlst' = take 200 vlst
@@ -247,7 +267,7 @@ getSurface conn ((i,j,k),pos) = do
     [] -> return []
     ((SurfaceField v):_) -> return $ str2face v
   where
-    sql = " Select BlockID from SurfaceTable \
+    sql = " Select face from SurfaceTable \
           \   where ChunkID = (Select ChunkID from ChunkTable \
           \                       where i_index = ? \
           \                         and j_index = ? \
@@ -264,7 +284,7 @@ getChunkSurface conn (i,j,k) = do
   r <- query conn sql (i,j,k) :: IO [ChunkSurfaceField]
   return $ map f2l r
   where
-    sql = " Select pos,BlockID from SurfaceTable \
+    sql = " Select pos,face from SurfaceTable \
           \   where ChunkID = (Select ChunkID from ChunkTable \
           \                       where i_index = ? \
           \                         and j_index = ? \
@@ -273,65 +293,45 @@ getChunkSurface conn (i,j,k) = do
 
 -- ######### Control ##########
 
-dbProcess :: IO ()
-dbProcess = bracket (initProcess "test.db")
-                    exitProcess
-                    mainProcess  
+dbProcess :: FilePath -> IO ()
+dbProcess home = bracket (initProcess home)
+                         exitProcess
+                         mainProcess  
 
 
 mainProcess :: Connection -> IO ()
 mainProcess conn = do
   let chnkID = (1,2,3)
   print "start main"
-  chk <- checkChunkData conn chnkID
-  unless chk $ do
-    print "add chnuk"
-    addChunkData conn chnkID 
-  p1 <- getBlockPos conn (chnkID,4)
-  case p1 of
-    Just v -> (print . show) v
-    Nothing -> do 
-      addBlockPos conn (chnkID,4,5)
-      print "add blk 4"
-  p2 <- getBlockPos conn (chnkID,0)
-  case p2 of
-    Just v -> (print . show) v
-    Nothing -> do
-      addBlockPos conn (chnkID,0,5)
-      print "add blk 5"
-  -- 
-  blks <- getChunkBlock conn chnkID
-  print $ show blks
-  updateBlockPos conn (chnkID,4,2)
-  deleteBlockPos conn (chnkID,0)
+
 
   print "end main"
   return ()
 
 
-initDB :: Connection -> IO ()
-initDB conn = do
-  print "create Table"
+initTable :: Connection -> IO ()
+initTable conn = do
+  Dbg.traceIO "create Table"
   mapM_ (execute_ conn) 
     [ Query createChunkTableSQL 
     , Query createBlockInfoTableSQL
     , Query createBlockPosTableSQL
     , Query createSurfaceTableSQL
     ]
-  print "finish create Table "
+  Dbg.traceIO "finish create Table "
 
 initProcess :: FilePath -> IO Connection
 initProcess dbPath = do
-  print "start DB Process"
+  Dbg.traceIO "start DB Process"
   e <- doesFileExist dbPath
   conn <- open dbPath
-  unless e $ initDB conn
+  unless e $ initTable conn
   return conn
 
 exitProcess :: Connection -> IO ()
 exitProcess conn = do
   close conn
-  print "exit DB Process"
+  Dbg.traceIO "exit DB Process"
 
 {-
 data TestField = TestField Int String deriving (Show)
