@@ -3,7 +3,7 @@
 module DB.WithSqlite3Spec where
 
 import Test.Hspec
-import Database.SQLite.Simple
+--import Database.SQLite.Simple
 
 import Hinecraft.DB.WithSqlite3
 

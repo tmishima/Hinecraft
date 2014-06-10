@@ -71,7 +71,7 @@ _getChunkID conn (i,j,k) = do
   r <- query conn sql (i,j,k) :: IO [ChunkIDField]
   return $ case r of
     [] -> Nothing
-    ((ChunkIDField i):_) -> Just i 
+    ((ChunkIDField chi):_) -> Just chi 
   where
     sql = " Select ChunkID from ChunkTable \
           \   where i_index = ? \
@@ -182,10 +182,12 @@ setBlocksToChunk conn cidx vlst = do
     Just ci' -> do
       execute_ conn $ sql ci'
   where
+    fmt cid (i,bid) = unwords [show cid, ",",  show i, ",", show bid] 
+    ufmt cid pos = " union all select " ++ (fmt cid pos )
+    rec cid = concatMap (ufmt cid) $ tail vlst
     sql cid = Query $ T.pack $ "INSERT INTO BlockPosTable select "
-        ++ show cid ++ ",1,2"
-        ++ " union select " 
-        ++ show cid ++ ",3,2;"
+        ++ (fmt cid $ head vlst) ++ (rec cid)
+          
 {-
   execute conn sql (i,j,k)
   where
@@ -221,13 +223,13 @@ face2str fs = map (\ f -> if elem f fs then 'T' else 'F')
                 [STop, SBottom, SRight, SLeft, SFront, SBack] 
 
 str2face :: String -> [Surface] 
-str2face str = map snd $ filter (\ (s,f) -> s == 'T' ) $ 
+str2face str = map snd $ filter (\ (s,_) -> s == 'T' ) $ 
                 zip str
                     [STop, SBottom, SRight, SLeft, SFront, SBack] 
 
 
 addSurface :: Connection -> (ChunkIdx,Index,[Surface]) -> IO ()
-addSurface conn ((i,j,k),pos,[]) = return () 
+addSurface _    (_,_,[]) = return () 
 addSurface conn ((i,j,k),pos,fs) = execute conn sql (i,j,k,pos,tfs)
   where
     sql = "INSERT INTO SurfaceTable ( ChunkID , pos, face ) \
