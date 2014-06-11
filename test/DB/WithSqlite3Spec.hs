@@ -41,14 +41,25 @@ test2 = withConnect (\ conn -> do
 
 test2' = withConnect (\ conn -> do
   addChunkData conn chnkID 
-  setBlocksToChunk conn chnkID
-    [ (1,2), (2,3) , (3,4)] 
+  setChunkBlock conn chnkID
+    $ zip [1..1000] [11 .. ]
   Just p1 <- getBlockPos conn (chnkID,1)
-  Just p2 <- getBlockPos conn (chnkID,2)
-  Just p3 <- getBlockPos conn (chnkID,3)
-  return $ and [p1 == 2, p2 == 3, p3 == 4])
+  Just p2 <- getBlockPos conn (chnkID,200)
+  Just p3 <- getBlockPos conn (chnkID,201)
+  Just p4 <- getBlockPos conn (chnkID,1000)
+  return $ and [p1 == 11, p2 == 210, p3 == 211, p4 == 1010])
   where
     chnkID = (0,0,0) 
+
+test2'' = withConnect (\ conn -> do
+  addChunkData conn chnkID 
+  setChunkBlock conn chnkID dat
+  blst <- getChunkBlock conn chnkID
+  return $ and $ map (\ (x,y) -> x == y ) $ zip dat blst)
+  where
+    chnkID = (0,0,0) 
+    dat = zip [1..1000] [11 .. ]
+
 
 test3 = withConnect (\ conn -> do
   addChunkData conn chnkID 
@@ -114,6 +125,16 @@ test6 = withConnect (\ conn -> do
     chk = foldr (\ f (b,ft) ->
       ( b &&  elem f ft , filter (f /= ) ft)) (True,sufs) 
 
+test7 = withConnect (\ conn -> do
+  addChunkData conn chnkID 
+  setChunkSurface conn chnkID sufs
+  fs <- getChunkSurface conn chnkID
+  return $ fst $ chk fs)
+  where
+    chnkID = (0,1,0) 
+    sufs = [(4,[STop]),(5,[SLeft]),(6,[SBottom])]
+    chk = foldr (\ f (b,ft) ->
+      ( b &&  elem f ft , filter (f /= ) ft)) (True,sufs) 
 
 spec :: Spec
 spec = do
@@ -124,6 +145,8 @@ spec = do
       test2 `shouldReturn` True 
     it "test2'" $
       test2' `shouldReturn` True 
+    it "test2''" $
+      test2'' `shouldReturn` True 
     it "test3" $
       test3 `shouldReturn` True 
     it "test4" $
@@ -132,6 +155,8 @@ spec = do
       test5 `shouldReturn` True 
     it "test6" $
       test6 `shouldReturn` True 
+    it "test7" $
+      test7 `shouldReturn` True 
     it "sample" $
       dbfunc1 `shouldBe` 1
 

@@ -173,32 +173,22 @@ getChunkBlock conn (i,j,k) = do
     f2l (ChunkBlockField p v) = (p,v)
 
 
-setBlocksToChunk :: Connection -> ChunkIdx -> [(Index,BlockID)] -> IO ()
-setBlocksToChunk _ _ [] = return ()
-setBlocksToChunk conn cidx vlst = do
+setChunkBlock :: Connection -> ChunkIdx -> [(Index,BlockID)] -> IO ()
+setChunkBlock _ _ [] = return ()
+setChunkBlock conn cidx vlst = do
   cid <- _getChunkID conn cidx
+  let (vlst',vlst'') = splitAt 200 vlst
   case cid of
     Nothing -> return ()
     Just ci' -> do
-      execute_ conn $ sql ci'
+      execute_ conn $ sql ci' vlst'
+  setChunkBlock conn cidx vlst'' 
   where
     fmt cid (i,bid) = unwords [show cid, ",",  show i, ",", show bid] 
     ufmt cid pos = " union all select " ++ (fmt cid pos )
-    rec cid = concatMap (ufmt cid) $ tail vlst
-    sql cid = Query $ T.pack $ "INSERT INTO BlockPosTable select "
-        ++ (fmt cid $ head vlst) ++ (rec cid)
-          
-{-
-  execute conn sql (i,j,k)
-  where
-    vlst' = take 200 vlst
-    sql = "INSERT INTO BlockPosTable \
-          \ ( ChunkID, pos BlockID ) \
-          \ values \
-          \ (?,?)
-          "
--}
-
+    rec cid vlst' = concatMap (ufmt cid) $ tail vlst'
+    sql cid vlst' = Query $ T.pack $ "INSERT INTO BlockPosTable select "
+        ++ (fmt cid $ head vlst') ++ (rec cid vlst') ++ ";"
 
 -- ######### Surface Table ##########
 
@@ -292,6 +282,25 @@ getChunkSurface conn (i,j,k) = do
           \                         and j_index = ? \
           \                         and k_index = ? )"
     f2l (ChunkSurfaceField p v) = (p, str2face v)
+
+setChunkSurface :: Connection -> ChunkIdx -> [(Index,[Surface])]
+                -> IO ()
+setChunkSurface _ _ [] = return ()
+setChunkSurface conn cidx flst = do
+  cid <- _getChunkID conn cidx
+  let (flst',flst'') = splitAt 200 flst
+  case cid of
+    Nothing -> return ()
+    Just ci' -> do
+      execute_ conn $ sql ci' flst'
+  setChunkSurface conn cidx flst'' 
+  where
+    face2str' fs = "\"" ++ (face2str fs) ++ "\"" 
+    fmt cid (i,fs) = unwords [show cid, ",",  show i, ",", face2str' fs] 
+    ufmt cid pos = " union all select " ++ (fmt cid pos )
+    rec cid vlst' = concatMap (ufmt cid) $ tail vlst'
+    sql cid vlst' = Query $ T.pack $ "INSERT INTO SurfaceTable select "
+        ++ (fmt cid $ head vlst') ++ (rec cid vlst') ++ ";"
 
 -- ######### Control ##########
 
