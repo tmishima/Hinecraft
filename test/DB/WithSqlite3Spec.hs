@@ -6,14 +6,16 @@ import Test.Hspec
 --import Database.SQLite.Simple
 
 import Hinecraft.DB.WithSqlite3
+import Control.Concurrent.Chan
 
 main :: IO()
 main = hspec spec
 
 withConnect fn = do
+  tmp <- newChan 
   conn <- initProcess ":memory:"
   ret <- fn conn
-  exitProcess conn 
+  exitProcess tmp conn 
   return ret
 
 test1 = withConnect (\ conn -> do
@@ -85,9 +87,6 @@ test4 = withConnect (\ conn -> do
   where
     chnkID = (0,0,0) 
 
-
-
-
 test5 = withConnect (\ conn -> do
   addChunkData conn chnkID 
   addSurface conn (chnkID,4,[STop]) 
@@ -136,6 +135,11 @@ test7 = withConnect (\ conn -> do
     chk = foldr (\ f (b,ft) ->
       ( b &&  elem f ft , filter (f /= ) ft)) (True,sufs) 
 
+test8 = do
+  hdl <- initDB []
+  exitDB hdl
+  return True
+
 spec :: Spec
 spec = do
   describe "DB test A" $ do
@@ -157,6 +161,10 @@ spec = do
       test6 `shouldReturn` True 
     it "test7" $
       test7 `shouldReturn` True 
+
+  describe "DB test B" $ do
+    it "test8" $
+      test8 `shouldReturn` True
     it "sample" $
       dbfunc1 `shouldBe` 1
 

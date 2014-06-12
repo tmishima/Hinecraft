@@ -19,6 +19,8 @@ import Control.Exception
 import Control.Monad
 import qualified Data.Text as T
 --import Database.SQLite.Simple.FromRow
+import Control.Concurrent.Chan
+import Control.Concurrent
 
 import Debug.Trace as Dbg
 
@@ -302,24 +304,6 @@ setChunkSurface conn cidx flst = do
     sql cid vlst' = Query $ T.pack $ "INSERT INTO SurfaceTable select "
         ++ (fmt cid $ head vlst') ++ (rec cid vlst') ++ ";"
 
--- ######### Control ##########
-
-dbProcess :: FilePath -> IO ()
-dbProcess home = bracket (initProcess home)
-                         exitProcess
-                         mainProcess  
-
-
-mainProcess :: Connection -> IO ()
-mainProcess conn = do
-  let chnkID = (1,2,3)
-  print "start main"
-
-
-  print "end main"
-  return ()
-
-
 initTable :: Connection -> IO ()
 initTable conn = do
   Dbg.traceIO "create Table"
@@ -339,24 +323,87 @@ initProcess dbPath = do
   unless e $ initTable conn
   return conn
 
-exitProcess :: Connection -> IO ()
-exitProcess conn = do
+exitProcess :: Chan DatStream -> Connection -> IO ()
+exitProcess outst conn = do
   close conn
+  writeChan outst Finish
   Dbg.traceIO "exit DB Process"
 
-{-
-data TestField = TestField Int String deriving (Show)
+-- ######### Control ##########
 
-instance FromRow TestField where
-  fromRow = TestField <$> field <*> field
+type Idx = (Int,Int,Int)
+data CmdStream = Load Idx Idx
+               | Put Idx Int
+               | Del Idx
+               | Store [(Idx,Int)]
+               | Exit
 
-main :: IO ()
-main = do
-  conn <- open "test.db"
-  execute conn "INSERT INTO test (str) VALUES (?)" (Only ("test string 2" :: String))
-  r <- query_ conn "SELECT * from test" :: IO [TestField]
-  mapM_ print r
-  close conn
--}
+data DatStream = Dump [(Idx,Int)]
+               | Finish
 
+data DBHandle = DBHandle
+  { ist :: Chan CmdStream
+  , ost :: Chan DatStream 
+  }
+
+initDB :: FilePath -> IO DBHandle
+initDB home = do
+  inst <- newChan
+  outst <- newChan
+  _ <- forkIO $ do
+    Dbg.traceIO "start DB Thread"
+    bracket (initProcess file)
+            (exitProcess outst)
+            (mainProcess inst outst)
+    Dbg.traceIO "end DB Thread"
+  return $! DBHandle
+    { ist = inst
+    , ost = outst
+    } 
+  where
+    file = if null home 
+      then ":memory:"
+      else home ++ "/.Hinecraft/userdata/wld0.db"
+
+mainProcess :: Chan CmdStream -> Chan DatStream -> Connection -> IO ()
+mainProcess inst outst conn = do
+  cmd <- readChan inst
+  q <- case cmd of
+      Exit -> return True
+      Load sidx eidx -> do
+        --blks <- loadBlksFromDB sidx eidx
+        --liftIO $ writeChan outst $ Dump blks
+        --liftIO $ Dbg.traceIO "DB Load"
+        return False
+      Put (x,y,z) v -> do
+
+        return False
+      Del (x,y,z) -> do
+        --blk <- selectList [ WorldX ==. x, WorldY ==. y, WorldZ ==. z] []
+        --unless (null blk) $ do
+        --  delete (entityKey $ head blk)
+        --  --liftIO $ Dbg.traceIO $ "DB Del = " ++ show (x,y,z)
+        --  return ()
+        return False
+      Store lst -> do
+        --liftIO $ Dbg.traceIO "Store"
+        --_ <- insertMany $ map (\ ((x,y,z),v) -> World x y z v) lst
+        return False
+  unless q $ mainProcess inst outst conn
+
+
+exitDB :: DBHandle -> IO ()
+exitDB hdl = do
+  writeChan cmdst Exit
+  Dbg.traceIO "DB Finish Wait"
+  waitLoop 
+  where
+    waitLoop = do
+      r <- readChan dst 
+      f <- case r of
+        Finish -> return True
+        _ -> return False
+      unless f waitLoop
+    cmdst = ist hdl
+    dst = ost hdl
 
