@@ -6,7 +6,7 @@
 module Hinecraft.Types where
 
 version :: String
-version = "0.2.1"
+version = "0.3.0"
 
 data ChunkParam = ChunkParam
   { blockSize :: Int

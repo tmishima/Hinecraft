@@ -2,7 +2,7 @@
 -- 
 
 name:                Hinecraft
-version:             0.2.1.0
+version:             0.3.0.0
 -- synopsis:            
 description:         This is minecraft clone
 license:             Apache-2.0
@@ -35,8 +35,7 @@ executable Hinecraft
                      , array , vector , directory , process
                      , OpenGLRaw , cereal , FTGL , time
                      , containers , GLUtil , linear , text
-                     , persistent , persistent-template
-                     , persistent-sqlite , transformers
+                     , sqlite-simple
 
   if os(windows)
     extra-lib-dirs:    extra_lib_for_Windows7_32bit

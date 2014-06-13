@@ -6,6 +6,7 @@ import Test.Hspec
 --import Database.SQLite.Simple
 
 import Hinecraft.DB.WithSqlite3
+import Hinecraft.DB.Internal
 import Hinecraft.Types
 import Control.Concurrent.Chan
 

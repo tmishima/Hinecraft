@@ -38,7 +38,6 @@ import Hinecraft.Util
 import Hinecraft.Types
 import Hinecraft.Data
 import Hinecraft.GUI.GLFWWindow 
---import Hinecraft.WithSqlite
 
 main :: IO ()
 main = bracket initHinecraft exitHinecraft runHinecraft
