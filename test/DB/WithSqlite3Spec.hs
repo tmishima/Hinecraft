@@ -6,10 +6,16 @@ import Test.Hspec
 --import Database.SQLite.Simple
 
 import Hinecraft.DB.WithSqlite3
+import Hinecraft.Types
 import Control.Concurrent.Chan
 
 main :: IO()
 main = hspec spec
+
+spec :: Spec
+spec = do
+  specAB
+  specCD
 
 withConnect fn = do
   tmp <- newChan 
@@ -135,36 +141,122 @@ test7 = withConnect (\ conn -> do
     chk = foldr (\ f (b,ft) ->
       ( b &&  elem f ft , filter (f /= ) ft)) (True,sufs) 
 
+specAB :: Spec
+specAB = do
+  describe "DB test A" $ do
+    it "A1: Chunk Check" $
+      test1 `shouldReturn` True 
+    it "A2: Block Check" $
+      test2 `shouldReturn` True 
+    it "A2-1" $
+      test2' `shouldReturn` True 
+    it "A2-2" $
+      test2'' `shouldReturn` True 
+    it "A3" $
+      test3 `shouldReturn` True 
+    it "A4" $
+      test4 `shouldReturn` True 
+    it "A5" $
+      test5 `shouldReturn` True 
+    it "A6" $
+      test6 `shouldReturn` True 
+    it "A7" $
+      test7 `shouldReturn` True 
+
+  describe "DB test B" $ do
+    it "B1" $
+      wIndexToChunkpos (0,0,0) `shouldBe` ((0,0,0),0)
+    it "B2" $
+      wIndexToChunkpos (15,15,15) `shouldBe` ((0,0,0),16*16*15+16*15+15)
+    it "B3" $
+      wIndexToChunkpos (16,0,0) `shouldBe` ((1,0,0),0)
+    it "B4" $
+      wIndexToChunkpos (16,16,0) `shouldBe` ((1,1,0),0)
+    it "B5" $
+      wIndexToChunkpos (16,16,16) `shouldBe` ((1,1,1),0)
+    it "B6" $
+      wIndexToChunkpos (16,17,16) `shouldBe` ((1,1,1),16*16*1)
+    it "B7" $
+      wIndexToChunkpos (-1,0,0) `shouldBe` ((-1,0,0),15)
+    it "B8" $
+      ( chunkposToWindex $ wIndexToChunkpos (-1,0,0)) `shouldBe` (-1,0,0)
+    it "B9" $
+      ( chunkposToWindex $ wIndexToChunkpos (16,0,0)) `shouldBe` (16,0,0)
+    it "B10" $
+      ( chunkposToWindex $ wIndexToChunkpos (16,16,0)) `shouldBe` (16,16,0)
+    it "B11" $
+      ( chunkposToWindex $ wIndexToChunkpos (16,0,16)) `shouldBe` (16,0,16)
+    it "B12" $
+      ( chunkposToWindex $ wIndexToChunkpos (0,16,0)) `shouldBe` (0,16,0)
+
 test8 = do
   hdl <- initDB []
   exitDB hdl
   return True
 
-spec :: Spec
-spec = do
-  describe "DB test A" $ do
-    it "test1: Chunk Check" $
-      test1 `shouldReturn` True 
-    it "test2: Block Check" $
-      test2 `shouldReturn` True 
-    it "test2'" $
-      test2' `shouldReturn` True 
-    it "test2''" $
-      test2'' `shouldReturn` True 
-    it "test3" $
-      test3 `shouldReturn` True 
-    it "test4" $
-      test4 `shouldReturn` True 
-    it "test5" $
-      test5 `shouldReturn` True 
-    it "test6" $
-      test6 `shouldReturn` True 
-    it "test7" $
-      test7 `shouldReturn` True 
+test9 = do
+  hdl <- initDB []
+  setBlockToDB hdl (0,0,0) 1
+  c <- readChunkData hdl (0,0,0)
+  exitDB hdl
+  return $ case c of
+             (((0,0,0),1):_) -> True
+             _ -> False
 
-  describe "DB test B" $ do
-    it "test8" $
+test10 = do
+  hdl <- initDB []
+  setBlockToDB hdl (0,0,1) 1
+  c1 <- readChunkData hdl (0,0,0)
+  delBlockInDB hdl (0,0,1)
+  c2 <- readChunkData hdl (0,0,0)
+  exitDB hdl
+  return $ case c1 of
+             (((0,0,1),1):_) -> c2 == []
+             _ -> False
+
+test11 = do
+  hdl <- initDB []
+  writeChunkData hdl (0,0,0) dat
+  c <- readChunkData hdl (0,0,0)
+  exitDB hdl
+  return $ if null c 
+             then False
+             else fst $ chk c 
+  where
+    dat = zip [(i,j,k) | i <- [0..15], j <- [0..15], k <-[0..15]] [1..]
+    chk = foldr (\ v (b,dt) ->
+      ( b &&  elem v dt , filter (v /= ) dt)) (True,dat) 
+
+test12 = do
+  hdl <- initDB []
+  writeChunkData hdl (1,0,0) dat
+  c <- readChunkData hdl (1,0,0)
+  exitDB hdl
+  return $ if null c 
+             then False
+             else fst $ chk c 
+  where
+    dat = zip [(i,j,k) | i <- [0..15], j <- [0..15], k <-[0..15]] [1..]
+    rdat = map (\ ((i,j,k),v) -> ((i + 16, j,k),v)) dat 
+    chk = foldr (\ v (b,dt) ->
+      ( b &&  elem v dt , filter (v /= ) dt)) (True,rdat) 
+
+specCD :: Spec
+specCD = do
+  describe "DB test C" $ do
+    it "C1" $
       test8 `shouldReturn` True
-    it "sample" $
-      dbfunc1 `shouldBe` 1
+    it "C2" $
+      test9 `shouldReturn` True
+    it "C3" $
+      test10 `shouldReturn` True
+    it "C4" $
+      test11 `shouldReturn` True
+    it "C5" $
+      test12 `shouldReturn` True
+
+
+
+
+
 
