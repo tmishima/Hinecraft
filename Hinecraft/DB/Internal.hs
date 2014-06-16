@@ -9,7 +9,8 @@ import Database.SQLite.Simple
 
 import Hinecraft.Types
 
-type ChunkIdx = (Int,Int,Int)
+type ChunkIdx = (Int,Int)
+type ChunkID = Int
 type BlockID = Int
 type Index = Int
 
@@ -20,7 +21,6 @@ createChunkTableSQL =
   "CREATE TABLE ChunkTable ( \
   \ i_index INTEGER NOT NULL, \
   \ j_index INTEGER NOT NULL, \
-  \ k_index INTEGER NOT NULL, \
   \ ChunkID INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL )"
 
 data ChunkIDField = ChunkIDField Int deriving (Show)
@@ -29,80 +29,88 @@ instance FromRow ChunkIDField where
   fromRow = ChunkIDField <$> field
 
 addChunkData :: Connection -> ChunkIdx -> IO ()
-addChunkData conn (i,j,k) = execute conn sql (i,j,k) 
+addChunkData conn (i,j) = execute conn sql (i,j) 
   where
     sql = "INSERT INTO ChunkTable \
-          \ ( i_index , j_index , k_index ) \
+          \ ( i_index , j_index ) \
           \ values \
-          \ (?, ?, ?)"
+          \ (?, ?)"
 
 checkChunkData :: Connection -> ChunkIdx -> IO Bool
-checkChunkData conn (i,j,k) = do
-  r <- query conn sql (i,j,k) :: IO [ChunkIDField]
+checkChunkData conn (i,j) = do
+  r <- query conn sql (i,j) :: IO [ChunkIDField]
   return $ case r of
     [] -> False 
     _ -> True
   where
     sql = " Select ChunkID from ChunkTable \
           \   where i_index = ? \
-          \     and j_index = ? \
-          \     and k_index = ? "
+          \     and j_index = ? "
 
 _getChunkID :: Connection -> ChunkIdx -> IO (Maybe Int)
-_getChunkID conn (i,j,k) = do
-  r <- query conn sql (i,j,k) :: IO [ChunkIDField]
+_getChunkID conn (i,j) = do
+  r <- query conn sql (i,j) :: IO [ChunkIDField]
   return $ case r of
     [] -> Nothing
     ((ChunkIDField chi):_) -> Just chi 
   where
     sql = " Select ChunkID from ChunkTable \
           \   where i_index = ? \
-          \     and j_index = ? \
-          \     and k_index = ? "
+          \     and j_index = ? "
 
--- ######### ObjectInfo Table ##########
+-- ######### Block-Chunk Table ##########
 
-createObjInfoTableSQL :: T.Text
-createObjInfoTableSQL =
-  "CREATE TABLE ObjectInfoTable ( \
-  \ ObjectID INTEGER PRIMARY KEY NOT NULL, \
-  \ ObjectShape INTEGER NOT NULL)"
+createBlockChunkTableSQL :: T.Text
+createBlockChunkTableSQL =
+  "CREATE TABLE BlockChunkTable ( \
+  \ BlockID INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, \ 
+  \ ChunkID INTEGER NOT NULL, \ 
+  \ HPos    INTEGER NOT NULL )" 
 
-addObjInfo :: Connection -> Int -> IO ()
-addObjInfo conn i =  execute conn sql (Only i) 
+data BlockChunkField = BlockChunkField Int deriving (Show)
+
+instance FromRow BlockChunkField where
+  fromRow = BlockChunkField <$> field
+
+addBlockToChunk :: Connection -> (ChunkIdx,Index) -> IO ()
+addBlockToChunk conn ((i,j),pos) = execute conn sql (i,j,pos)
   where
-    sql = "INSERT INTO ObjectInfoTable \
-          \ ( ObjectShape ) \
-          \ values \
-          \ (?)"
-
--- ######### BlockPos Table ##########
-
-createBlockPosTableSQL :: T.Text
-createBlockPosTableSQL =
-  "CREATE TABLE BlockPosTable ( \
-  \ ChunkID INTEGER NOT NULL, \
-  \ pos INTEGER NOT NULL, \
-  \ BlockID INTEGER NOT NULL, \
-  \ PRIMARY KEY (ChunkID,pos) )"
-
-data BlockPosField = BlockPosField Int deriving (Show)
-
-instance FromRow BlockPosField where
-  fromRow = BlockPosField <$> field
-
-addBlockPos :: Connection -> (ChunkIdx,Index,BlockID) -> IO ()
-addBlockPos conn ((i,j,k),pos,bid) = execute conn sql (i,j,k,pos,bid)
-  where
-    sql = "INSERT INTO BlockPosTable ( ChunkID , pos, BlockID ) \
+    sql = "INSERT INTO BlockChunkTable ( ChunkID, HPos ) \
           \ values \
           \ ( \
           \   (Select ChunkID from chunktable \
-          \      where i_index = ? and j_index = ? and k_index = ?) \
+          \      where i_index = ? and j_index = ? ) \
+          \   , ? ) "
+
+-- ######### Block-Obj Table ##########
+
+createBlockObjTableSQL :: T.Text
+createBlockObjTableSQL =
+  "CREATE TABLE BlockObjTable ( \
+  \ BlockID INTEGER NOT NULL, \
+  \ pos INTEGER NOT NULL, \
+  \ ObjectID INTEGER NOT NULL, \
+  \ PRIMARY KEY (BlockID,pos) )"
+
+data BlockObjField = BlockObjField Int deriving (Show)
+
+instance FromRow BlockObjField where
+  fromRow = BlockObjField <$> field
+
+addBlockPos :: Connection -> (ChunkIdx,Index,Index,BlockID) -> IO ()
+addBlockPos conn ((i,j),k,pos,bid) = execute conn sql (i,j,k,pos,bid)
+  where
+    sql = "INSERT INTO BlockObjTable ( BlockID , pos, ObjectID ) \
+          \ values \
+          \ ( \
+          \   ( Select BlockID from BlockChunkTable \
+          \      where ChunkID = (Select ChunkID from chunktable \
+          \                        where i_index = ? and j_index = ?) \
+          \            and HPos = ?) \
           \   , ? , ? ) "
 
-updateBlockPos :: Connection -> (ChunkIdx,Index,BlockID) -> IO ()
-updateBlockPos conn ((i,j,k),pos,bid) =  execute conn sql (bid,pos,i,j,k) 
+updateBlockPos :: Connection -> (ChunkIdx,Index,Index,BlockID) -> IO ()
+updateBlockPos conn ((i,j),k,pos,bid) =  execute conn sql (bid,pos,i,j,k) 
   where
     sql = "UPDATE BlockPosTable \
           \ SET BlockID = ? \
@@ -112,8 +120,8 @@ updateBlockPos conn ((i,j,k),pos,bid) =  execute conn sql (bid,pos,i,j,k)
           \               and j_index = ? \
           \               and k_index = ? )"
 
-deleteBlockPos :: Connection -> (ChunkIdx,Index) -> IO ()
-deleteBlockPos conn ((i,j,k),pos) =  execute conn sql (pos,i,j,k) 
+deleteBlockPos :: Connection -> (ChunkIdx,Index,Index) -> IO ()
+deleteBlockPos conn ((i,j),k,pos) =  execute conn sql (pos,i,j,k) 
   where
     sql = "DELETE From BlockPosTable \
           \   where pos = ? \
@@ -122,12 +130,12 @@ deleteBlockPos conn ((i,j,k),pos) =  execute conn sql (pos,i,j,k)
           \               and j_index = ? \
           \               and k_index = ? )"
 
-getBlockPos :: Connection -> (ChunkIdx,Index) -> IO (Maybe BlockID)
-getBlockPos conn ((i,j,k),pos) = do
-  r <- query conn sql (i,j,k,pos) :: IO [BlockPosField]
+getBlockPos :: Connection -> (ChunkIdx,Index,Index) -> IO (Maybe BlockID)
+getBlockPos conn ((i,j),k,pos) = do
+  r <- query conn sql (i,j,k,pos) :: IO [BlockObjField]
   case r of
     [] -> return Nothing
-    ((BlockPosField v):_) -> return $ Just v
+    ((BlockObjField v):_) -> return $ Just v
   where
     sql = " Select BlockID from BlockPosTable \
           \   where ChunkID = (Select ChunkID from ChunkTable \
@@ -141,11 +149,13 @@ data ChunkBlockField = ChunkBlockField Int Int deriving (Show)
 instance FromRow ChunkBlockField where
   fromRow = ChunkBlockField <$> field <*> field
 
-getChunkBlock :: Connection -> ChunkIdx -> IO [(Index,BlockID)]
-getChunkBlock conn (i,j,k) = do
+getChunkBlock :: Connection -> ChunkIdx -> IO [[(Index,BlockID)]]
+getChunkBlock conn (i,j) = mapM (\ k -> do
   r <- query conn sql (i,j,k) :: IO [ChunkBlockField]
-  return $ map f2l r
+  return $ map f2l r)
+    [1 .. bsize]
   where
+    bsize = blockSize chunkParam
     sql = " Select pos,BlockID from BlockPosTable \
           \   where ChunkID = (Select ChunkID from ChunkTable \
           \                       where i_index = ? \
@@ -153,17 +163,22 @@ getChunkBlock conn (i,j,k) = do
           \                         and k_index = ? )"
     f2l (ChunkBlockField p v) = (p,v)
 
-
-setChunkBlock :: Connection -> ChunkIdx -> [(Index,BlockID)] -> IO ()
+setChunkBlock :: Connection -> ChunkIdx -> [(Index, [(Index,BlockID)])]
+              -> IO ()
 setChunkBlock _ _ [] = return ()
-setChunkBlock conn cidx vlst = do
+setChunkBlock conn cidx vlst = mapM_ (setChunkBlock' conn cidx) vlst
+ 
+setChunkBlock' :: Connection -> ChunkIdx -> (Index, [(Index,BlockID)])
+               -> IO ()
+setChunkBlock' _ _ (_,[]) = return ()
+setChunkBlock' conn cidx (k,vlst) = do
   cid <- _getChunkID conn cidx
   let (vlst',vlst'') = splitAt 200 vlst
   case cid of
     Nothing -> return ()
     Just ci' -> do
       execute_ conn $ sql ci' vlst'
-  setChunkBlock conn cidx vlst'' 
+  setChunkBlock' conn cidx (k,vlst'')
   where
     fmt cid (i,bid) = unwords [show cid, ",",  show i, ",", show bid] 
     ufmt cid pos = " union all select " ++ (fmt cid pos )
@@ -196,9 +211,9 @@ str2face str = map snd $ filter (\ (s,_) -> s == 'T' ) $
                     [STop, SBottom, SRight, SLeft, SFront, SBack] 
 
 
-addSurface :: Connection -> (ChunkIdx,Index,[Surface]) -> IO ()
-addSurface _    (_,_,[]) = return () 
-addSurface conn ((i,j,k),pos,fs) = execute conn sql (i,j,k,pos,tfs)
+addSurface :: Connection -> (ChunkIdx,Index,Index,[Surface]) -> IO ()
+addSurface _    (_,_,_,[]) = return () 
+addSurface conn ((i,j),k,pos,fs) = execute conn sql (i,j,k,pos,tfs)
   where
     sql = "INSERT INTO SurfaceTable ( ChunkID , pos, face ) \
           \ values \
@@ -208,8 +223,8 @@ addSurface conn ((i,j,k),pos,fs) = execute conn sql (i,j,k,pos,tfs)
           \   , ? , ? ) "
     tfs = face2str fs
 
-updateSurface :: Connection -> (ChunkIdx,Index,[Surface]) -> IO ()
-updateSurface conn ((i,j,k),pos,fs) =  execute conn sql (tfs,pos,i,j,k) 
+updateSurface :: Connection -> (ChunkIdx,Index,Index,[Surface]) -> IO ()
+updateSurface conn ((i,j),k,pos,fs) =  execute conn sql (tfs,pos,i,j,k) 
   where
     sql = "UPDATE SurfaceTable \
           \ SET face = ? \
@@ -220,8 +235,8 @@ updateSurface conn ((i,j,k),pos,fs) =  execute conn sql (tfs,pos,i,j,k)
           \               and k_index = ? )"
     tfs = face2str fs
 
-deleteSurface :: Connection -> (ChunkIdx,Index) -> IO ()
-deleteSurface conn ((i,j,k),pos) =  execute conn sql (pos,i,j,k) 
+deleteSurface :: Connection -> (ChunkIdx,Index,Index) -> IO ()
+deleteSurface conn ((i,j),k,pos) =  execute conn sql (pos,i,j,k) 
   where
     sql = "DELETE From SurfaceTable \
           \   where pos = ? \
@@ -230,8 +245,8 @@ deleteSurface conn ((i,j,k),pos) =  execute conn sql (pos,i,j,k)
           \               and j_index = ? \
           \               and k_index = ? )"
 
-getSurface :: Connection -> (ChunkIdx,Index) -> IO [Surface]
-getSurface conn ((i,j,k),pos) = do
+getSurface :: Connection -> (ChunkIdx,Index,Index) -> IO [Surface]
+getSurface conn ((i,j),k,pos) = do
   r <- query conn sql (i,j,k,pos) :: IO [SurfaceField]
   case r of
     [] -> return []
@@ -249,11 +264,12 @@ data ChunkSurfaceField = ChunkSurfaceField Int String deriving (Show)
 instance FromRow ChunkSurfaceField where
   fromRow = ChunkSurfaceField <$> field <*> field
 
-getChunkSurface :: Connection -> ChunkIdx -> IO [(Index,[Surface])]
-getChunkSurface conn (i,j,k) = do
+getChunkSurface :: Connection -> ChunkIdx -> IO [[(Index,[Surface])]]
+getChunkSurface conn (i,j) = mapM (\ k -> do
   r <- query conn sql (i,j,k) :: IO [ChunkSurfaceField]
-  return $ map f2l r
+  return $ map f2l r) [ 1 .. bsize]
   where
+    bsize = blockSize chunkParam
     sql = " Select pos,face from SurfaceTable \
           \   where ChunkID = (Select ChunkID from ChunkTable \
           \                       where i_index = ? \
@@ -261,17 +277,22 @@ getChunkSurface conn (i,j,k) = do
           \                         and k_index = ? )"
     f2l (ChunkSurfaceField p v) = (p, str2face v)
 
-setChunkSurface :: Connection -> ChunkIdx -> [(Index,[Surface])]
+setChunkSurface :: Connection -> ChunkIdx -> [(Index,[(Index,[Surface])])]
                 -> IO ()
 setChunkSurface _ _ [] = return ()
-setChunkSurface conn cidx flst = do
+setChunkSurface conn cidx flsts = mapM_ (setChunkSurface' conn cidx) flsts
+
+setChunkSurface' :: Connection -> ChunkIdx -> (Index, [(Index,[Surface])])
+                -> IO ()
+setChunkSurface' _ _ (_,[]) = return ()
+setChunkSurface' conn cidx (k,flst) = do
   cid <- _getChunkID conn cidx
   let (flst',flst'') = splitAt 200 flst
   case cid of
     Nothing -> return ()
     Just ci' -> do
       execute_ conn $ sql ci' flst'
-  setChunkSurface conn cidx flst'' 
+  setChunkSurface' conn cidx (k,flst'') 
   where
     face2str' fs = "\"" ++ (face2str fs) ++ "\"" 
     fmt cid (i,fs) = unwords [show cid, ",",  show i, ",", face2str' fs] 
@@ -303,7 +324,21 @@ chunkposToWindex ((i,j,k),idx) = (x,y,z)
     (ly,t) = idx `divMod` (bsize * bsize)
     (lz,lx) = t `divMod` bsize
 
+-- ######### ObjectInfo Table ##########
+
+createObjInfoTableSQL :: T.Text
+createObjInfoTableSQL =
+  "CREATE TABLE ObjectInfoTable ( \
+  \ ObjectID INTEGER PRIMARY KEY NOT NULL, \
+  \ ObjectShape INTEGER NOT NULL)"
+
+addObjInfo :: Connection -> Int -> IO ()
+addObjInfo conn i =  execute conn sql (Only i) 
+  where
+    sql = "INSERT INTO ObjectInfoTable \
+          \ ( ObjectShape ) \
+          \ values \
+          \ (?)"
+
 -- #####################################################
-
-
 

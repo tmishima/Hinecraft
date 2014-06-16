@@ -31,8 +31,9 @@ initTable conn = do
   Dbg.traceIO "create Table"
   mapM_ (execute_ conn) 
     [ Query createChunkTableSQL 
+    , Query createBlockChunkTableSQL
     , Query createObjInfoTableSQL
-    , Query createBlockPosTableSQL
+    , Query createBlockObjTableSQL
     , Query createSurfaceTableSQL
     ]
   Dbg.traceIO "finish create Table "
@@ -56,52 +57,60 @@ mainProcess inst outst conn = do
   cmd <- readChan inst
   q <- case cmd of
       Exit -> return True
-      Load cidx -> do
-        cflg <- checkChunkData conn cidx
+      Load (i,k) -> do
+        cflg <- checkChunkData conn (i,k)
         blks <- if cflg 
           then do
-            b' <- getChunkBlock conn cidx 
-            return $ map (\ (pos,v) -> (chunkposToWindex (cidx,pos), v)) b' 
-          else return []
+            b' <- getChunkBlock conn (i,k) 
+            return $
+              map (\ (j,b'') ->
+                map (\ (pos,v) -> (chunkposToWindex ((i,j,k),pos), v)) b''
+                ) $ zip [1..bsize] b' 
+          else return $ replicate bsize []
         writeChan outst $ Dump blks
         Dbg.traceIO "DB: Load"
         return False
       Put (x,y,z) v -> do
-        let (cidx,pos) = wIndexToChunkpos (x,y,z)
-        cflg <- checkChunkData conn cidx
+        let ((i,j,k),pos) = wIndexToChunkpos (x,y,z)
+        cflg <- checkChunkData conn (i,k)
         unless cflg $ Dbg.trace "DB: add Chunk at Put ope"
-                                $ addChunkData conn cidx
-        blk <- getBlockPos conn (cidx,pos)
+                                $ addChunkData conn (i,k)
+        blk <- getBlockPos conn ((i,k),j,pos)
         case blk of
-          Nothing -> Dbg.trace "DB: put" $ addBlockPos conn (cidx,pos,v)  
-          _ -> Dbg.trace "DB: update" $ updateBlockPos conn (cidx,pos,v) 
+          Nothing -> Dbg.trace "DB: put"
+                       $ addBlockPos conn ((i,k),j,pos,v)  
+          _ -> Dbg.trace "DB: update"
+                       $ updateBlockPos conn ((i,k),j,pos,v) 
         return False
       Del (x,y,z) -> do
-        let (cidx,pos) = wIndexToChunkpos (x,y,z)
-        cflg <- checkChunkData conn cidx
+        let ((i,j,k),pos) = wIndexToChunkpos (x,y,z)
+        cflg <- checkChunkData conn (i,k) 
         if cflg 
-          then Dbg.trace "DB: del" $ deleteBlockPos conn (cidx,pos)
+          then Dbg.trace "DB: del" $ deleteBlockPos conn ((i,k),j,pos)
           else return ()
         return False
-      Store cidx lst -> do
-        cflg <- checkChunkData conn cidx
+      Store (i,k) blks -> do 
+        cflg <- checkChunkData conn (i,k)
         unless cflg $ Dbg.trace "DB: add Chunk at Put ope"
-                                $ addChunkData conn cidx
-        setChunkBlock conn cidx $ map (\ (p,v) ->
-                                         (snd $ wIndexToChunkpos p,v)) lst
+                                $ addChunkData conn (i,k)
+        setChunkBlock conn (i,k) $ zip [1 .. bsize] 
+          $ map (map (\ (p,v) ->
+                   (snd $ wIndexToChunkpos p,v))) blks
         return False
   unless q $ mainProcess inst outst conn
+  where
+    bsize = blockSize chunkParam
 
 -- ######### Control ##########
 
 type Idx = (Int,Int,Int)
-data CmdStream = Load Idx 
+data CmdStream = Load ChunkIdx 
                | Put Idx Int
                | Del Idx
-               | Store Idx [(Idx,Int)]
+               | Store ChunkIdx [[(Idx,Int)]]
                | Exit
 
-data DatStream = Dump [(Idx,Int)]
+data DatStream = Dump [[(Idx,Int)]]
                | Finish
 
 data DBHandle = DBHandle
@@ -149,7 +158,7 @@ setBlockToDB hdl idx val = do
   where
     cmdst = ist hdl
 
-readChunkData :: DBHandle -> Idx -> IO [(WorldIndex,Int)]
+readChunkData :: DBHandle -> ChunkIdx -> IO [[(WorldIndex,Int)]]
 readChunkData hdl chnkID = do 
   writeChan cmdst $ Load chnkID 
   Dump blks <- readChan dst
@@ -164,7 +173,7 @@ delBlockInDB hdl idx = do
   where
     cmdst = ist hdl
 
-writeChunkData :: DBHandle -> Idx -> [(Idx,Int)] -> IO ()
+writeChunkData :: DBHandle -> ChunkIdx -> [[(Idx,Int)]] -> IO ()
 writeChunkData _ _ [] = return ()
 writeChunkData hdl cidx lst = do
   writeChan cmdst $ Store cidx lst

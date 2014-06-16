@@ -16,11 +16,12 @@ main = hspec spec
 spec :: Spec
 spec = do
   specAB
-  specCD
+  -- specCD
 
 withConnect fn = do
   tmp <- newChan 
-  conn <- initProcess ":memory:"
+  --conn <- initProcess ":memory:"
+  conn <- initProcess "tmp.db"
   ret <- fn conn
   exitProcess tmp conn 
   return ret
@@ -34,7 +35,7 @@ test1 = withConnect (\ conn -> do
   chk3 <- checkChunkData conn chnkID 
   return $ and [not chk1, chk2, chk3,cid == 1])
   where
-    chnkID = (0,0,0) 
+    chnkID = (0,0) 
 
 test2 = withConnect (\ conn -> do
   addChunkData conn chnkID 
@@ -48,6 +49,7 @@ test2 = withConnect (\ conn -> do
   where
     chnkID = (0,0,0) 
 
+{-
 test2' = withConnect (\ conn -> do
   addChunkData conn chnkID 
   setChunkBlock conn chnkID
@@ -141,13 +143,13 @@ test7 = withConnect (\ conn -> do
     sufs = [(4,[STop]),(5,[SLeft]),(6,[SBottom])]
     chk = foldr (\ f (b,ft) ->
       ( b &&  elem f ft , filter (f /= ) ft)) (True,sufs) 
-
+-}
 specAB :: Spec
 specAB = do
   describe "DB test A" $ do
     it "A1: Chunk Check" $
       test1 `shouldReturn` True 
-    it "A2: Block Check" $
+{-    it "A2: Block Check" $
       test2 `shouldReturn` True 
     it "A2-1" $
       test2' `shouldReturn` True 
@@ -163,7 +165,8 @@ specAB = do
       test6 `shouldReturn` True 
     it "A7" $
       test7 `shouldReturn` True 
-
+-}
+{-
   describe "DB test B" $ do
     it "B1" $
       wIndexToChunkpos (0,0,0) `shouldBe` ((0,0,0),0)
@@ -256,7 +259,7 @@ specCD = do
     it "C5" $
       test12 `shouldReturn` True
 
-
+-}
 
 
 
