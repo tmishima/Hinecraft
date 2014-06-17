@@ -71,7 +71,7 @@ mainProcess inst outst conn = do
         writeChan outst $ Dump blks
         Dbg.traceIO "DB: Load"
         return False
-      Put (x,y,z) v -> do
+      Put (x,y,z) v fs -> do
         let ((i,j,k),pos) = wIndexToChunkpos (x,y,z)
         --Dbg.traceIO $ show ((i,j,k),pos)
         cflg <- checkChunk conn (i,k)
@@ -110,7 +110,7 @@ mainProcess inst outst conn = do
 
 type Idx = (Int,Int,Int)
 data CmdStream = Load ChunkIdx 
-               | Put Idx Int
+               | Put Idx Int [Surface]
                | Del Idx
                | Store ChunkIdx [[(Idx,Int)]]
                | Exit
@@ -157,9 +157,9 @@ exitDB hdl = do
     cmdst = ist hdl
     dst = ost hdl
 
-setBlockToDB :: DBHandle -> Idx -> Int -> IO ()
-setBlockToDB hdl idx val = do
-  writeChan cmdst $ Put idx val
+setBlockToDB :: DBHandle -> Idx -> Int -> [Surface] -> IO ()
+setBlockToDB hdl idx val fs = do
+  writeChan cmdst $ Put idx val fs 
   where
     cmdst = ist hdl
 

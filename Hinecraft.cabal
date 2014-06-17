@@ -27,7 +27,6 @@ executable Hinecraft
                      Hinecraft.Render.Util
                      Hinecraft.Render.TitleView
                      Hinecraft.Render.WithSimpleShader
-                     Hinecraft.WithSqlite 
                      Hinecraft.DB.WithSqlite3 
   build-depends:       base ==4.6.*
                      , GLFW-b , OpenGL , mtl == 2.*

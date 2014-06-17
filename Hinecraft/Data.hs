@@ -393,7 +393,7 @@ setBlockID :: DataHdl -> WorldIndex -> BlockIDNum -> IO DataHdl
 setBlockID dtHdl pos bid = do
   if bid == airBlockID 
     then delBlockInDB (dbHdl dtHdl) pos 
-    else setBlockToDB (dbHdl dtHdl) pos bid
+    else setBlockToDB (dbHdl dtHdl) pos bid []
   return $! DataHdl
     { dbHdl = dbHdl dtHdl
     , wldDat = case wldDat dtHdl of

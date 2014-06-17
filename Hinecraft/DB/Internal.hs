@@ -234,32 +234,36 @@ addSurface conn ((i,j),k,pos,fs) = execute conn sql (i,j,k,pos,tfs)
     sql = "INSERT INTO SurfaceTable ( BlockID , pos, face ) \
           \ values \
           \ ( \
-          \   (Select ChunkID from chunktable \
-          \      where i_index = ? and j_index = ? and k_index = ?) \
+          \   (Select BlockID from BlockChunkTable \
+          \       where ChunkID = (Select ChunkID from ChunkTable \
+          \               where i_index = ? and j_index = ? ) \
+          \             and HPos = ?) \
           \   , ? , ? ) "
     tfs = face2str fs
 
 updateSurface :: Connection -> (ChunkIdx,Index,Index,[Surface]) -> IO ()
-updateSurface conn ((i,j),k,pos,fs) =  execute conn sql (tfs,pos,i,j,k) 
+updateSurface conn ((i,j),k,pos,fs) =  execute conn sql (tfs,i,j,k,pos) 
   where
     sql = "UPDATE SurfaceTable \
           \ SET face = ? \
-          \   where pos = ? \
-          \     and ChunkID = (Select ChunkID from ChunkTable \
-          \            where  i_index = ? \
-          \               and j_index = ? \
-          \               and k_index = ? )"
+          \   where \
+          \     BlockID = (Select BlockID from BlockChunkTable \
+          \       where ChunkID = (Select ChunkID from ChunkTable \
+          \               where i_index = ? and j_index = ? ) \
+          \             and HPos = ?) \
+          \     and pos = ? "
     tfs = face2str fs
 
 deleteSurface :: Connection -> (ChunkIdx,Index,Index) -> IO ()
-deleteSurface conn ((i,j),k,pos) =  execute conn sql (pos,i,j,k) 
+deleteSurface conn ((i,j),k,pos) =  execute conn sql (i,j,k,pos) 
   where
     sql = "DELETE From SurfaceTable \
-          \   where pos = ? \
-          \     and ChunkID = (Select ChunkID from ChunkTable \
-          \            where  i_index = ? \
-          \               and j_index = ? \
-          \               and k_index = ? )"
+          \   where \
+          \     BlockID = (Select BlockID from BlockChunkTable \
+          \       where ChunkID = (Select ChunkID from ChunkTable \
+          \               where i_index = ? and j_index = ? ) \
+          \             and HPos = ?) \
+          \     and pos = ? "
 
 getSurface :: Connection -> (ChunkIdx,Index,Index) -> IO [Surface]
 getSurface conn ((i,j),k,pos) = do
@@ -269,11 +273,12 @@ getSurface conn ((i,j),k,pos) = do
     ((SurfaceField v):_) -> return $ str2face v
   where
     sql = " Select face from SurfaceTable \
-          \   where ChunkID = (Select ChunkID from ChunkTable \
-          \                       where i_index = ? \
-          \                         and j_index = ? \
-          \                         and k_index = ? ) \
-          \         and Pos = ?"
+          \   where \
+          \     BlockID = (Select BlockID from BlockChunkTable \
+          \       where ChunkID = (Select ChunkID from ChunkTable \
+          \               where i_index = ? and j_index = ? ) \
+          \             and HPos = ?) \
+          \     and pos = ? "
 
 data ChunkSurfaceField = ChunkSurfaceField Int String deriving (Show)
 
@@ -287,10 +292,11 @@ getChunkSurface conn (i,j) = mapM (\ k -> do
   where
     !bkNo = blockNum chunkParam - 1
     sql = " Select pos,face from SurfaceTable \
-          \   where ChunkID = (Select ChunkID from ChunkTable \
-          \                       where i_index = ? \
-          \                         and j_index = ? \
-          \                         and k_index = ? )"
+          \   where \
+          \     BlockID = (Select BlockID from BlockChunkTable \
+          \       where ChunkID = (Select ChunkID from ChunkTable \
+          \               where i_index = ? and j_index = ? ) \
+          \             and HPos = ?) "
     f2l (ChunkSurfaceField p v) = (p, str2face v)
 
 setChunkSurface :: Connection -> ChunkIdx -> [(Index,[(Index,[Surface])])]

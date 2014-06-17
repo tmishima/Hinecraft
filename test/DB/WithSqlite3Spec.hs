@@ -125,32 +125,35 @@ test7 = withConnect (\ conn -> do
     chk = foldr (\ f (b,ft) ->
       ( b &&  elem f ft , filter (f /= ) ft)) (True,suf) 
 
-{-
-test6 = withConnect (\ conn -> do
-  addChunkData conn chnkID 
-  addSurface conn (chnkID,4,[STop]) 
-  addSurface conn (chnkID,5,[SLeft]) 
-  addSurface conn (chnkID,6,[SBottom]) 
-  fs <- getChunkSurface conn chnkID
-  print fs
+test8 = withConnect (\ conn -> do
+  addChunk conn chnkID 
+  mapM_ (\ j -> addBlockToChunk conn (chnkID,j)) [0..9]
+  addSurface conn (chnkID,5,4,[STop]) 
+  addSurface conn (chnkID,5,5,[SLeft]) 
+  addSurface conn (chnkID,5,6,[SBottom]) 
+  fs' <- getChunkSurface conn chnkID
+  print fs'
+  let fs = fs' !! 5
   return $ fst $ chk fs)
   where
-    chnkID = (0,1,0) 
+    chnkID = (0,1) 
     sufs = [(4,[STop]),(5,[SLeft]),(6,[SBottom])]
     chk = foldr (\ f (b,ft) ->
       ( b &&  elem f ft , filter (f /= ) ft)) (True,sufs) 
 
-test7 = withConnect (\ conn -> do
-  addChunkData conn chnkID 
-  setChunkSurface conn chnkID sufs
-  fs <- getChunkSurface conn chnkID
+test9 = withConnect (\ conn -> do
+  addChunk conn chnkID 
+  mapM_ (\ j -> addBlockToChunk conn (chnkID,j)) [0..9]
+  setChunkSurface conn chnkID [(1,sufs)]
+  fs' <- getChunkSurface conn chnkID
+  let fs = fs' !! 1
   return $ fst $ chk fs)
   where
-    chnkID = (0,1,0) 
+    chnkID = (0,7) 
     sufs = [(4,[STop]),(5,[SLeft]),(6,[SBottom])]
     chk = foldr (\ f (b,ft) ->
       ( b &&  elem f ft , filter (f /= ) ft)) (True,sufs) 
--}
+
 specAB :: Spec
 specAB = do
   describe "DB test A" $ do
@@ -166,13 +169,13 @@ specAB = do
       test5 `shouldReturn` True 
     it "A6" $
       test6 `shouldReturn` True 
- {-   it "A5" $
-      test5 `shouldReturn` True 
-    it "A6" $
-      test6 `shouldReturn` True 
     it "A7" $
-      test7 `shouldReturn` True 
--}
+      test7 `shouldReturn` True
+    it "A8" $
+      test8 `shouldReturn` True
+    it "A9" $
+      test9 `shouldReturn` True
+
   describe "DB test B" $ do
     it "B1" $
       wIndexToChunkpos (0,0,0) `shouldBe` ((0,0,0),0)
@@ -199,14 +202,14 @@ specAB = do
     it "B12" $
       ( chunkposToWindex $ wIndexToChunkpos (0,16,0)) `shouldBe` (0,16,0)
 
-test8 = do
+testC1 = do
   hdl <- initDB []
   exitDB hdl
   return True
 
-test9 = do
+testC2 = do
   hdl <- initDB []
-  setBlockToDB hdl (0,0,0) 1
+  setBlockToDB hdl (0,0,0) 1 []
   r@(c:_) <- readChunkData hdl (0,0)
   print $ show r
   exitDB hdl
@@ -214,9 +217,9 @@ test9 = do
              (((0,0,0),1):_) -> True
              _ -> False
 
-test10 = do
+testC3 = do
   hdl <- initDB []
-  setBlockToDB hdl (0,0,1) 1
+  setBlockToDB hdl (0,0,1) 1 []
   (c1:_) <- readChunkData hdl (0,0)
   delBlockInDB hdl (0,0,1)
   (c2:_) <- readChunkData hdl (0,0)
@@ -225,7 +228,7 @@ test10 = do
              (((0,0,1),1):_) -> c2 == []
              _ -> False
 
-test11 = do
+testC4 = do
   hdl <- initDB []
   writeChunkData hdl (0,0) $ dat : (replicate (bsize -1) [])
   (c:_) <- readChunkData hdl (0,0)
@@ -239,7 +242,7 @@ test11 = do
     chk = foldr (\ v (b,dt) ->
       ( b &&  elem v dt , filter (v /= ) dt)) (True,dat) 
 
-test12 = do
+testC5 = do
   hdl <- initDB []
   writeChunkData hdl (1,0) $ dat : (replicate (bsize -1) [])
   (c:_) <- readChunkData hdl (1,0)
@@ -258,14 +261,14 @@ specCD :: Spec
 specCD = do
   describe "DB test C" $ do
     it "C1" $
-      test8 `shouldReturn` True
+      testC1 `shouldReturn` True
     it "C2" $
-      test9 `shouldReturn` True
+      testC2 `shouldReturn` True
     it "C3" $
-      test10 `shouldReturn` True
+      testC3 `shouldReturn` True
     it "C4" $
-      test11 `shouldReturn` True
+      testC4 `shouldReturn` True
     it "C5" $
-      test12 `shouldReturn` True
+      testC5 `shouldReturn` True
 
 
