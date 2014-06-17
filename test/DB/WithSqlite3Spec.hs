@@ -210,7 +210,7 @@ testC1 = do
 testC2 = do
   hdl <- initDB []
   setBlockToDB hdl (0,0,0) 1 []
-  r@(c:_) <- readChunkData hdl (0,0)
+  r@((c:_),_) <- readChunkData hdl (0,0)
   print $ show r
   exitDB hdl
   return $ case c of
@@ -220,9 +220,9 @@ testC2 = do
 testC3 = do
   hdl <- initDB []
   setBlockToDB hdl (0,0,1) 1 []
-  (c1:_) <- readChunkData hdl (0,0)
+  ((c1:_),_) <- readChunkData hdl (0,0)
   delBlockInDB hdl (0,0,1)
-  (c2:_) <- readChunkData hdl (0,0)
+  ((c2:_),_) <- readChunkData hdl (0,0)
   exitDB hdl
   return $ case c1 of
              (((0,0,1),1):_) -> c2 == []
@@ -230,8 +230,8 @@ testC3 = do
 
 testC4 = do
   hdl <- initDB []
-  writeChunkData hdl (0,0) $ dat : (replicate (bsize -1) [])
-  (c:_) <- readChunkData hdl (0,0)
+  writeChunkData hdl (0,0) (dat : (replicate (bsize -1) [])) []
+  ((c:_),_) <- readChunkData hdl (0,0)
   exitDB hdl
   return $ if null c 
              then False
@@ -244,8 +244,8 @@ testC4 = do
 
 testC5 = do
   hdl <- initDB []
-  writeChunkData hdl (1,0) $ dat : (replicate (bsize -1) [])
-  (c:_) <- readChunkData hdl (1,0)
+  writeChunkData hdl (1,0) (dat : (replicate (bsize -1) [])) []
+  ((c:_),_) <- readChunkData hdl (1,0)
   exitDB hdl
   return $ if null c 
              then False
