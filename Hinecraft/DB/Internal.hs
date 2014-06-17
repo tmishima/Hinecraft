@@ -207,10 +207,10 @@ setChunkBlock' conn cidx (k,vlst) = do
 createSurfaceTableSQL :: T.Text
 createSurfaceTableSQL =
   "CREATE TABLE SurfaceTable ( \
-  \ ChunkID INTEGER NOT NULL, \
+  \ BlockID INTEGER NOT NULL, \
   \ pos INTEGER NOT NULL, \
   \ face TEXT NOT NULL, \
-  \ PRIMARY KEY (ChunkID,pos) )"
+  \ PRIMARY KEY (BlockID,pos) )"
 
 data SurfaceField = SurfaceField String deriving (Show)
 
@@ -231,7 +231,7 @@ addSurface :: Connection -> (ChunkIdx,Index,Index,[Surface]) -> IO ()
 addSurface _    (_,_,_,[]) = return () 
 addSurface conn ((i,j),k,pos,fs) = execute conn sql (i,j,k,pos,tfs)
   where
-    sql = "INSERT INTO SurfaceTable ( ChunkID , pos, face ) \
+    sql = "INSERT INTO SurfaceTable ( BlockID , pos, face ) \
           \ values \
           \ ( \
           \   (Select ChunkID from chunktable \

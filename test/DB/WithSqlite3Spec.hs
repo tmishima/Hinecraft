@@ -101,30 +101,31 @@ test6 = withConnect (\ conn -> do
   where
     chnkID = (-5,0) 
 
-{-
 test7 = withConnect (\ conn -> do
   addChunk conn chnkID 
-  addSurface conn (chnkID,4,[STop]) 
-  f1 <- getSurface conn (chnkID,4)
+  mapM_ (\ j -> addBlockToChunk conn (chnkID,j)) [0..9]
+  addSurface conn (chnkID,2,4,[STop]) 
+  f1 <- getSurface conn (chnkID,2,4)
   flg1 <- return $ case f1 of
     [STop] -> True
     _ -> False 
 
-  updateSurface conn (chnkID,4,suf) 
-  f2 <- getSurface conn (chnkID,4)
+  updateSurface conn (chnkID,2,4,suf) 
+  f2 <- getSurface conn (chnkID,2,4)
   flg2 <- return $ fst $ chk f2
 
-  deleteSurface conn (chnkID,4) 
-  f3 <- getSurface conn (chnkID,4)
+  deleteSurface conn (chnkID,2,4) 
+  f3 <- getSurface conn (chnkID,2,4)
   flg3 <- return $ f3 == []
 
   return $ and [flg1, flg2, flg3])
   where
-    chnkID = (0,0,0) 
+    chnkID = (3,0) 
     suf = [SLeft,SRight]
     chk = foldr (\ f (b,ft) ->
       ( b &&  elem f ft , filter (f /= ) ft)) (True,suf) 
 
+{-
 test6 = withConnect (\ conn -> do
   addChunkData conn chnkID 
   addSurface conn (chnkID,4,[STop]) 
