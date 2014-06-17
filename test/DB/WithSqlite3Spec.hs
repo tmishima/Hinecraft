@@ -16,88 +16,94 @@ main = hspec spec
 spec :: Spec
 spec = do
   specAB
-  -- specCD
+  specCD
 
 withConnect fn = do
   tmp <- newChan 
-  --conn <- initProcess ":memory:"
-  conn <- initProcess "tmp.db"
+  conn <- initProcess ":memory:"
+  --conn <- initProcess "tmp.db"
   ret <- fn conn
   exitProcess tmp conn 
   return ret
 
 test1 = withConnect (\ conn -> do
-  chk1 <- checkChunkData conn chnkID 
-  addChunkData conn chnkID 
+  chk1 <- checkChunk conn chnkID 
+  addChunk conn chnkID 
   Just cid <- _getChunkID conn chnkID
-  chk2 <- checkChunkData conn chnkID 
-  addChunkData conn chnkID 
-  chk3 <- checkChunkData conn chnkID 
-  return $ and [not chk1, chk2, chk3,cid == 1])
+  chk2 <- checkChunk conn chnkID 
+  mapM_ (\ j -> addBlockToChunk conn (chnkID,j)) [0..9]
+  return $ and [not chk1, chk2, cid == 1])
   where
     chnkID = (0,0) 
 
 test2 = withConnect (\ conn -> do
-  addChunkData conn chnkID 
-  p1 <- getBlockPos conn (chnkID,4)
-  addBlockPos conn (chnkID,4,5)
-  p2 <- getBlockPos conn (chnkID,4)
+  addChunk conn chnkID 
+  mapM_ (\ j -> addBlockToChunk conn (chnkID,j)) [0..9]
+
+  p1 <- getCellObject conn (chnkID,2,4)
+  addCellObject conn (chnkID,2,4,5)
+  p2 <- getCellObject conn (chnkID,2,4)
   flg <- return $ case p2 of
     Just v -> v == 5
     Nothing -> False 
   return $ and [p1 == Nothing, flg])
   where
-    chnkID = (0,0,0) 
-
-{-
-test2' = withConnect (\ conn -> do
-  addChunkData conn chnkID 
-  setChunkBlock conn chnkID
-    $ zip [1..1000] [11 .. ]
-  Just p1 <- getBlockPos conn (chnkID,1)
-  Just p2 <- getBlockPos conn (chnkID,200)
-  Just p3 <- getBlockPos conn (chnkID,201)
-  Just p4 <- getBlockPos conn (chnkID,1000)
-  return $ and [p1 == 11, p2 == 210, p3 == 211, p4 == 1010])
-  where
-    chnkID = (0,0,0) 
-
-test2'' = withConnect (\ conn -> do
-  addChunkData conn chnkID 
-  setChunkBlock conn chnkID dat
-  blst <- getChunkBlock conn chnkID
-  return $ and $ map (\ (x,y) -> x == y ) $ zip dat blst)
-  where
-    chnkID = (0,0,0) 
-    dat = zip [1..1000] [11 .. ]
-
+    chnkID = (0,1) 
 
 test3 = withConnect (\ conn -> do
-  addChunkData conn chnkID 
-  addBlockPos conn (chnkID,4,5)
-  updateBlockPos conn (chnkID,4,2)
-  p1 <- getBlockPos conn (chnkID,4)
+  addChunk conn chnkID 
+  mapM_ (\ j -> addBlockToChunk conn (chnkID,j)) [0..9]
+
+  setChunkBlock conn chnkID
+    $ [(3, zip [1..1000] [11 .. ])]
+  Just p1 <- getCellObject conn (chnkID,3,1)
+  Just p2 <- getCellObject conn (chnkID,3,200)
+  Just p3 <- getCellObject conn (chnkID,3,201)
+  Just p4 <- getCellObject conn (chnkID,3,1000)
+  return $ and [p1 == 11, p2 == 210, p3 == 211, p4 == 1010])
+  where
+    chnkID = (2,0) 
+
+test4 = withConnect (\ conn -> do
+  addChunk conn chnkID 
+  mapM_ (\ j -> addBlockToChunk conn (chnkID,j)) [0..9]
+  setChunkBlock conn chnkID [(2,dat)]
+  blst <- getChunkBlock conn chnkID
+  return $ and $ map (\ (x,y) -> x == y ) $ zip dat ( blst !! 2))
+  where
+    chnkID = (0,-1) 
+    dat = zip [1..1000] [11 .. ]
+
+test5 = withConnect (\ conn -> do
+  addChunk conn chnkID 
+  mapM_ (\ j -> addBlockToChunk conn (chnkID,j)) [0..9]
+  addCellObject conn (chnkID,1,4,5)
+  updateCellObject conn (chnkID,1,4,2)
+  p1 <- getCellObject conn (chnkID,1,4)
   flg <- return $ case p1 of
     Just v -> v == 2
     Nothing -> False 
   return flg)
   where
-    chnkID = (0,0,0) 
+    chnkID = (0,3) 
 
-test4 = withConnect (\ conn -> do
-  addChunkData conn chnkID 
-  addBlockPos conn (chnkID,4,5)
-  deleteBlockPos conn (chnkID,4)
-  p1 <- getBlockPos conn (chnkID,4)
-  flg <- return $ case p1 of
+test6 = withConnect (\ conn -> do
+  addChunk conn chnkID 
+  mapM_ (\ j -> addBlockToChunk conn (chnkID,j)) [0..9]
+  addCellObject conn (chnkID,3,4,5)
+  Just p1 <- getCellObject conn (chnkID,3,4)
+  deleteCellObject conn (chnkID,3,4)
+  p2 <- getCellObject conn (chnkID,3,4)
+  flg <- return $ case p2 of
     Just v -> False
     Nothing -> True 
-  return flg)
+  return $ and [p1 == 5, flg])
   where
-    chnkID = (0,0,0) 
+    chnkID = (-5,0) 
 
-test5 = withConnect (\ conn -> do
-  addChunkData conn chnkID 
+{-
+test7 = withConnect (\ conn -> do
+  addChunk conn chnkID 
   addSurface conn (chnkID,4,[STop]) 
   f1 <- getSurface conn (chnkID,4)
   flg1 <- return $ case f1 of
@@ -149,12 +155,8 @@ specAB = do
   describe "DB test A" $ do
     it "A1: Chunk Check" $
       test1 `shouldReturn` True 
-{-    it "A2: Block Check" $
+    it "A2: Block Check" $
       test2 `shouldReturn` True 
-    it "A2-1" $
-      test2' `shouldReturn` True 
-    it "A2-2" $
-      test2'' `shouldReturn` True 
     it "A3" $
       test3 `shouldReturn` True 
     it "A4" $
@@ -163,10 +165,13 @@ specAB = do
       test5 `shouldReturn` True 
     it "A6" $
       test6 `shouldReturn` True 
+ {-   it "A5" $
+      test5 `shouldReturn` True 
+    it "A6" $
+      test6 `shouldReturn` True 
     it "A7" $
       test7 `shouldReturn` True 
 -}
-{-
   describe "DB test B" $ do
     it "B1" $
       wIndexToChunkpos (0,0,0) `shouldBe` ((0,0,0),0)
@@ -201,7 +206,8 @@ test8 = do
 test9 = do
   hdl <- initDB []
   setBlockToDB hdl (0,0,0) 1
-  c <- readChunkData hdl (0,0,0)
+  r@(c:_) <- readChunkData hdl (0,0)
+  print $ show r
   exitDB hdl
   return $ case c of
              (((0,0,0),1):_) -> True
@@ -210,9 +216,9 @@ test9 = do
 test10 = do
   hdl <- initDB []
   setBlockToDB hdl (0,0,1) 1
-  c1 <- readChunkData hdl (0,0,0)
+  (c1:_) <- readChunkData hdl (0,0)
   delBlockInDB hdl (0,0,1)
-  c2 <- readChunkData hdl (0,0,0)
+  (c2:_) <- readChunkData hdl (0,0)
   exitDB hdl
   return $ case c1 of
              (((0,0,1),1):_) -> c2 == []
@@ -220,26 +226,28 @@ test10 = do
 
 test11 = do
   hdl <- initDB []
-  writeChunkData hdl (0,0,0) dat
-  c <- readChunkData hdl (0,0,0)
+  writeChunkData hdl (0,0) $ dat : (replicate (bsize -1) [])
+  (c:_) <- readChunkData hdl (0,0)
   exitDB hdl
   return $ if null c 
              then False
              else fst $ chk c 
   where
+    bsize = blockSize chunkParam
     dat = zip [(i,j,k) | i <- [0..15], j <- [0..15], k <-[0..15]] [1..]
     chk = foldr (\ v (b,dt) ->
       ( b &&  elem v dt , filter (v /= ) dt)) (True,dat) 
 
 test12 = do
   hdl <- initDB []
-  writeChunkData hdl (1,0,0) dat
-  c <- readChunkData hdl (1,0,0)
+  writeChunkData hdl (1,0) $ dat : (replicate (bsize -1) [])
+  (c:_) <- readChunkData hdl (1,0)
   exitDB hdl
   return $ if null c 
              then False
              else fst $ chk c 
   where
+    bsize = blockSize chunkParam
     dat = zip [(i,j,k) | i <- [0..15], j <- [0..15], k <-[0..15]] [1..]
     rdat = map (\ ((i,j,k),v) -> ((i + 16, j,k),v)) dat 
     chk = foldr (\ v (b,dt) ->
@@ -258,9 +266,5 @@ specCD = do
       test11 `shouldReturn` True
     it "C5" $
       test12 `shouldReturn` True
-
--}
-
-
 
 

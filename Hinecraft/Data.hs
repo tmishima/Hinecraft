@@ -111,11 +111,11 @@ getAllSurfaceData dhdl = case wldDat dhdl of
 loadWorldData :: DBHandle -> IO WorldData
 loadWorldData dbHdl' = do
   chLst <- mapM (\ (i,j) -> do
-    cs <- mapM (\ k -> readChunkData dbHdl' (i,j,k)) [0 .. bkNo]
+    cs <- readChunkData dbHdl' (i,j)
     chunk <- if and $ map null cs 
       then do
         let c = genChunk
-        -- writeChunkData dbHdl' $ vec2list (i,j) c
+        writeChunkData dbHdl' (i,j) $ vec2list (i,j) c
         Dbg.traceIO $ "genChunk " ++ show (i,j)
         return c
       else return $ map (\ c -> (DVS.replicate (16 ^ 3) airBlockID) DVS.//
@@ -129,8 +129,8 @@ loadWorldData dbHdl' = do
     !bkNo = blockNum chunkParam - 1
 
 
-vec2list :: (Int,Int) -> [DVS.Vector Int] -> [(WorldIndex,Int)]
-vec2list (i,j) cs = concatMap v2l $ zip [0 .. ] cs
+vec2list :: (Int,Int) -> [DVS.Vector Int] -> [[(WorldIndex,Int)]]
+vec2list (i,j) cs = map v2l $ zip [0 .. ] cs
   where
     bsize = blockSize chunkParam
     (ox,oz) = (i * bsize, j * bsize)

@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE BangPatterns #-}
 
 module Hinecraft.DB.WithSqlite3
 {-  ( initDB
@@ -58,48 +59,52 @@ mainProcess inst outst conn = do
   q <- case cmd of
       Exit -> return True
       Load (i,k) -> do
-        cflg <- checkChunkData conn (i,k)
+        cflg <- checkChunk conn (i,k)
         blks <- if cflg 
           then do
             b' <- getChunkBlock conn (i,k) 
             return $
               map (\ (j,b'') ->
                 map (\ (pos,v) -> (chunkposToWindex ((i,j,k),pos), v)) b''
-                ) $ zip [1..bsize] b' 
-          else return $ replicate bsize []
+                ) $ zip [0..bkNo-1] b' 
+          else return $ replicate bkNo []
         writeChan outst $ Dump blks
         Dbg.traceIO "DB: Load"
         return False
       Put (x,y,z) v -> do
         let ((i,j,k),pos) = wIndexToChunkpos (x,y,z)
-        cflg <- checkChunkData conn (i,k)
+        --Dbg.traceIO $ show ((i,j,k),pos)
+        cflg <- checkChunk conn (i,k)
         unless cflg $ Dbg.trace "DB: add Chunk at Put ope"
-                                $ addChunkData conn (i,k)
-        blk <- getBlockPos conn ((i,k),j,pos)
+                    $ addChunk' conn (i,k)
+        blk <- getCellObject conn ((i,k),j,pos)
         case blk of
           Nothing -> Dbg.trace "DB: put"
-                       $ addBlockPos conn ((i,k),j,pos,v)  
+                       $ addCellObject conn ((i,k),j,pos,v)  
           _ -> Dbg.trace "DB: update"
-                       $ updateBlockPos conn ((i,k),j,pos,v) 
+                       $ updateCellObject conn ((i,k),j,pos,v) 
         return False
       Del (x,y,z) -> do
         let ((i,j,k),pos) = wIndexToChunkpos (x,y,z)
-        cflg <- checkChunkData conn (i,k) 
+        cflg <- checkChunk conn (i,k) 
         if cflg 
-          then Dbg.trace "DB: del" $ deleteBlockPos conn ((i,k),j,pos)
+          then Dbg.trace "DB: del" $ deleteCellObject conn ((i,k),j,pos)
           else return ()
         return False
       Store (i,k) blks -> do 
-        cflg <- checkChunkData conn (i,k)
+        cflg <- checkChunk conn (i,k)
         unless cflg $ Dbg.trace "DB: add Chunk at Put ope"
-                                $ addChunkData conn (i,k)
-        setChunkBlock conn (i,k) $ zip [1 .. bsize] 
+                    $ addChunk' conn (i,k)
+        setChunkBlock conn (i,k) $ zip [0 .. (bkNo-1)] 
           $ map (map (\ (p,v) ->
                    (snd $ wIndexToChunkpos p,v))) blks
         return False
   unless q $ mainProcess inst outst conn
   where
-    bsize = blockSize chunkParam
+    !bkNo = blockNum chunkParam
+    addChunk' conn (i,k) = do
+      addChunk conn (i,k)
+      mapM_ (\ j -> addBlockToChunk conn ((i,k),j)) [0 .. (bkNo - 1)]
 
 -- ######### Control ##########
 

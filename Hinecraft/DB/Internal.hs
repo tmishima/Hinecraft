@@ -28,16 +28,16 @@ data ChunkIDField = ChunkIDField Int deriving (Show)
 instance FromRow ChunkIDField where
   fromRow = ChunkIDField <$> field
 
-addChunkData :: Connection -> ChunkIdx -> IO ()
-addChunkData conn (i,j) = execute conn sql (i,j) 
+addChunk :: Connection -> ChunkIdx -> IO ()
+addChunk conn (i,j) = execute conn sql (i,j) 
   where
     sql = "INSERT INTO ChunkTable \
           \ ( i_index , j_index ) \
           \ values \
           \ (?, ?)"
 
-checkChunkData :: Connection -> ChunkIdx -> IO Bool
-checkChunkData conn (i,j) = do
+checkChunk :: Connection -> ChunkIdx -> IO Bool
+checkChunk conn (i,j) = do
   r <- query conn sql (i,j) :: IO [ChunkIDField]
   return $ case r of
     [] -> False 
@@ -82,6 +82,18 @@ addBlockToChunk conn ((i,j),pos) = execute conn sql (i,j,pos)
           \      where i_index = ? and j_index = ? ) \
           \   , ? ) "
 
+_getBlockID :: Connection -> ChunkIdx -> Index -> IO (Maybe Int)
+_getBlockID conn (i,j) hpos = do
+  r <- query conn sql (i,j,hpos) :: IO [BlockChunkField]
+  return $ case r of
+    [] -> Nothing
+    ((BlockChunkField blki):_) -> Just blki 
+  where
+    sql = "Select BlockID from BlockChunkTable \
+          \   where ChunkID = (Select ChunkID from chunktable \
+          \                      where i_index = ? and j_index = ?) \
+          \         and HPos = ? "
+
 -- ######### Block-Obj Table ##########
 
 createBlockObjTableSQL :: T.Text
@@ -97,8 +109,8 @@ data BlockObjField = BlockObjField Int deriving (Show)
 instance FromRow BlockObjField where
   fromRow = BlockObjField <$> field
 
-addBlockPos :: Connection -> (ChunkIdx,Index,Index,BlockID) -> IO ()
-addBlockPos conn ((i,j),k,pos,bid) = execute conn sql (i,j,k,pos,bid)
+addCellObject :: Connection -> (ChunkIdx,Index,Index,BlockID) -> IO ()
+addCellObject conn ((i,j),k,pos,bid) = execute conn sql (i,j,k,pos,bid)
   where
     sql = "INSERT INTO BlockObjTable ( BlockID , pos, ObjectID ) \
           \ values \
@@ -109,40 +121,43 @@ addBlockPos conn ((i,j),k,pos,bid) = execute conn sql (i,j,k,pos,bid)
           \            and HPos = ?) \
           \   , ? , ? ) "
 
-updateBlockPos :: Connection -> (ChunkIdx,Index,Index,BlockID) -> IO ()
-updateBlockPos conn ((i,j),k,pos,bid) =  execute conn sql (bid,pos,i,j,k) 
-  where
-    sql = "UPDATE BlockPosTable \
-          \ SET BlockID = ? \
-          \   where pos = ? \
-          \     and ChunkID = (Select ChunkID from ChunkTable \
-          \            where  i_index = ? \
-          \               and j_index = ? \
-          \               and k_index = ? )"
-
-deleteBlockPos :: Connection -> (ChunkIdx,Index,Index) -> IO ()
-deleteBlockPos conn ((i,j),k,pos) =  execute conn sql (pos,i,j,k) 
-  where
-    sql = "DELETE From BlockPosTable \
-          \   where pos = ? \
-          \     and ChunkID = (Select ChunkID from ChunkTable \
-          \            where  i_index = ? \
-          \               and j_index = ? \
-          \               and k_index = ? )"
-
-getBlockPos :: Connection -> (ChunkIdx,Index,Index) -> IO (Maybe BlockID)
-getBlockPos conn ((i,j),k,pos) = do
+getCellObject :: Connection -> (ChunkIdx,Index,Index) -> IO (Maybe BlockID)
+getCellObject conn ((i,j),k,pos) = do
   r <- query conn sql (i,j,k,pos) :: IO [BlockObjField]
   case r of
     [] -> return Nothing
     ((BlockObjField v):_) -> return $ Just v
   where
-    sql = " Select BlockID from BlockPosTable \
-          \   where ChunkID = (Select ChunkID from ChunkTable \
-          \                       where i_index = ? \
-          \                         and j_index = ? \
-          \                         and k_index = ? ) \
-          \         and Pos = ?"
+    sql = " Select ObjectID from BlockObjTable \
+          \   where \
+          \     BlockID = (Select BlockID from BlockChunkTable \
+          \       where ChunkID = (Select ChunkID from ChunkTable \
+          \               where i_index = ? and j_index = ? ) \
+          \             and HPos = ?) \
+          \     and Pos = ?"
+
+updateCellObject :: Connection -> (ChunkIdx,Index,Index,BlockID) -> IO ()
+updateCellObject conn ((i,j),k,pos,oid) =  execute conn sql (oid,i,j,k,pos) 
+  where
+    sql = "UPDATE BlockObjTable \
+          \ SET ObjectID = ? \
+          \   where \
+          \     BlockID = (Select BlockID from BlockChunkTable \
+          \       where ChunkID = (Select ChunkID from ChunkTable \
+          \               where i_index = ? and j_index = ? ) \
+          \             and HPos = ?) \
+          \     and Pos = ? "
+
+deleteCellObject :: Connection -> (ChunkIdx,Index,Index) -> IO ()
+deleteCellObject conn ((i,j),k,pos) =  execute conn sql (i,j,k,pos) 
+  where
+    sql = "DELETE From BlockObjTable \
+          \   where \
+          \     BlockID = (Select BlockID from BlockChunkTable \
+          \       where ChunkID = (Select ChunkID from ChunkTable \
+          \               where i_index = ? and j_index = ? ) \
+          \             and HPos = ?) \
+          \     and Pos = ? "
 
 data ChunkBlockField = ChunkBlockField Int Int deriving (Show)
 
@@ -153,15 +168,16 @@ getChunkBlock :: Connection -> ChunkIdx -> IO [[(Index,BlockID)]]
 getChunkBlock conn (i,j) = mapM (\ k -> do
   r <- query conn sql (i,j,k) :: IO [ChunkBlockField]
   return $ map f2l r)
-    [1 .. bsize]
+    [0 .. bkNo]
   where
-    bsize = blockSize chunkParam
-    sql = " Select pos,BlockID from BlockPosTable \
-          \   where ChunkID = (Select ChunkID from ChunkTable \
-          \                       where i_index = ? \
-          \                         and j_index = ? \
-          \                         and k_index = ? )"
+    !bkNo = blockNum chunkParam - 1
     f2l (ChunkBlockField p v) = (p,v)
+    sql = " Select pos,ObjectID from BlockObjTable \
+          \   where \
+          \     BlockID = (Select BlockID from BlockChunkTable \
+          \       where ChunkID = (Select ChunkID from ChunkTable \
+          \               where i_index = ? and j_index = ? ) \
+          \             and HPos = ?) "
 
 setChunkBlock :: Connection -> ChunkIdx -> [(Index, [(Index,BlockID)])]
               -> IO ()
@@ -172,19 +188,19 @@ setChunkBlock' :: Connection -> ChunkIdx -> (Index, [(Index,BlockID)])
                -> IO ()
 setChunkBlock' _ _ (_,[]) = return ()
 setChunkBlock' conn cidx (k,vlst) = do
-  cid <- _getChunkID conn cidx
+  bid <- _getBlockID conn cidx k
   let (vlst',vlst'') = splitAt 200 vlst
-  case cid of
+  case bid of
     Nothing -> return ()
     Just ci' -> do
       execute_ conn $ sql ci' vlst'
   setChunkBlock' conn cidx (k,vlst'')
   where
-    fmt cid (i,bid) = unwords [show cid, ",",  show i, ",", show bid] 
-    ufmt cid pos = " union all select " ++ (fmt cid pos )
-    rec cid vlst' = concatMap (ufmt cid) $ tail vlst'
-    sql cid vlst' = Query $ T.pack $ "INSERT INTO BlockPosTable select "
-        ++ (fmt cid $ head vlst') ++ (rec cid vlst') ++ ";"
+    fmt bid (i,oid) = unwords [show bid, ",",  show i, ",", show oid] 
+    ufmt bid pos = " union all select " ++ (fmt bid pos )
+    rec bid vlst' = concatMap (ufmt bid) $ tail vlst'
+    sql bid vlst' = Query $ T.pack $ "INSERT INTO BlockObjTable select "
+        ++ (fmt bid $ head vlst') ++ (rec bid vlst') ++ ";"
 
 -- ######### Surface Table ##########
 
@@ -267,9 +283,9 @@ instance FromRow ChunkSurfaceField where
 getChunkSurface :: Connection -> ChunkIdx -> IO [[(Index,[Surface])]]
 getChunkSurface conn (i,j) = mapM (\ k -> do
   r <- query conn sql (i,j,k) :: IO [ChunkSurfaceField]
-  return $ map f2l r) [ 1 .. bsize]
+  return $ map f2l r) [ 0 .. bkNo]
   where
-    bsize = blockSize chunkParam
+    !bkNo = blockNum chunkParam - 1
     sql = " Select pos,face from SurfaceTable \
           \   where ChunkID = (Select ChunkID from ChunkTable \
           \                       where i_index = ? \
