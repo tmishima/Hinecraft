@@ -6,7 +6,6 @@
 module Hinecraft.Data
   ( WorldData (..)
   , SurfaceList
-  , SurfacePos
   , getSurface
   -- , genSurfaceList
   , setSurfaceList
@@ -56,27 +55,9 @@ data WorldData = WorldData
 
 type Chunk = [DVS.Vector BlockIDNum]
 
-data CellInfo = CellInfo
-  { blockID :: BlockIDNum
-  , cellType :: Int
-  , baseFace :: Surface
-  }
-  deriving (Show,Eq,Ord)
-
-type ChunkN = [DVS'.Vector CellInfo]
-
-test = DVS'.replicate 3 $ CellInfo 0 0 SFront
-
+type ChunkSurface = [M.Map Int [Surface]]
 
 -- | 
-
-{-
-data Te = Te { a :: [Int], b :: Double}
-  deriving (Show,Eq)
-
-test2 :: DVS'.Vector (Int,Te)
-test2 = DVS'.replicate 3 (0,Te [] 4.0)
--}
 
 initData :: FilePath -> IO DataHdl
 initData home = do
@@ -114,7 +95,7 @@ loadWorldData dbHdl' = do
     (cs,_) <- readChunkData dbHdl' (i,j)
     chunk <- if and $ map null cs 
       then do
-        let c = genChunk
+        let (c,f) = genChunk
         writeChunkData dbHdl' (i,j) (vec2list (i,j) c) []
         Dbg.traceIO $ "genChunk " ++ show (i,j)
         return c
@@ -147,7 +128,7 @@ loadSurfaceList wld = do
                  let c = case getChunk' (chunkList wld) (i,j) of
                            Just c' -> c'
                            Nothing -> Dbg.trace "genChunk with surface"
-                                      genChunk
+                                      (fst genChunk)
                  in
                  map (\ bn -> getSurface' wld c ((i,j),bn)) [0 .. bkNo]
            )
@@ -380,15 +361,6 @@ chunkArea :: [(Int,Int)]
 chunkArea = [ (x,z) | x <- [-1,0,1], z <- [-1,0,1] ]
          -- [ (x,z) | x <- [-4,-3 .. 4], z <- [-4,-3 .. 4] ]
         
-readSurfData :: (Int,Int) -> FilePath -> IO [SurfacePos]
-readSurfData (i,j) path = do
-  f <- doesDirectoryExist dpath
-  if f
-    then read <$> readFile (dpath ++ "/suf") 
-    else return []
-  where
-    !dpath = path ++ "/cuk" ++ show i ++ "_" ++ show j
-
 setBlockID :: DataHdl -> WorldIndex -> BlockIDNum -> IO DataHdl
 setBlockID dtHdl pos bid = do
   if bid == airBlockID 
@@ -468,8 +440,8 @@ calcReGenArea (x,y,z) = if null blknos
     !chkIdx = nub $ map (\ (x',z') -> (x' `div` bsize, z' `div` bsize))
                [(x,z),(x+1,z),(x-1,z),(x,z+1),(x,z-1)]
 
-genChunk :: Chunk
-genChunk = arrb ++ (arrs'' : arrt)
+genChunk :: (Chunk, ChunkSurface)
+genChunk = ( arrb ++ (arrs'' : arrt) , mapb ++ (maps : mapt))
   where
     !bsize = blockSize chunkParam
     !blength = blockSize chunkParam ^ (3::Int) 
@@ -482,6 +454,10 @@ genChunk = arrb ++ (arrs'' : arrt)
                      [ (bsize * bsize * 2) .. (bsize * bsize * 3 - 1)]
     !arrb = replicate 3 (DVS.replicate blength stoneBlockID)
              :: [DVS.Vector BlockIDNum]
+    !mapb = replicate 3 ( M.fromList []) :: [M.Map Int [Surface]]
+    !mapt = replicate 4 ( M.fromList []) :: [M.Map Int [Surface]]
+    !maps = M.fromList $ map (\ p -> (p,[SFront]))
+                  [ (bsize * bsize * 2) .. (bsize * bsize * 3 - 1)]
 
 getChunk' :: M.Map (Int,Int) Chunk -> (Int,Int) -> Maybe Chunk
 getChunk' chmap (i,j) = M.lookup (i,j) chmap
