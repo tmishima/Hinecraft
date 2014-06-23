@@ -1,5 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-} 
-
+--
+-- Copyright : (c) T.Mishima 2014
+-- License : Apache-2.0
+--
 module DB.WithSqlite3Spec where
 
 import Test.Hspec
@@ -25,6 +28,14 @@ withConnect fn = do
   ret <- fn conn
   exitProcess tmp conn 
   return ret
+
+withConnect' path fn = do
+  tmp <- newChan 
+  conn <- initProcess path
+  ret <- fn conn
+  exitProcess tmp conn 
+  return ret
+
 
 test1 = withConnect (\ conn -> do
   chk1 <- checkChunk conn chnkID 
@@ -154,6 +165,20 @@ test9 = withConnect (\ conn -> do
     chk = foldr (\ f (b,ft) ->
       ( b &&  elem f ft , filter (f /= ) ft)) (True,sufs) 
 
+test10 = withConnect (\ conn -> do
+  addChunk conn chnkID 
+  mapM_ (\ j -> addBlockToChunk conn (chnkID,j)) [0..9]
+  setChunkSurface conn chnkID [(1,sufs)]
+  fs <- getChunkSurface conn chnkID
+  print (show fs)
+  deleteSurfaceBlock conn (chnkID,1)
+  fs' <- getChunkSurface conn chnkID
+  print (show fs')
+  return (null $ concat fs'))
+  where
+    chnkID = (0,7) 
+    sufs = [(4,[STop]),(5,[SLeft]),(6,[SBottom])]
+
 specAB :: Spec
 specAB = do
   describe "DB test A" $ do
@@ -175,32 +200,9 @@ specAB = do
       test8 `shouldReturn` True
     it "A9" $
       test9 `shouldReturn` True
+    it "A10" $
+      test10 `shouldReturn` True
 
-  describe "DB test B" $ do
-    it "B1" $
-      wIndexToChunkpos (0,0,0) `shouldBe` ((0,0,0),0)
-    it "B2" $
-      wIndexToChunkpos (15,15,15) `shouldBe` ((0,0,0),16*16*15+16*15+15)
-    it "B3" $
-      wIndexToChunkpos (16,0,0) `shouldBe` ((1,0,0),0)
-    it "B4" $
-      wIndexToChunkpos (16,16,0) `shouldBe` ((1,1,0),0)
-    it "B5" $
-      wIndexToChunkpos (16,16,16) `shouldBe` ((1,1,1),0)
-    it "B6" $
-      wIndexToChunkpos (16,17,16) `shouldBe` ((1,1,1),16*16*1)
-    it "B7" $
-      wIndexToChunkpos (-1,0,0) `shouldBe` ((-1,0,0),15)
-    it "B8" $
-      ( chunkposToWindex $ wIndexToChunkpos (-1,0,0)) `shouldBe` (-1,0,0)
-    it "B9" $
-      ( chunkposToWindex $ wIndexToChunkpos (16,0,0)) `shouldBe` (16,0,0)
-    it "B10" $
-      ( chunkposToWindex $ wIndexToChunkpos (16,16,0)) `shouldBe` (16,16,0)
-    it "B11" $
-      ( chunkposToWindex $ wIndexToChunkpos (16,0,16)) `shouldBe` (16,0,16)
-    it "B12" $
-      ( chunkposToWindex $ wIndexToChunkpos (0,16,0)) `shouldBe` (0,16,0)
 
 testC1 = do
   hdl <- initDB []
@@ -209,23 +211,23 @@ testC1 = do
 
 testC2 = do
   hdl <- initDB []
-  setBlockToDB hdl (0,0,0) 1 []
+  setCellOnDB hdl (0,0) 0 0 1
   r@((c:_),_) <- readChunkData hdl (0,0)
   print $ show r
   exitDB hdl
   return $ case c of
-             (((0,0,0),1):_) -> True
+             ((0,1):_) -> True
              _ -> False
 
 testC3 = do
   hdl <- initDB []
-  setBlockToDB hdl (0,0,1) 1 []
+  setCellOnDB hdl (0,0) 0 1 1 
   ((c1:_),_) <- readChunkData hdl (0,0)
-  delBlockInDB hdl (0,0,1)
+  delCellOnDB hdl (0,0) 0 1
   ((c2:_),_) <- readChunkData hdl (0,0)
   exitDB hdl
   return $ case c1 of
-             (((0,0,1),1):_) -> c2 == []
+             ((1,1):_) -> c2 == []
              _ -> False
 
 testC4 = do
@@ -238,7 +240,7 @@ testC4 = do
              else fst $ chk c 
   where
     bsize = blockSize chunkParam
-    dat = zip [(i,j,k) | i <- [0..15], j <- [0..15], k <-[0..15]] [1..]
+    dat = zip [0 .. (bsize ^ 3 - 1)] [1..]
     chk = foldr (\ v (b,dt) ->
       ( b &&  elem v dt , filter (v /= ) dt)) (True,dat) 
 
@@ -252,10 +254,9 @@ testC5 = do
              else fst $ chk c 
   where
     bsize = blockSize chunkParam
-    dat = zip [(i,j,k) | i <- [0..15], j <- [0..15], k <-[0..15]] [1..]
-    rdat = map (\ ((i,j,k),v) -> ((i + 16, j,k),v)) dat 
+    dat = zip [0 .. (bsize ^ 3 - 1)] [1..]
     chk = foldr (\ v (b,dt) ->
-      ( b &&  elem v dt , filter (v /= ) dt)) (True,rdat) 
+      ( b &&  elem v dt , filter (v /= ) dt)) (True,dat) 
 
 specCD :: Spec
 specCD = do

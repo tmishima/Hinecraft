@@ -85,6 +85,11 @@ data PlayModeState = PlayModeState
   }
   deriving (Show)
 
+type ChunkIdx = (Int,Int)
+type ChunkID = Int
+type BlockID = Int
+type Index = Int
+
 type WorldIndex = (Int,Int,Int)
 type Pos' = (Double,Double,Double)
 type Rot' = Pos'

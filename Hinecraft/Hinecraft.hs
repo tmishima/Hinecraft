@@ -193,7 +193,7 @@ mainProcess (glfwHdl, guiRes) tmstat plstat dtHdl runMode wvHdl dt = do
           let !clst = calcReGenArea pos'
               !sflst = map (\ (ij,bNo') ->
                          ((ij,bNo')
-                         , fromJust $ getSurfaceList newDtHdl (ij,bNo')
+                         , getSurfaceList newDtHdl (ij,bNo')
                          )) clst 
           updateVAOlist wvHdl sflst
           return $! newDtHdl

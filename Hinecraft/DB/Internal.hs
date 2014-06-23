@@ -1,6 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BangPatterns #-}
-
+--
+-- Copyright : (c) T.Mishima 2014
+-- License : Apache-2.0
+--
 module Hinecraft.DB.Internal where
 
 import qualified Data.Text as T
@@ -8,11 +11,6 @@ import Control.Applicative
 import Database.SQLite.Simple
 
 import Hinecraft.Types
-
-type ChunkIdx = (Int,Int)
-type ChunkID = Int
-type BlockID = Int
-type Index = Int
 
 -- ######### Chunk Table ##########
 
@@ -189,7 +187,7 @@ setChunkBlock' :: Connection -> ChunkIdx -> (Index, [(Index,BlockID)])
 setChunkBlock' _ _ (_,[]) = return ()
 setChunkBlock' conn cidx (k,vlst) = do
   bid <- _getBlockID conn cidx k
-  let (vlst',vlst'') = splitAt 200 vlst
+  let (vlst',vlst'') = splitAt 400 vlst
   case bid of
     Nothing -> return ()
     Just ci' -> do
@@ -280,17 +278,41 @@ getSurface conn ((i,j),k,pos) = do
           \             and HPos = ?) \
           \     and pos = ? "
 
-data ChunkSurfaceField = ChunkSurfaceField Int String deriving (Show)
-
-instance FromRow ChunkSurfaceField where
-  fromRow = ChunkSurfaceField <$> field <*> field
-
-getChunkSurface :: Connection -> ChunkIdx -> IO [[(Index,[Surface])]]
-getChunkSurface conn (i,j) = mapM (\ k -> do
-  r <- query conn sql (i,j,k) :: IO [ChunkSurfaceField]
-  return $ map f2l r) [ 0 .. bkNo]
+deleteSurfaceBlock :: Connection -> (ChunkIdx,Index) -> IO ()
+deleteSurfaceBlock conn ((i,j),k) = execute conn sql (i,j,k)
   where
-    !bkNo = blockNum chunkParam - 1
+    sql = "DELETE From SurfaceTable \
+          \   where \
+          \     BlockID = (Select BlockID from BlockChunkTable \
+          \       where ChunkID = (Select ChunkID from ChunkTable \
+          \               where i_index = ? and j_index = ? ) \
+          \             and HPos = ?) "
+
+addSurfaceBlock :: Connection -> (ChunkIdx,Index)
+                -> [(Index,[Surface])] -> IO ()
+addSurfaceBlock conn _ [] = return ()
+addSurfaceBlock conn (cidx,k) flst = do
+  bid <- _getBlockID conn cidx k
+  let (flst',flst'') = splitAt 400 flst
+  case bid of
+    Nothing -> return ()
+    Just bid' -> do
+      execute_ conn $ sql bid' flst'
+  addSurfaceBlock conn (cidx,k) flst'' 
+  where
+    face2str' fs = "\"" ++ (face2str fs) ++ "\"" 
+    fmt bid (i,fs) = unwords [show bid, ",",  show i, ",", face2str' fs] 
+    ufmt bid pos = " union all select " ++ (fmt bid pos )
+    rec bid vlst' = concatMap (ufmt bid) $ tail vlst'
+    sql bid vlst' = Query $ T.pack $ "INSERT INTO SurfaceTable select "
+        ++ (fmt bid $ head vlst') ++ (rec bid vlst') ++ ";"
+
+getSurfaceBlock :: Connection -> (ChunkIdx,Index)
+                -> IO [(Index,[Surface])] 
+getSurfaceBlock conn ((i,j),k) = do
+  r <- query conn sql (i,j,k) :: IO [ChunkSurfaceField]
+  return $ map f2l r
+  where
     sql = " Select pos,face from SurfaceTable \
           \   where \
           \     BlockID = (Select BlockID from BlockChunkTable \
@@ -299,52 +321,22 @@ getChunkSurface conn (i,j) = mapM (\ k -> do
           \             and HPos = ?) "
     f2l (ChunkSurfaceField p v) = (p, str2face v)
 
+data ChunkSurfaceField = ChunkSurfaceField Int String deriving (Show)
+
+instance FromRow ChunkSurfaceField where
+  fromRow = ChunkSurfaceField <$> field <*> field
+
+getChunkSurface :: Connection -> ChunkIdx -> IO [[(Index,[Surface])]]
+getChunkSurface conn (i,j) = mapM (\ k -> getSurfaceBlock conn ((i,j),k)
+                                   ) [ 0 .. bkNo]
+  where
+    !bkNo = blockNum chunkParam - 1
+
 setChunkSurface :: Connection -> ChunkIdx -> [(Index,[(Index,[Surface])])]
                 -> IO ()
 setChunkSurface _ _ [] = return ()
-setChunkSurface conn cidx flsts = mapM_ (setChunkSurface' conn cidx) flsts
-
-setChunkSurface' :: Connection -> ChunkIdx -> (Index, [(Index,[Surface])])
-                -> IO ()
-setChunkSurface' _ _ (_,[]) = return ()
-setChunkSurface' conn cidx (k,flst) = do
-  cid <- _getChunkID conn cidx
-  let (flst',flst'') = splitAt 200 flst
-  case cid of
-    Nothing -> return ()
-    Just ci' -> do
-      execute_ conn $ sql ci' flst'
-  setChunkSurface' conn cidx (k,flst'') 
-  where
-    face2str' fs = "\"" ++ (face2str fs) ++ "\"" 
-    fmt cid (i,fs) = unwords [show cid, ",",  show i, ",", face2str' fs] 
-    ufmt cid pos = " union all select " ++ (fmt cid pos )
-    rec cid vlst' = concatMap (ufmt cid) $ tail vlst'
-    sql cid vlst' = Query $ T.pack $ "INSERT INTO SurfaceTable select "
-        ++ (fmt cid $ head vlst') ++ (rec cid vlst') ++ ";"
-
--- #####################################################
---
-type ChunkIndex = (Int,Int,Int)
-
-wIndexToChunkpos :: WorldIndex -> (ChunkIndex,Int)
-wIndexToChunkpos (x,y,z) = ( (ox,oy,oz) , cidx)
-  where
-    bsize = blockSize chunkParam
-    (ox, lx) = x `divMod` bsize 
-    (oy, ly) = y `divMod` bsize
-    (oz, lz) = z `divMod` bsize 
-    cidx = bsize * bsize * ly + bsize * lz + lx
-
-chunkposToWindex :: (ChunkIndex,Int) -> WorldIndex
-chunkposToWindex ((i,j,k),idx) = (x,y,z)
-  where
-    bsize = blockSize chunkParam
-    x = bsize * i + lx
-    y = bsize * j + ly
-    z = bsize * k + lz
-    (ly,t) = idx `divMod` (bsize * bsize)
-    (lz,lx) = t `divMod` bsize
+setChunkSurface conn cidx flsts = mapM_
+  (\ (bid,fs) -> addSurfaceBlock conn (cidx,bid) fs) flsts
 
 -- ######### ObjectInfo Table ##########
 

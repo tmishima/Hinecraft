@@ -327,10 +327,11 @@ genChunkVAO' sh bsf = do
                       (concat coordlst)
   return $! Just (ndnum, vao)
   where
-    !(clrlst, normlst, coordlst, vertlst, ndnum) = foldr 
-      (\ e (cs,ns,cds,vs,s) -> let (c,n,cd,v,num) = genElem e
-                             in (c:cs,n:ns,cd:cds,v:vs,num+s)
-                             ) ([],[],[],[],0) bsf
+    !(clrlst, normlst, coordlst, vertlst, ndnum) =
+      foldr 
+        (\ e (cs,ns,cds,vs,s) -> let (c,n,cd,v,num) = genElem e
+                                 in (c:cs,n:ns,cd:cds,v:vs,num+s))
+        ([],[],[],[],0) bsf
   --
 
 genElem :: (WorldIndex, BlockIDNum, [Surface])
