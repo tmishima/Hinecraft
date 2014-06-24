@@ -171,7 +171,8 @@ mainProcess (glfwHdl, guiRes) tmstat plstat dtHdl runMode wvHdl dt = do
       if (isEmpty dtHdl)
         then return $! (PlayMode,plstat,tmstat,dtHdl)
         else do
-          !dtHdl' <- loadData dtHdl
+          let !(ux,uy,uz) =  userPos $ usrStat plstat
+          !dtHdl' <- loadData dtHdl (round' ux, round' uy, round' uz)
           initWorldVAOList wvHdl $ getAllSurfaceData dtHdl'
           !md <- return PlayMode
           return $! (md,plstat,tmstat,dtHdl')
@@ -198,12 +199,27 @@ mainProcess (glfwHdl, guiRes) tmstat plstat dtHdl runMode wvHdl dt = do
           updateVAOlist wvHdl sflst
           return $! newDtHdl
         Nothing -> return dtHdl
+      let (ci1,_,_) = wIndexToChunkpos newPos
+          (ci2,_,_) = wIndexToChunkpos $ d2i $ userPos u'
+          newPos = d2i $ userPos newStat
+          d2i (px,py,pz) = (round' px, round' py, round' pz)
+      newDtHdl'' <- if ci1 == ci2 
+        then return newDtHdl'
+        else do
+          (twld,clst) <- reconfData newDtHdl' newPos
+          let !bNum = (blockNum chunkParam) - 1
+              !sflst = map (\ (ij,bNo') ->
+                       ((ij,bNo')
+                       , getSurfaceList newDtHdl' (ij,bNo')
+                       )) [(ij,bNo') | ij <- clst, bNo' <- [0 .. bNum]]
+          updateVAOlist wvHdl sflst
+          return twld
       return $! ( md
                 , PlayModeState
                        { usrStat = newStat , drgdrpMd = Nothing
                        , drgSta = Nothing , curPos = pos , pallet = plt
                        }
-                , tmstat, newDtHdl')
+                , tmstat, newDtHdl'')
     InventoryMode -> do
       winSize <- getWindowSize glfwHdl
       let !md = case syskey of
@@ -312,9 +328,7 @@ calcPlayerMotion :: DataHdl -> UserStatus
                  -> UserStatus
 calcPlayerMotion dtHdl usrStat' (mx,my) (f,b,l,r,jmp) (_,sy) dt =
   UserStatus
-    { userPos = ( nx
-                , ny 
-                , nz)
+    { userPos = ( nx , ny , nz)
     , userRot = (realToFrac nrx, realToFrac nry, realToFrac nrz) 
     , palletIndex = if idx < 0 then 0 else if idx > 8 then 8 else idx
     , userVel = (0.0,w,0.0)
@@ -326,7 +340,7 @@ calcPlayerMotion dtHdl usrStat' (mx,my) (f,b,l,r,jmp) (_,sy) dt =
     !(nrx,nry,nrz) = playerView dt ( realToFrac orx
                                    , realToFrac ory
                                    , realToFrac orz)
-                        ( my * 0.5, mx * 0.5, 0)
+                        ( my * 1.0, mx * 1.0, 0)
     !(dx,dy,dz) = playerMotion dt nry ( fromIntegral (b - f)*4
                                       , fromIntegral (r - l)*4
                                       , w)                
