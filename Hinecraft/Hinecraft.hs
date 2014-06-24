@@ -29,10 +29,10 @@ import System.Environment (getArgs)
 import Data.Time
 import Data.IORef
 
-import Hinecraft.Render.View
-import Hinecraft.Render.Types
-import Hinecraft.Render.TitleView
-import Hinecraft.Render.WorldView
+import Hinecraft.Rendering.View
+import Hinecraft.Rendering.Types
+import Hinecraft.Rendering.TitleView
+import Hinecraft.Rendering.WorldView
 import Hinecraft.Model
 import Hinecraft.Util
 import Hinecraft.Types

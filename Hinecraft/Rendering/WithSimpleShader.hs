@@ -3,7 +3,7 @@
 -- Copyright : (c) T.Mishima 2014
 -- License : Apache-2.0
 --
-module Hinecraft.Render.WithSimpleShader 
+module Hinecraft.Rendering.WithSimpleShader 
   ( SimpleShaderProg
   , makeSimpShdrVAO
   , orthoProjMatrix
@@ -20,7 +20,7 @@ import qualified Graphics.GLUtil.Camera3D as GU3
 
 import Linear
 
-import Hinecraft.Render.Types
+import Hinecraft.Rendering.Types
 
 data SimpleShaderProg = SimpleShaderProg
   { shprg :: ShaderProgram

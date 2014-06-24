@@ -3,7 +3,7 @@
 -- Copyright : (c) T.Mishima 2014
 -- License : Apache-2.0
 --
-module Hinecraft.Render.Types where
+module Hinecraft.Rendering.Types where
 
 -- OpenGL
 import Graphics.Rendering.OpenGL

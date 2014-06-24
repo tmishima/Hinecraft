@@ -36,7 +36,7 @@ import System.Directory
 import Hinecraft.Types
 import Hinecraft.Model
 import Hinecraft.Util
-import Hinecraft.Render.Util
+import Hinecraft.Rendering.Util
 import Hinecraft.DB.WithSqlite3
 
 import Debug.Trace as Dbg

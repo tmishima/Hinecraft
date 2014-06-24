@@ -3,7 +3,7 @@
 -- Copyright : (c) T.Mishima 2014
 -- License : Apache-2.0
 --
-module Hinecraft.Render.Util
+module Hinecraft.Rendering.Util
   ( blockNodeVertex
   , drawBackPlane
   , putTextLine
@@ -23,7 +23,7 @@ import qualified Graphics.GLUtil as GU
 -- Font
 import Graphics.Rendering.FTGL as Ft
 
-import Hinecraft.Render.Types
+import Hinecraft.Rendering.Types
 import Hinecraft.Types
 import Hinecraft.Model
 

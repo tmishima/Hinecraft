@@ -3,7 +3,7 @@
 -- Copyright : (c) T.Mishima 2014
 -- License : Apache-2.0
 --
-module Hinecraft.Render.TitleView
+module Hinecraft.Rendering.TitleView
   ( TitleModeHdl
   , initTitleModeView
   , drawTitle
@@ -21,9 +21,9 @@ import qualified Graphics.GLUtil.Camera2D as GU2
 --import Linear ( M44 ) --  eye4
 
 import Hinecraft.Types
-import Hinecraft.Render.Util
-import Hinecraft.Render.Types
-import Hinecraft.Render.WithSimpleShader
+import Hinecraft.Rendering.Util
+import Hinecraft.Rendering.Types
+import Hinecraft.Rendering.WithSimpleShader
 
 
 --type Scene = (M44 GLfloat, GU.VAO, [TextureObject], M44 GLfloat -> GU.VAO -> IO ())

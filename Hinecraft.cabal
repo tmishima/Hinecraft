@@ -22,11 +22,11 @@ executable Hinecraft
                      Hinecraft.Data
                      Hinecraft.Util
                      Hinecraft.Model
-                     Hinecraft.Render.View,
-                     Hinecraft.Render.Types
-                     Hinecraft.Render.Util
-                     Hinecraft.Render.TitleView
-                     Hinecraft.Render.WithSimpleShader
+                     Hinecraft.Rendering.View,
+                     Hinecraft.Rendering.Types
+                     Hinecraft.Rendering.Util
+                     Hinecraft.Rendering.TitleView
+                     Hinecraft.Rendering.WithSimpleShader
                      Hinecraft.DB.WithSqlite3 
   build-depends:       base ==4.6.*
                      , GLFW-b , OpenGL , mtl == 2.*

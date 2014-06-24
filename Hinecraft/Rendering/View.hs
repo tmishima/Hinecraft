@@ -3,7 +3,7 @@
 -- Copyright : (c) T.Mishima 2014
 -- License : Apache-2.0
 --
-module Hinecraft.Render.View
+module Hinecraft.Rendering.View
   ( ViewMode (..)
   , UserStatus (..)
   , loadGuiResource
@@ -30,10 +30,10 @@ import Control.Monad (  forM_ {-,when, unless,void,filterM-} )
 import Hinecraft.Model
 import Hinecraft.Types
 
-import Hinecraft.Render.Types
-import Hinecraft.Render.Util
-import Hinecraft.Render.TitleView
-import Hinecraft.Render.WorldView
+import Hinecraft.Rendering.Types
+import Hinecraft.Rendering.Util
+import Hinecraft.Rendering.TitleView
+import Hinecraft.Rendering.WorldView
 
 -- Define
 -- ##################### OpenGL ###########################

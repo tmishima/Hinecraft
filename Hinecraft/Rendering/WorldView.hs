@@ -3,7 +3,7 @@
 -- Copyright : (c) T.Mishima 2014
 -- License : Apache-2.0
 --
-module Hinecraft.Render.WorldView
+module Hinecraft.Rendering.WorldView
   ( WorldViewVHdl (blockTexture)
   , initWorldView
   , drawWorldView
@@ -34,10 +34,10 @@ import Control.Applicative
 
 import Hinecraft.Types
 import Hinecraft.Model
-import Hinecraft.Render.Util
-import Hinecraft.Render.Types
-import Hinecraft.Render.WithBasicShader as BSd
-import Hinecraft.Render.WithSimpleShader as SSd
+import Hinecraft.Rendering.Util
+import Hinecraft.Rendering.Types
+import Hinecraft.Rendering.WithBasicShader as BSd
+import Hinecraft.Rendering.WithSimpleShader as SSd
 
 data WorldViewVHdl = WorldViewVHdl 
   { basicShader :: BasicShaderProg
