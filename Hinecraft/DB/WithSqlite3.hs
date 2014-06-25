@@ -93,7 +93,7 @@ mainProcess inst outst conn = do
         return False
       Store (i,k) blks sufs -> do 
         cflg <- checkChunk conn (i,k)
-        unless cflg $ Dbg.trace "DB: add Chunk at Put ope"
+        unless cflg $ Dbg.trace "DB: add Chunk at Store ope"
                     $ addChunk' conn (i,k)
         setChunkBlock conn (i,k) $ zip [0 .. (bkNo-1)] blks
         setChunkSurface conn (i,k) $ zip [0 .. (bkNo-1)] sufs
@@ -108,7 +108,7 @@ mainProcess inst outst conn = do
         return False
       PutSBlk (i,k) j sufs -> do
         cflg <- checkChunk conn (i,k)
-        unless cflg $ Dbg.trace "DB: add Chunk at Put ope"
+        unless cflg $ Dbg.trace "DB: add SurfaceChunk at PutSBlk ope"
                     $ addChunk' conn (i,k)
         deleteSurfaceBlock conn ((i,k),j) 
         addSurfaceBlock conn ((i,k),j) sufs

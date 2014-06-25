@@ -98,9 +98,9 @@ l2g dhdl wld ((i,k),ms) =
       $ zip [0..] ms
   )
 
-reconfData :: DataHdl -> WorldIndex -> IO (DataHdl, [ChunkIdx])
+reconfData :: DataHdl -> WorldIndex -> IO (DataHdl, ([ChunkIdx],[ChunkIdx]))
 reconfData dhdl upos = case (wldDat dhdl) of
-  Nothing -> (\ d -> (d,clist)) <$> loadData dhdl upos
+  Nothing -> (\ d -> (d,([],[]))) <$> loadData dhdl upos
   Just wldDat' -> do
     chLst <- mapM (\ (i,j) -> do
       let chnk = (\ c -> case M.lookup (i,j) (surfaceChunks wldDat') of
@@ -124,6 +124,7 @@ reconfData dhdl upos = case (wldDat dhdl) of
               , map M.fromList fs) 
       ) clist 
     Dbg.traceIO "reconfData"
+    -- Dbg.traceIO $ "old,new =" ++ (show (nowclist,clist,upos))
     return $!
       ( DataHdl
         { dbHdl = dbHdl'
@@ -132,11 +133,19 @@ reconfData dhdl upos = case (wldDat dhdl) of
           , surfaceChunks = M.fromList $ map (\ (i,_,f) -> (i,f)) chLst 
           }
         }
-      , clist 
+      , diffcs nowclist clist 
       )
   where
     dbHdl' = dbHdl dhdl
     clist = chunkArea upos
+    nowclist = map (\ (i,_) -> i)
+                $ case (wldDat dhdl) of
+                   Just cs -> M.toList $ cellChunks cs
+                   Nothing -> []
+    diffcs oldcs newcs = foldr (\ c (acs,oldcs') -> if elem c oldcs'
+                           then (acs,filter (c /=) oldcs') 
+                           else ((c:acs),oldcs')) ([],oldcs) newcs
+
     !bkNo = blockNum chunkParam - 1
     vec2list :: [DVS.Vector Int] -> [[(Int,BlockIDNum)]]
     vec2list = map ((filter ((/= airBlockID).snd))
@@ -379,7 +388,8 @@ chkSuf'' vec (tag1,tag2) (itr1,itr2) clbk (x,y,z) = concat
                <$> (vec DVS.!? ((pos2i . itr2) (x,y,z))) 
 
 chunkArea :: WorldIndex -> [(Int,Int)]
-chunkArea upos = [ (i + x,j + z) | x <- [-2,-1..3], z <- [-2,-1..3] ]
+-- chunkArea upos = [ (i + x,j + z) | x <- [-2,-1..3], z <- [-2,-1..3] ]
+chunkArea upos = [ (i + x,j + z) | x <- [-1,0..1], z <- [-1,0..1] ]
   where        
     ((i,j),_,_) = wIndexToChunkpos upos
         

@@ -13,6 +13,9 @@ module Hinecraft.Rendering.WorldView
   , getBlockVAOList
   , setBlockVAOList
   , updateVAOlist
+  -- 
+  , appendVAO
+  , deleteVAO
   )
   where
 
@@ -73,6 +76,24 @@ updateVAOlist wvhdl sufList = do
         Nothing -> return wvlst
     upfn nv _ = Just nv
 
+appendVAO :: WorldViewVHdl -> [(ChunkIdx,[SurfacePos])]
+          -> IO ()
+appendVAO wvhdl sufList = do
+  !vaos <- getBlockVAOList wvhdl
+  !newvaos <- foldM fn vaos sufList 
+  setBlockVAOList wvhdl newvaos 
+  where
+    fn vaos (ij,sfs) = do
+      vaos' <- mapM (\ s -> do
+        genChunkVAO wvhdl s) sfs 
+      return $ M.insert ij vaos' vaos
+
+deleteVAO :: WorldViewVHdl -> [ChunkIdx] -> IO ()
+deleteVAO wvhdl cidxs = do
+  !vaos <- getBlockVAOList wvhdl
+  setBlockVAOList wvhdl $ foldl fn vaos cidxs 
+  where
+    fn vaos ij = M.delete ij vaos
 
 getBlockVAOList :: WorldViewVHdl -> IO WorldVAOList
 getBlockVAOList vwHdl = readIORef (blkVAOList vwHdl)
@@ -247,8 +268,8 @@ drawWorldView wvhdl (w,h) res vaos usrStat' pos sunDeg = do
     !sunY = sunLen * (sin $ GU3.deg2rad sunDeg')
     !sunZ = sunLen * (cos $ GU3.deg2rad sunDeg')
     !dvMat = GU3.camMatrix $ GU3.tilt (-sunDeg')
-                           -- $ GU3.dolly (V3 ux 400 uz)
                            $ GU3.dolly (V3 (0::GLfloat) sunY sunZ)
+                           -- $ GU3.dolly (V3 ux sunY (sunZ + uz))
                            GU3.fpsCamera
     !mMat = V4 (V4 1.0 0.0 0.0 0.0)
                (V4 0.0 1.0 0.0 0.0)

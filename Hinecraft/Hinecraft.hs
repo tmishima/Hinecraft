@@ -206,13 +206,16 @@ mainProcess (glfwHdl, guiRes) tmstat plstat dtHdl runMode wvHdl dt = do
       newDtHdl'' <- if ci1 == ci2 
         then return newDtHdl'
         else do
-          (twld,clst) <- reconfData newDtHdl' newPos
+          (twld,(acs,dcs)) <- reconfData newDtHdl' newPos
+          Dbg.traceIO $ "acs,dcs =" ++ (show (acs,dcs))
           let !bNum = (blockNum chunkParam) - 1
-              !sflst = map (\ (ij,bNo') ->
-                       ((ij,bNo')
-                       , getSurfaceList newDtHdl' (ij,bNo')
-                       )) [(ij,bNo') | ij <- clst, bNo' <- [0 .. bNum]]
-          updateVAOlist wvHdl sflst
+              !sflst = map (\ ij ->
+                         ( ij
+                         , map (\ b -> getSurfaceList twld (ij,b))
+                             [0 .. bNum]
+                         )) acs
+          appendVAO wvHdl sflst
+          deleteVAO wvHdl dcs
           return twld
       return $! ( md
                 , PlayModeState
