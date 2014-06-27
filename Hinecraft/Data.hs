@@ -29,7 +29,7 @@ import Data.Maybe ( fromJust, isJust, catMaybes ) -- , mapMaybe
 import Data.List
 import Data.Ord
 import Data.Tuple
---import Data.IORef
+import Data.IORef
 import qualified Data.Map as M
 import System.Directory
 
@@ -102,6 +102,7 @@ reconfData :: DataHdl -> WorldIndex -> IO (DataHdl, ([ChunkIdx],[ChunkIdx]))
 reconfData dhdl upos = case (wldDat dhdl) of
   Nothing -> (\ d -> (d,([],[]))) <$> loadData dhdl upos
   Just wldDat' -> do
+    wstck <- newIORef [] :: IO (IORef [ChunkIdx])
     chLst <- mapM (\ (i,j) -> do
       let chnk = (\ c -> case M.lookup (i,j) (surfaceChunks wldDat') of
                              Just f' -> (c,f')
@@ -114,17 +115,21 @@ reconfData dhdl upos = case (wldDat dhdl) of
           (cs,fs) <- readChunkData dbHdl' (i,j)
           if and $ map null cs 
             then do
-              let (c,f) = genChunk
-              writeChunkData dbHdl' (i,j) (vec2list c) (map M.toList f)
-              Dbg.traceIO $ "genChunk " ++ show (i,j)
-              return ((i,j),c,f)
+              tmp <- readIORef wstck
+              writeIORef wstck ((i,j):tmp)
+              --writeChunkData dbHdl' (i,j) (vec2list gc) (map M.toList gf)
+              -- Dbg.traceIO $ "genChunk " ++ show (i,j)
+              return ((i,j),gc,gf)
             else return
               ( (i,j)
               , map (\ c -> (DVS.replicate (16 ^ 3) airBlockID) DVS.// c) cs
               , map M.fromList fs) 
       ) clist 
-    Dbg.traceIO "reconfData"
+    -- Dbg.traceIO "reconfData"
     -- Dbg.traceIO $ "old,new =" ++ (show (nowclist,clist,upos))
+    wstck' <- readIORef wstck
+    mapM_ (\ (i,j) ->
+      writeChunkData dbHdl' (i,j) (vec2list gc) (map M.toList gf)) wstck' 
     return $!
       ( DataHdl
         { dbHdl = dbHdl'
@@ -136,6 +141,7 @@ reconfData dhdl upos = case (wldDat dhdl) of
       , diffcs nowclist clist 
       )
   where
+    (gc,gf) = genChunk
     dbHdl' = dbHdl dhdl
     clist = chunkArea upos
     nowclist = map (\ (i,_) -> i)
@@ -159,14 +165,14 @@ loadWorldData dbHdl' clst = do
       then do
         let (c,f) = genChunk
         writeChunkData dbHdl' (i,j) (vec2list c) (map M.toList f)
-        Dbg.traceIO $ "genChunk " ++ show (i,j)
+        -- Dbg.traceIO $ "genChunk " ++ show (i,j)
         return ((i,j),c,f)
       else return
         ( (i,j)
         , map (\ c -> (DVS.replicate (16 ^ 3) airBlockID) DVS.// c) cs
         , map M.fromList fs) 
     ) clst 
-  Dbg.traceIO "loadWorldData"
+  -- Dbg.traceIO "loadWorldData"
   return $! WorldData
     { cellChunks = M.fromList $ map (\ (i,c,_) -> (i,c)) chLst
     , surfaceChunks = M.fromList $ map (\ (i,_,f) -> (i,f)) chLst 
@@ -388,8 +394,8 @@ chkSuf'' vec (tag1,tag2) (itr1,itr2) clbk (x,y,z) = concat
                <$> (vec DVS.!? ((pos2i . itr2) (x,y,z))) 
 
 chunkArea :: WorldIndex -> [(Int,Int)]
--- chunkArea upos = [ (i + x,j + z) | x <- [-2,-1..3], z <- [-2,-1..3] ]
-chunkArea upos = [ (i + x,j + z) | x <- [-1,0..1], z <- [-1,0..1] ]
+chunkArea upos = [ (i + x,j + z) | x <- [-2,-1..3], z <- [-2,-1..3] ]
+-- chunkArea upos = [ (i + x,j + z) | x <- [-1,0..1], z <- [-1,0..1] ]
   where        
     ((i,j),_,_) = wIndexToChunkpos upos
         

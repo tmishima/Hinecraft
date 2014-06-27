@@ -62,7 +62,7 @@ mainProcess inst outst conn = do
   cmd <- readChan inst
   q <- case cmd of
       Exit -> return True
-      Load (i,k) -> do
+      Load (i,k) -> withTransaction conn $ do
         cflg <- checkChunk conn (i,k)
         (blks,sufs) <- if cflg 
           then do
@@ -71,44 +71,44 @@ mainProcess inst outst conn = do
             return ( b', f' )
           else return (replicate bkNo [], replicate bkNo [])
         writeChan outst $ Dump blks sufs
-        Dbg.traceIO $ unwords ["DB: Cell Chunk =",show (i,k)," Load" ]
+        -- Dbg.traceIO $ unwords ["DB: Cell Chunk =",show (i,k)," Load" ]
         return False
       PutCell (i,k) j pos v -> do
         cflg <- checkChunk conn (i,k)
-        unless cflg $ Dbg.trace "DB: add Chunk at Put ope"
+        unless cflg -- $ Dbg.trace "DB: add Chunk at Put ope"
                     $ addChunk' conn (i,k)
         blk <- getCellObject conn ((i,k),j,pos)
         case blk of
-          Nothing -> Dbg.trace "DB: put obj"
-                       $ addCellObject conn ((i,k),j,pos,v)  
-          _ -> Dbg.trace "DB: update obj"
-                       $ updateCellObject conn ((i,k),j,pos,v) 
+          Nothing -> --Dbg.trace "DB: put obj" $
+                        addCellObject conn ((i,k),j,pos,v)  
+          _ -> -- Dbg.trace "DB: update obj" $
+                        updateCellObject conn ((i,k),j,pos,v) 
         return False
       DelCell (i,k) j pos -> do
         cflg <- checkChunk conn (i,k) 
         if cflg 
-          then Dbg.trace "DB: del" $ 
+          then -- Dbg.trace "DB: del" $ 
             deleteCellObject conn ((i,k),j,pos)
           else return ()
         return False
-      Store (i,k) blks sufs -> do 
+      Store (i,k) blks sufs -> withTransaction conn $ do 
         cflg <- checkChunk conn (i,k)
-        unless cflg $ Dbg.trace "DB: add Chunk at Store ope"
+        unless cflg -- $ Dbg.trace "DB: add Chunk at Store ope" 
                     $ addChunk' conn (i,k)
         setChunkBlock conn (i,k) $ zip [0 .. (bkNo-1)] blks
         setChunkSurface conn (i,k) $ zip [0 .. (bkNo-1)] sufs
         return False
-      GetSBlk (i,k) j -> do
+      GetSBlk (i,k) j -> withTransaction conn $ do
         cflg <- checkChunk conn (i,k)
         sufs <- if cflg 
           then getSurfaceBlock conn ((i,k),j)
           else return []
         writeChan outst $ DumpSB sufs
-        Dbg.traceIO $ unwords ["DB: SBlock =",show (i,k,j)," Load" ]
+        -- Dbg.traceIO $ unwords ["DB: SBlock =",show (i,k,j)," Load" ]
         return False
-      PutSBlk (i,k) j sufs -> do
+      PutSBlk (i,k) j sufs -> withTransaction conn $ do
         cflg <- checkChunk conn (i,k)
-        unless cflg $ Dbg.trace "DB: add SurfaceChunk at PutSBlk ope"
+        unless cflg -- $ Dbg.trace "DB: add SurfaceChunk at PutSBlk ope"
                     $ addChunk' conn (i,k)
         deleteSurfaceBlock conn ((i,k),j) 
         addSurfaceBlock conn ((i,k),j) sufs

@@ -207,7 +207,7 @@ mainProcess (glfwHdl, guiRes) tmstat plstat dtHdl runMode wvHdl dt = do
         then return newDtHdl'
         else do
           (twld,(acs,dcs)) <- reconfData newDtHdl' newPos
-          Dbg.traceIO $ "acs,dcs =" ++ (show (acs,dcs))
+          -- Dbg.traceIO $ "acs,dcs =" ++ (show (acs,dcs))
           let !bNum = (blockNum chunkParam) - 1
               !sflst = map (\ ij ->
                          ( ij
