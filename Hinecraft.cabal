@@ -2,7 +2,7 @@
 -- 
 
 name:                Hinecraft
-version:             0.3.0.0
+version:             0.3.0.1
 -- synopsis:            
 description:         This is minecraft clone
 license:             Apache-2.0
@@ -28,12 +28,10 @@ executable Hinecraft
                      Hinecraft.Rendering.TitleView
                      Hinecraft.Rendering.WithSimpleShader
                      Hinecraft.DB.WithSqlite3 
-  build-depends:       base ==4.6.*
-                     , GLFW-b , OpenGL , mtl == 2.*
-                     , bytestring == 0.10.*
-                     , array , vector , directory , process
-                     , OpenGLRaw , cereal , FTGL , time
-                     , containers , GLUtil , linear , text
+  build-depends:       base , GLFW-b , OpenGL , mtl
+                     , bytestring , array , vector , directory
+                     , process , OpenGLRaw , cereal , FTGL
+                     , time , containers , GLUtil , linear , text
                      , sqlite-simple
 
   if os(windows)

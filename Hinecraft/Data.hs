@@ -15,7 +15,6 @@ module Hinecraft.Data
   , DataHdl
   , initData
   , exitData
-  , loadData
   , reconfData
   , isEmpty
   -- 
@@ -69,17 +68,6 @@ initData home = do
 exitData :: DataHdl -> IO ()
 exitData = exitDB . dbHdl
 
-loadData :: DataHdl -> WorldIndex -> IO DataHdl
-loadData dhdl upos = do
-  !wld <- loadWorldData dbHdl' clist
-  return $! DataHdl
-    { dbHdl = dbHdl'
-    , wldDat = Just wld
-     }
-  where
-    dbHdl' = dbHdl dhdl
-    clist = chunkArea upos
-
 isEmpty :: DataHdl -> Bool
 isEmpty dhdl = isJust $ wldDat dhdl
 
@@ -100,7 +88,12 @@ l2g dhdl wld ((i,k),ms) =
 
 reconfData :: DataHdl -> WorldIndex -> IO (DataHdl, ([ChunkIdx],[ChunkIdx]))
 reconfData dhdl upos = case (wldDat dhdl) of
-  Nothing -> (\ d -> (d,([],[]))) <$> loadData dhdl upos
+  Nothing -> (\ d -> (d,(clist,[]))) <$> do
+    !wld <- loadWorldData dbHdl' clist
+    return $! DataHdl
+      { dbHdl = dbHdl'
+      , wldDat = Just wld
+      }
   Just wldDat' -> do
     wstck <- newIORef [] :: IO (IORef [ChunkIdx])
     chLst <- mapM (\ (i,j) -> do

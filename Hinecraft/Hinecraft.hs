@@ -172,7 +172,7 @@ mainProcess (glfwHdl, guiRes) tmstat plstat dtHdl runMode wvHdl dt = do
         then return $! (PlayMode,plstat,tmstat,dtHdl)
         else do
           let !(ux,uy,uz) =  userPos $ usrStat plstat
-          !dtHdl' <- loadData dtHdl (round' ux, round' uy, round' uz)
+          !(dtHdl',_) <- reconfData dtHdl (round' ux, round' uy, round' uz)
           initWorldVAOList wvHdl $ getAllSurfaceData dtHdl'
           !md <- return PlayMode
           return $! (md,plstat,tmstat,dtHdl')
