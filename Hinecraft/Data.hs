@@ -31,6 +31,7 @@ import Data.Tuple
 import Data.IORef
 import qualified Data.Map as M
 import System.Directory
+import Control.Monad (foldM)
 
 import Hinecraft.Types
 import Hinecraft.Model
@@ -87,53 +88,38 @@ l2g dhdl wld ((i,k),ms) =
   )
 
 reconfData :: DataHdl -> WorldIndex -> IO (DataHdl, ([ChunkIdx],[ChunkIdx]))
-reconfData dhdl upos = case (wldDat dhdl) of
-  Nothing -> (\ d -> (d,(clist,[]))) <$> do
-    !wld <- loadWorldData dbHdl' clist
-    return $! DataHdl
-      { dbHdl = dbHdl'
-      , wldDat = Just wld
-      }
-  Just wldDat' -> do
-    wstck <- newIORef [] :: IO (IORef [ChunkIdx])
+reconfData dhdl upos = do 
+  wstck <- newIORef [] :: IO (IORef [ChunkIdx])
+  !wld <- do
     chLst <- mapM (\ (i,j) -> do
-      let chnk = (\ c -> case M.lookup (i,j) (surfaceChunks wldDat') of
-                             Just f' -> (c,f')
-                             Nothing -> (c,[])
-                 ) 
-                 <$> M.lookup (i,j) (cellChunks wldDat')  
-      case chnk of
-        Just (c,f) -> return ((i,j),c,f) 
-        Nothing -> do
-          (cs,fs) <- readChunkData dbHdl' (i,j)
-          if and $ map null cs 
-            then do
-              tmp <- readIORef wstck
-              writeIORef wstck ((i,j):tmp)
-              --writeChunkData dbHdl' (i,j) (vec2list gc) (map M.toList gf)
-              -- Dbg.traceIO $ "genChunk " ++ show (i,j)
-              return ((i,j),gc,gf)
-            else return
-              ( (i,j)
-              , map (\ c -> (DVS.replicate (16 ^ 3) airBlockID) DVS.// c) cs
-              , map M.fromList fs) 
+      (cs,fs) <- readChunkData dbHdl' (i,j)
+      if and $ map null cs 
+        then do
+          tmp <- readIORef wstck
+          writeIORef wstck ((i,j):tmp)
+          --writeChunkData dbHdl' (i,j) (vec2list gc) (map M.toList gf)
+          -- Dbg.traceIO $ "genChunk " ++ show (i,j)
+          return ((i,j),gc,gf)
+        else return $ genCk (i,j) cs fs
       ) clist 
-    -- Dbg.traceIO "reconfData"
-    -- Dbg.traceIO $ "old,new =" ++ (show (nowclist,clist,upos))
-    wstck' <- readIORef wstck
-    mapM_ (\ (i,j) ->
-      writeChunkData dbHdl' (i,j) (vec2list gc) (map M.toList gf)) wstck' 
-    return $!
-      ( DataHdl
-        { dbHdl = dbHdl'
-        , wldDat = Just $ WorldData
-          { cellChunks = M.fromList $ map (\ (i,c,_) -> (i,c)) chLst
-          , surfaceChunks = M.fromList $ map (\ (i,_,f) -> (i,f)) chLst 
-          }
-        }
-      , diffcs nowclist clist 
-      )
+    -- Dbg.traceIO "loadWorldData"
+    return $! WorldData
+      { cellChunks = M.fromList $ map (\ (i,c,_) -> (i,c)) chLst
+      , surfaceChunks = M.fromList $ map (\ (i,_,f) -> (i,f)) chLst 
+      }
+  wstck' <- readIORef wstck
+  mapM_ (\ (i,j) ->
+    writeChunkData dbHdl' (i,j) (vec2list gc) (map M.toList gf)) wstck'     
+  return $! ( DataHdl
+    { dbHdl = dbHdl'
+    , wldDat = Just wld
+    }
+    , diffcs nowclist clist)
   where
+    genCk (i,j) cs fs =
+      ( (i,j)
+      , map (\ c -> (DVS.replicate (bsize ^ 3) airBlockID) DVS.// c) cs
+      , map M.fromList fs) 
     (gc,gf) = genChunk
     dbHdl' = dbHdl dhdl
     clist = chunkArea upos
@@ -146,32 +132,7 @@ reconfData dhdl upos = case (wldDat dhdl) of
                            else ((c:acs),oldcs')) ([],oldcs) newcs
 
     !bkNo = blockNum chunkParam - 1
-    vec2list :: [DVS.Vector Int] -> [[(Int,BlockIDNum)]]
-    vec2list = map ((filter ((/= airBlockID).snd))
-                                      . ((zip [0..]).DVS.toList)) 
-
-loadWorldData :: DBHandle -> [ChunkIdx] -> IO WorldData
-loadWorldData dbHdl' clst = do
-  chLst <- mapM (\ (i,j) -> do
-    (cs,fs) <- readChunkData dbHdl' (i,j)
-    if and $ map null cs 
-      then do
-        let (c,f) = genChunk
-        writeChunkData dbHdl' (i,j) (vec2list c) (map M.toList f)
-        -- Dbg.traceIO $ "genChunk " ++ show (i,j)
-        return ((i,j),c,f)
-      else return
-        ( (i,j)
-        , map (\ c -> (DVS.replicate (16 ^ 3) airBlockID) DVS.// c) cs
-        , map M.fromList fs) 
-    ) clst 
-  -- Dbg.traceIO "loadWorldData"
-  return $! WorldData
-    { cellChunks = M.fromList $ map (\ (i,c,_) -> (i,c)) chLst
-    , surfaceChunks = M.fromList $ map (\ (i,_,f) -> (i,f)) chLst 
-    }
-  where
-    !bkNo = blockNum chunkParam - 1
+    !bsize = blockSize chunkParam
     vec2list :: [DVS.Vector Int] -> [[(Int,BlockIDNum)]]
     vec2list = map ((filter ((/= airBlockID).snd))
                                       . ((zip [0..]).DVS.toList)) 
