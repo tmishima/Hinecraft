@@ -73,6 +73,9 @@ data TitleModeState = TitleModeState
   }
   deriving (Eq,Show)
 
+data InitModeState = InitModeState Double
+  deriving (Eq,Show)
+
 type DragDropMode = Maybe BlockIDNum
 type DragDropState = Maybe ((Double,Double),BlockIDNum)
 

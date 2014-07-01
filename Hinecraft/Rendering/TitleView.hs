@@ -135,13 +135,10 @@ drawTitle (w,h) res stat tvHdl =
     prjMat = GU3.projectionMatrix (GU3.deg2rad 90)
                  (fromIntegral w/ fromIntegral h) 0.1 (10::GLfloat)
 
-data InitModeState = InitModeState Double
-  deriving (Eq,Show)
-
 drawInit :: (Int,Int) -> GuiResource -> InitModeState
           -> TitleModeHdl
           -> IO ()
-drawInit (w,h) res istat tvHdl =
+drawInit (w,h) res (InitModeState stat) tvHdl =
   GU.withViewport (Position 0 0) (Size (fromIntegral w) (fromIntegral h)) $ do
     useShader sh $ \ shaderPrg -> do
      -- Draw 2D Title
@@ -160,7 +157,7 @@ drawInit (w,h) res istat tvHdl =
       renderPlate shaderPrg (whitePlatVAO tvHdl) Nothing
       putTextLine font' (Just (1,1,1)) (Just 30)
                         (fromIntegral w / 2 - 200 ,fromIntegral h / 2)
-                      $ "Loading ......... "
+                      $ "Loading ... " ++ (take 4 $ show stat)
   where
     bkgTex = envCubeTex tvHdl
     widTex = widgetsTexture res
