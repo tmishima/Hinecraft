@@ -8,7 +8,8 @@ module Hinecraft.DB.WithSqlite3
   ( DBHandle
   , initDB
   , exitDB
-  , readChunkData
+  , readChunkReq
+  , readChunk
   , writeChunkData
   , setObjectAtCell
   , delObjectAtCell
@@ -70,7 +71,7 @@ mainProcess inst outst conn = do
             f' <- getChunkSurface conn (i,k)
             return ( b', f' )
           else return (replicate bkNo [], replicate bkNo [])
-        writeChan outst $ Dump blks sufs
+        writeChan outst $ Dump (i,k) blks sufs
         -- Dbg.traceIO $ unwords ["DB: Cell Chunk =",show (i,k)," Load" ]
         return False
       PutCell (i,k) j pos v -> do
@@ -131,7 +132,7 @@ data CmdStream = Load ChunkIdx
                | GetSBlk (Int,Int) Int 
                | Exit
 
-data DatStream = Dump [[(Int,Int)]] [[(Int,[Surface])]]
+data DatStream = Dump ChunkIdx [[(Int,Int)]] [[(Int,[Surface])]]
                | DumpSB [(Int,[Surface])]
                | Finish
 
@@ -181,14 +182,18 @@ setObjectAtCell hdl cidx bidx pos val = do
   where
     cmdst = ist hdl
 
-readChunkData :: DBHandle -> ChunkIdx
-              -> IO ([[(Int,Int)]],[[(Int,[Surface])]])
-readChunkData hdl chnkID = do 
+readChunkReq :: DBHandle -> ChunkIdx
+             -> IO ()
+readChunkReq hdl chnkID = do 
   writeChan cmdst $ Load chnkID 
-  Dump blks sufs <- readChan dst
-  return (blks , sufs)
   where
     cmdst = ist hdl
+
+readChunk :: DBHandle -> IO (ChunkIdx,[[(Int,Int)]],[[(Int,[Surface])]])
+readChunk hdl = do
+  Dump cidx blks sufs <- readChan dst
+  return (cidx, blks, sufs)
+  where
     dst = ost hdl
 
 readSurfaceBlock :: DBHandle -> ChunkIdx -> Int

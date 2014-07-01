@@ -4,26 +4,28 @@
 -- License : Apache-2.0
 --
 module Hinecraft.Data
-  ( WorldData (..)
+  ( WorldData
+  , getWorldData
+  , getBlockID
   , getSurfaceList
   , getAllSurfaceData
-  , getBlockID
-  , setBlockID
   , calcReGenArea
   , calcCursorPos
+  --
+  , setBlockID
   -- 
   , DataHdl
   , initData
   , exitData
   , reconfData
   , isEmpty
+  , getChunkNum
   -- 
   , wIndexToChunkpos
   ) where
 
 import qualified Data.Vector.Unboxed as DVS
 import qualified Data.Vector as DVS'
-import Control.Applicative
 import Data.Maybe ( fromJust, isJust, catMaybes ) -- , mapMaybe
 import Data.List
 import Data.Ord
@@ -31,7 +33,9 @@ import Data.Tuple
 import Data.IORef
 import qualified Data.Map as M
 import System.Directory
-import Control.Monad (foldM)
+import Control.Monad (foldM,when)
+import Control.Concurrent (forkIO)
+import Control.Applicative
 
 import Hinecraft.Types
 import Hinecraft.Model
@@ -43,7 +47,9 @@ import Debug.Trace as Dbg
 
 data DataHdl = DataHdl
   { dbHdl :: DBHandle
-  , wldDat :: Maybe WorldData
+  , wldDat :: IORef ( Maybe WorldData
+                    , ([ChunkIdx],[(ChunkIdx,BlockNo)],[ChunkIdx]))
+  , loadState :: IORef (Maybe Int)
   }
 
 type CellChunk = [DVS.Vector BlockIDNum]
@@ -61,61 +67,106 @@ data WorldData = WorldData
 initData :: FilePath -> IO DataHdl
 initData home = do
   !dbHdl' <- initDB home
+  !w <- newIORef (Nothing,([],[],[]))
+  !s <- newIORef Nothing
   return $! DataHdl
     { dbHdl = dbHdl'
-    , wldDat = Nothing
-     }
+    , wldDat = w
+    , loadState = s
+    }
 
 exitData :: DataHdl -> IO ()
 exitData = exitDB . dbHdl
 
-isEmpty :: DataHdl -> Bool
-isEmpty dhdl = isJust $ wldDat dhdl
+isEmpty :: DataHdl -> IO Bool
+isEmpty dhdl = do
+  (t,_) <- readIORef $ wldDat dhdl 
+  return $ not $ isJust t
 
-getAllSurfaceData :: DataHdl -> [((Int, Int), [SurfacePos])]
-getAllSurfaceData dhdl = case wldDat dhdl of
-  Just wld -> map (l2g dhdl wld) $ M.toList $ surfaceChunks wld 
+getChunkNum :: DataHdl -> IO (Int,Int)
+getChunkNum dhdl = do
+  i <- readIORef $ loadState dhdl 
+  return $ case i of
+    Nothing -> (-1,cMax)
+    Just i' -> (i',cMax)
+  where cMax = length $ chunkArea (0,0,0)
+
+getAllSurfaceData :: Maybe WorldData -> [((Int, Int), [SurfacePos])]
+getAllSurfaceData wldDat = case wldDat of
+  Just wld -> map (l2g wld) $ M.toList $ surfaceChunks wld 
   Nothing -> []
 
-l2g dhdl wld ((i,k),ms) =
+l2g wld ((i,k),ms) =
   ( (i,k)
   , map (\ (j,m) ->
       map (\ (p,v) ->
         let widx = chunkposToWindex ((i,k),j,p)
-            Just bid = getBlockID dhdl widx
+            Just bid = getBlockID (Just wld) widx
         in (widx, bid, v)) $ M.toList m)
       $ zip [0..] ms
   )
 
-reconfData :: DataHdl -> WorldIndex -> IO (DataHdl, ([ChunkIdx],[ChunkIdx]))
+getWorldData :: DataHdl
+             -> IO ( Maybe WorldData
+                   , ([ChunkIdx],[(ChunkIdx,BlockNo)],[ChunkIdx]))
+getWorldData dhdl = do
+  (w,us) <- readIORef $ wldDat dhdl
+  writeIORef (wldDat dhdl) (w,([],[],[])) 
+  return (w,us)
+
+getWorldData' :: DataHdl
+             -> IO ( Maybe WorldData
+                   , ([ChunkIdx],[(ChunkIdx,BlockNo)],[ChunkIdx]))
+getWorldData' dhdl = readIORef $ wldDat dhdl
+
+
+reconfData :: DataHdl -> WorldIndex -> IO ()
 reconfData dhdl upos = do 
-  wstck <- newIORef [] :: IO (IORef [ChunkIdx])
-  !wld <- do
-    chLst <- mapM (\ (i,j) -> do
-      (cs,fs) <- readChunkData dbHdl' (i,j)
-      if and $ map null cs 
+  writeIORef (loadState dhdl) $ Just 0
+  forkIO $ do
+    wstck <- newIORef [] :: IO (IORef [ChunkIdx])
+    (wldDat',(_,u,_)) <- getWorldData' dhdl
+    !wld <- do
+      chLst <- mapM (\ (itr,(i,j)) -> do
+        case wldDat' of
+          Just wld' -> do
+            ret <- case (M.lookup (i,j) $ cellChunks wld') of
+              Just c' -> do
+                case (M.lookup (i,j) $ surfaceChunks wld') of
+                   Just f' -> return ((i,j),c',f')
+                   Nothing -> return ((i,j),c',[])
+              Nothing -> loadFromDB wstck itr (i,j) 
+            return ret 
+          Nothing -> do
+            loadFromDB wstck itr (i,j) 
+        ) $ zip [0..] clist 
+      -- Dbg.traceIO "loadWorldData"
+      return $! WorldData
+        { cellChunks = M.fromList $ map (\ (i,c,_) -> (i,c)) chLst
+        , surfaceChunks = M.fromList $ map (\ (i,_,f) -> (i,f)) chLst 
+        }
+
+    let (acs,dcs) = diffcs (nowclist wldDat') clist
+    writeIORef (wldDat dhdl) (Just wld,(acs,u,dcs))
+    writeIORef (loadState dhdl) $ Just $ length clist 
+
+    wstck' <- readIORef wstck
+    mapM_ (\ (i,j) ->
+      writeChunkData dbHdl' (i,j) (vec2list gc) (map M.toList gf)) wstck'  
+    return ()
+  return ()
+  where
+    loadFromDB wstck itr (i,j) = do 
+      readChunkReq dbHdl' (i,j)
+      (_,cs,fs) <- readChunk dbHdl'
+      chunk <- if and $ map null cs 
         then do
-          tmp <- readIORef wstck
-          writeIORef wstck ((i,j):tmp)
-          --writeChunkData dbHdl' (i,j) (vec2list gc) (map M.toList gf)
-          -- Dbg.traceIO $ "genChunk " ++ show (i,j)
+          modifyIORef wstck (\ s -> ((i,j):s))
           return ((i,j),gc,gf)
         else return $ genCk (i,j) cs fs
-      ) clist 
-    -- Dbg.traceIO "loadWorldData"
-    return $! WorldData
-      { cellChunks = M.fromList $ map (\ (i,c,_) -> (i,c)) chLst
-      , surfaceChunks = M.fromList $ map (\ (i,_,f) -> (i,f)) chLst 
-      }
-  wstck' <- readIORef wstck
-  mapM_ (\ (i,j) ->
-    writeChunkData dbHdl' (i,j) (vec2list gc) (map M.toList gf)) wstck'     
-  return $! ( DataHdl
-    { dbHdl = dbHdl'
-    , wldDat = Just wld
-    }
-    , diffcs nowclist clist)
-  where
+      writeIORef (loadState dhdl) $ Just itr 
+      Dbg.traceIO $ unwords ["genChunk", show (i,j) , show itr]
+      return chunk
     genCk (i,j) cs fs =
       ( (i,j)
       , map (\ c -> (DVS.replicate (bsize ^ 3) airBlockID) DVS.// c) cs
@@ -123,8 +174,8 @@ reconfData dhdl upos = do
     (gc,gf) = genChunk
     dbHdl' = dbHdl dhdl
     clist = chunkArea upos
-    nowclist = map (\ (i,_) -> i)
-                $ case (wldDat dhdl) of
+    nowclist w = map (\ (i,_) -> i)
+                $ case w of
                    Just cs -> M.toList $ cellChunks cs
                    Nothing -> []
     diffcs oldcs newcs = foldr (\ c (acs,oldcs') -> if elem c oldcs'
@@ -144,11 +195,11 @@ gIdx2lIdx (x,y,z) = (bsize ^ (2::Int)) * ly + bsize * lz + lx
     (ox,oz) = ( x `div` bsize, z `div` bsize) 
     bsize = blockSize chunkParam
 
-calcCursorPos :: DataHdl ->  UserStatus
+calcCursorPos :: Maybe WorldData ->  UserStatus
               -> Maybe (WorldIndex,Surface)
-calcCursorPos dtHdl usr = calcCursorPos' suf usr
+calcCursorPos wldDat usr = calcCursorPos' suf usr
   where
-    suf = case wldDat dtHdl of
+    suf = case wldDat of
             Just wld -> surfaceChunks wld
             Nothing -> M.empty
 
@@ -228,12 +279,12 @@ calcPointer (x,y,z) (rx,ry,_) r =
   where
     d2r d = pi*d/180.0
 
-getSurfaceList :: DataHdl -> ((Int,Int),Int) -> SurfacePos
-getSurfaceList dtHdl pos = case wldDat dtHdl of
+getSurfaceList :: Maybe WorldData -> ((Int,Int),Int) -> SurfacePos
+getSurfaceList wldDat pos = case wldDat of
                 Just wld -> tr $ getSurfaceList' (surfaceChunks wld) pos 
                 Nothing -> [] 
   where
-    !tr = map (\ (i,f) -> (i,fromJust $ getBlockID dtHdl i,f))
+    !tr = map (\ (i,f) -> (i,fromJust $ getBlockID wldDat i,f))
 
 getSurfaceList' :: SurfaceChunks -> ((Int,Int),Int)
                 -> [(WorldIndex,[Surface])]
@@ -353,12 +404,13 @@ chunkArea upos = [ (i + x,j + z) | x <- [-2,-1..3], z <- [-2,-1..3] ]
   where        
     ((i,j),_,_) = wIndexToChunkpos upos
         
-setBlockID :: DataHdl -> WorldIndex -> BlockIDNum -> IO DataHdl
+setBlockID :: DataHdl -> WorldIndex -> BlockIDNum -> IO ()
 setBlockID dtHdl pos bid = do
+  (w,(a,u,d)) <- getWorldData' dtHdl
   if bid == airBlockID 
     then delObjectAtCell (dbHdl dtHdl) cidx bidx idx 
     else setObjectAtCell (dbHdl dtHdl) cidx bidx idx bid 
-  newWld <- case wldDat dtHdl of
+  newWld <- case w of
     Nothing -> return Nothing
     Just wld -> do
       let !wld' = setBlockID' wld pos bid chnklst
@@ -369,10 +421,8 @@ setBlockID dtHdl pos bid = do
         writeSurfaceBlock (dbHdl dtHdl) cidx blkNo fs') 
         chnklst
       return $ Just wld' 
-  return $! DataHdl
-    { dbHdl = dbHdl dtHdl
-    , wldDat = newWld
-    }
+  writeIORef (wldDat dtHdl) (newWld,(a,u ++ chnklst,d))
+  return ()
   where
     !(cidx,bidx,idx) = wIndexToChunkpos pos
     !chnklst = calcReGenArea pos
@@ -412,8 +462,8 @@ setBlockIDfromChunk c (x,y,z) bid = Just $ foldr rep [] $ zip [0 .. ] c
     !(ox,oz) = ( x `div` bsize, z `div` bsize) 
     !idx = (bsize ^ (2::Int)) * ly + bsize * lz + lx
 
-getBlockID :: DataHdl -> WorldIndex -> Maybe BlockIDNum
-getBlockID hdl idx =  case wldDat hdl of
+getBlockID :: Maybe WorldData -> WorldIndex -> Maybe BlockIDNum
+getBlockID wldDat idx =  case wldDat of
                 Just wld -> getBlockID' (cellChunks wld) idx
                 Nothing -> Nothing
 

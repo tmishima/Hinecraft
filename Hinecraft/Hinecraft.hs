@@ -21,7 +21,7 @@ module Main (main) where
 import Data.Maybe
 import Debug.Trace as Dbg
 import Control.Exception ( bracket )
-import Control.Monad ( when {-unless,,foldMvoid,filterM-} )
+import Control.Monad ( unless, when {-,foldMvoid,filterM-} )
 --import Data.Maybe ( fromJust,isJust ) --,catMaybes )
 import System.Directory ( getHomeDirectory )
 import Control.Concurrent
@@ -106,7 +106,7 @@ runHinecraft resouce@(glfwHdl,guiRes) = do
     mainLoop tmstat' plstat' runMode (dtHdl,tvHdl,wvHdl) sHdl dbgInfo' = do
       pollGLFW
       --threadDelay 10000
-      --threadDelay 1000
+      threadDelay 5000
       dt <- getDeltTime glfwHdl
       exitflg' <- getExitReqGLFW glfwHdl
       sunDeg <- getSunDeg sHdl
@@ -168,15 +168,25 @@ mainProcess (glfwHdl, guiRes) tmstat plstat dtHdl runMode wvHdl dt = do
             }
       return $! (md,plstat,ntstat,dtHdl)
     InitMode -> do
-      if (isEmpty dtHdl)
-        then return $! (PlayMode,plstat,tmstat,dtHdl)
-        else do
+      (i,n) <- getChunkNum dtHdl
+      if i == (-1) 
+        then do
           let !(ux,uy,uz) =  userPos $ usrStat plstat
-          !(dtHdl',_) <- reconfData dtHdl (round' ux, round' uy, round' uz)
-          initWorldVAOList wvHdl $ getAllSurfaceData dtHdl'
-          !md <- return PlayMode
-          return $! (md,plstat,tmstat,dtHdl')
+          reconfData dtHdl (round' ux, round' uy, round' uz)
+          Dbg.traceIO $ "reconf start end = " ++ show n
+          return (InitMode,plstat,tmstat,dtHdl)
+        else if i == n
+          then do
+            Dbg.traceIO $ "reconf end " ++ (show (i,n))
+            (wldDat,(a,u,d)) <- getWorldData dtHdl
+            when (length a == n) $ do
+              initWorldVAOList wvHdl $ getAllSurfaceData wldDat 
+              Dbg.traceIO $ show (i,n)
+            return (PlayMode,plstat,tmstat,dtHdl)
+          else
+            return (InitMode,plstat,tmstat,dtHdl)
     PlayMode -> do
+      (wldDat',(acs,ucs,dcs)) <- getWorldData dtHdl
       !vm <- getCursorMotion glfwHdl
       !sm <- getScrollMotion glfwHdl 
       !mm <- getMoveKeyOpe glfwHdl
@@ -186,43 +196,44 @@ mainProcess (glfwHdl, guiRes) tmstat plstat dtHdl runMode wvHdl dt = do
              _ ->  PlayMode
           !u' = usrStat plstat
           !plt = pallet plstat
-          !newStat = calcPlayerMotion dtHdl u' vm mm sm dt
-          !pos = calcCursorPos dtHdl u'
-      newDtHdl' <- case setBlock u' mous pos plt of
-        Just (pos',bid) -> do
-          !newDtHdl <- setBlockID dtHdl pos' bid
-          let !clst = calcReGenArea pos'
-              !sflst = map (\ (ij,bNo') ->
-                         ((ij,bNo')
-                         , getSurfaceList newDtHdl (ij,bNo')
-                         )) clst 
-          updateVAOlist wvHdl sflst
-          return $! newDtHdl
-        Nothing -> return dtHdl
-      let (ci1,_,_) = wIndexToChunkpos newPos
-          (ci2,_,_) = wIndexToChunkpos $ d2i $ userPos u'
-          newPos = d2i $ userPos newStat
+          !newStat = calcPlayerMotion wldDat' u' vm mm sm dt
+          !pos = calcCursorPos wldDat' u'
+          !newPos = d2i $ userPos newStat
+          !(ci1,_,_) = wIndexToChunkpos newPos
+          !(ci2,_,_) = wIndexToChunkpos $ d2i $ userPos u'
           d2i (px,py,pz) = (round' px, round' py, round' pz)
-      newDtHdl'' <- if ci1 == ci2 
-        then return newDtHdl'
-        else do
-          (twld,(acs,dcs)) <- reconfData newDtHdl' newPos
-          -- Dbg.traceIO $ "acs,dcs =" ++ (show (acs,dcs))
-          let !bNum = (blockNum chunkParam) - 1
-              !sflst = map (\ ij ->
-                         ( ij
-                         , map (\ b -> getSurfaceList twld (ij,b))
-                             [0 .. bNum]
-                         )) acs
-          appendVAO wvHdl sflst
-          deleteVAO wvHdl dcs
-          return twld
+
+      unless (ci1 == ci2) $ reconfData dtHdl newPos
+
+      when (or [(not.null) acs, (not.null) dcs]) $ do 
+        let !bNum = (blockNum chunkParam) - 1
+            !sflst = map (\ ij ->
+                       ( ij
+                       , map (\ b -> getSurfaceList wldDat' (ij,b))
+                           [0 .. bNum]
+                       )) acs
+        appendVAO wvHdl sflst
+        deleteVAO wvHdl dcs
+        return ()
+
+      case setBlock u' mous pos plt of
+        Just (pos',bid) -> setBlockID dtHdl pos' bid
+        Nothing -> return () 
+
+      when ((not.null) ucs) $ do
+        let !sflst = map (\ (ij,bNo') ->
+                         ((ij,bNo')
+                         , getSurfaceList wldDat' (ij,bNo')
+                         )) ucs
+        updateVAOlist wvHdl sflst
+        return () 
+
       return $! ( md
                 , PlayModeState
                        { usrStat = newStat , drgdrpMd = Nothing
                        , drgSta = Nothing , curPos = pos , pallet = plt
                        }
-                , tmstat, newDtHdl'')
+                , tmstat, dtHdl)
     InventoryMode -> do
       winSize <- getWindowSize glfwHdl
       let !md = case syskey of
@@ -325,11 +336,12 @@ setBlock ustat (_,_,lb,rb,_) (Just ((cx,cy,cz),fpos)) plt
       SBack   -> (cx,cy,cz + 1)
 
 
-calcPlayerMotion :: DataHdl -> UserStatus
+calcPlayerMotion :: Maybe WorldData -> UserStatus
                  -> (Double,Double) -> (Int,Int,Int,Int,Int) -> (Int,Int)
                  -> Double
                  -> UserStatus
-calcPlayerMotion dtHdl usrStat' (mx,my) (f,b,l,r,jmp) (_,sy) dt =
+calcPlayerMotion Nothing usrStat' _ _ _ _ = usrStat'
+calcPlayerMotion (Just wldDat) usrStat' (mx,my) (f,b,l,r,jmp) (_,sy) dt =
   UserStatus
     { userPos = ( nx , ny , nz)
     , userRot = (realToFrac nrx, realToFrac nry, realToFrac nrz) 
@@ -351,46 +363,47 @@ calcPlayerMotion dtHdl usrStat' (mx,my) (f,b,l,r,jmp) (_,sy) dt =
     !w = if jmp == 2
           then 5
           else wo - (9.8 * dt)
-    !(nx,ny,nz) = movePlayer dtHdl (ox,oy,oz) (realToFrac dx
+    !(nx,ny,nz) = movePlayer wldDat (ox,oy,oz) (realToFrac dx
                                             ,realToFrac dy
                                             ,realToFrac dz)
 
-movePlayer :: DataHdl -> Pos' -> Pos' -> Pos'
-movePlayer dtHdl (ox',oy',oz') (dx,dy,dz) =
-  case getBlockID dtHdl (round' tx, round' y' ,round' tz) of
+movePlayer :: WorldData -> Pos' -> Pos' -> Pos'
+movePlayer wldDat (ox',oy',oz') (dx,dy,dz) =
+  case getBlockID (Just wldDat) (round' tx, round' y' ,round' tz) of
     Just bid -> if bid == airBlockID || chkHalf bid ||
                    not ( isCollision $ getBlockInfo bid)
       then if dl < 1
            then (tx,y',tz)
-           else movePlayer dtHdl (tx,y',tz) (dx - dx', dy - dy', dz - dz')
+           else movePlayer wldDat (tx,y',tz)
+                           (dx - dx', dy - dy', dz - dz')
       else case bid'' of
         Just bid' -> if chkHalf bid' && y' + 0.6 > y''
           then if dl < 1
             then (tx,y'',tz)
-            else movePlayer dtHdl (tx,y'',tz)
+            else movePlayer wldDat (tx,y'',tz)
                                   (dx - dx', dy - dy', dz - dz')
           else (ox',y',oz')
         Nothing -> (ox',y',oz')
     Nothing -> (ox',oy',oz') 
   where 
-    !bid'' = getBlockID dtHdl (round' ox', round' oy' ,round' oz')
+    !bid'' = getBlockID (Just wldDat) (round' ox', round' oy' ,round' oz')
     !dl = sqrt (dx * dx + dz * dz + dy * dy)
     !(dx',dy',dz') = if dl < 1
           then (dx,dy,dz)
           else (dx / dl, dy / dl, dz / dl)
     !(tx,tz) = (ox' + dx', oz' + dz')
-    !y' = calYpos dtHdl (ox',oy',oz') dy'
-    !y'' = calYpos dtHdl (tx,y'+1,tz) (-1)
+    !y' = calYpos wldDat (ox',oy',oz') dy'
+    !y'' = calYpos wldDat (tx,y'+1,tz) (-1)
 
-calYpos :: DataHdl -> (Double,Double,Double) -> Double -> Double
+calYpos :: WorldData -> (Double,Double,Double) -> Double -> Double
 calYpos _   (_,y,_) 0 = y
-calYpos dtHdl (x,y,z) dy = if (abs ndy) < 0.001
+calYpos wldDat (x,y,z) dy = if (abs ndy) < 0.001
     then {-trace (show (y',y0,c,ly,dy,ndy)) -} y'
-    else {- trace (show (y',ndy)) $ -} calYpos dtHdl (x,y',z) ndy
+    else {- trace (show (y',ndy)) $ -} calYpos wldDat (x,y',z) ndy
   where
     !y0 = fromIntegral $ (round' y :: Int)
     !ly = y - y0
-    !t' = case getBlockID dtHdl (round' x, round' y, round' z) of
+    !t' = case getBlockID (Just wldDat) (round' x, round' y, round' z) of
       Just t -> if t == airBlockID  || 
                    not ( isCollision $ getBlockInfo t)
             then 0
