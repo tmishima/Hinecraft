@@ -157,7 +157,7 @@ drawInit (w,h) res (InitModeState stat) tvHdl =
       renderPlate shaderPrg (whitePlatVAO tvHdl) Nothing
       putTextLine font' (Just (1,1,1)) (Just 30)
                         (fromIntegral w / 2 - 200 ,fromIntegral h / 2)
-                      $ "Loading ... " ++ (take 4 $ show stat)
+                      $ "Loading ... " ++ (take 4 $ show stat) ++ " %"
   where
     bkgTex = envCubeTex tvHdl
     widTex = widgetsTexture res

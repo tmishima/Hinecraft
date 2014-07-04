@@ -262,15 +262,17 @@ drawWorldView wvhdl (w,h) res vaos usrStat' pos sunDeg = do
     !(urx,ury,_) = d2f $ userRot usrStat' :: (GLfloat,GLfloat,GLfloat)
     !dpMat = GU3.projectionMatrix (GU3.deg2rad 15) 1.0 (sunLen - 100)
                                   (sunLen + 100)
-    !sunDeg' | sunDeg > 0 && sunDeg < 180 =  180 - (realToFrac sunDeg)
-             | otherwise = 0 ::GLfloat
+    !sunDeg' | sunDeg > 5 && sunDeg < 170 =  180 - (realToFrac sunDeg)
+             | otherwise = 270 ::GLfloat
     !sunLen = 400 :: GLfloat
     !sunY = sunLen * (sin $ GU3.deg2rad sunDeg')
     !sunZ = sunLen * (cos $ GU3.deg2rad sunDeg')
     !dvMat = GU3.camMatrix $ GU3.tilt (-sunDeg')
-                           $ GU3.dolly (V3 (0::GLfloat) sunY sunZ)
-                           -- $ GU3.dolly (V3 ux sunY (sunZ + uz))
+                           -- $ GU3.dolly (V3 (0::GLfloat) sunY sunZ)
+                           $ GU3.dolly (V3 spx sunY (sunZ + spz))
                            GU3.fpsCamera
+    !(spx,spz) = ( fromIntegral $ 32 * round (ux / 32)
+                 , fromIntegral $ 32 * round (uz / 32))
     !mMat = V4 (V4 1.0 0.0 0.0 0.0)
                (V4 0.0 1.0 0.0 0.0)
                (V4 0.0 0.0 1.0 0.0)
