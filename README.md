@@ -30,7 +30,7 @@ WindowsでHinecraftをビルドするためには、ビルドに使用するPC�
 6.	プログラムを実行します。
   A)	作業フォルダでcabal runを実行します。
 
-注１）	Hinecraftは
+* 注１）	Hinecraftは
 
 FTGL[http://sourceforge.net/apps/mediawiki/ftgl/index.php?title=Main_Page]に依存しています。cabalを使用してFTGLパッケージをインストールする際にインクルードフォルダとlibファイルを指定する必要があります。
 
