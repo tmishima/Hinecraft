@@ -1,6 +1,10 @@
 Hinecraftビルド・インストール手順(windows)
 =========
 
++This is a simple Minecraft Clone (DEMO) written in Haskell.
++ScreenShot](https://raw.github.com/tmishima/Hinecraft/master/Hinecraft_title.png)
++![ScreenShot](https://raw.github.com/tmishima/Hinecraft/master/Hinecraft_blocks.png)
+
 WindowsでHinecraftをビルドするためには、ビルドに使用するPCに以下のプログラムおよびライブラリがインストールされている必要があります。
 
 * Haskell Platform
