@@ -2,6 +2,8 @@ Hinecraftビルド・インストール手順(windows)
 =========
 
 This is a simple Minecraft Clone (DEMO) written in Haskell.
+
+
 ![ScreenShot](https://raw.github.com/tmishima/Hinecraft/master/Hinecraft_title.png)
 ![ScreenShot](https://raw.github.com/tmishima/Hinecraft/master/Hinecraft_blocks.png)
 
@@ -52,6 +54,10 @@ cabal: At least the following dependencies are missing:
 FTGL -any,
 
 GLFW-b -any,　　　：
+
+Twitter：　@tty_mishima  
+
+テクスチャは以下をお借りしてます。  
 
 
 * TEX-D2  
