@@ -18,6 +18,7 @@ WindowsでHinecraftをビルドするためには、ビルドに使用するPC�
 [以降、Hinecraft.cabalファイルが存在するフォルダを作業フォルダと呼ぶ]
 3.	（作業フォルダ）\dll_for_Windows7_32bitフォルダに存在するftgl.dllファイルを作業フォルダへコピーします。
 4.	以下のコマンドを実行しプログラムをビルドします。
+
   A)	 cabal clean
 
   B)	 cabal configure　　（注3）
@@ -29,16 +30,24 @@ WindowsでHinecraftをビルドするためには、ビルドに使用するPC�
 6.	プログラムを実行します。
   A)	作業フォルダでcabal runを実行します。
 
-* 注１）	HinecraftはFTGL[http://sourceforge.net/apps/mediawiki/ftgl/index.php?title=Main_Page]に依存しています。cabalを使用してFTGLパッケージをインストールする際にインクルードフォルダとlibファイルを指定する必要があります。
+注１）	Hinecraftは
+
+FTGL[http://sourceforge.net/apps/mediawiki/ftgl/index.php?title=Main_Page]に依存しています。cabalを使用してFTGLパッケージをインストールする際にインクルードフォルダとlibファイルを指定する必要があります。
+
 インクルードフォルダはFTGLサイトよりソースファイルをダウンロードして指定してください。libファイルは（作業フォルダ）\extra_lib_for_Windows7_32bitフォルダ内のftgl.libを指定してください。
 
-* 注２）	Windows7においては通常以下のフォルダです。
+注２）	Windows7においては通常以下のフォルダです。 
+
 C:\Users\(ログインユーザ名)
 
-* 注３）	依存パッケージがインストールされていない場合は以下のようなエラーが表示されます。
+注３）	依存パッケージがインストールされていない場合は以下のようなエラーが表示されます。
+
 必要な依存パッケージをインストールしてからcabal configureを再実行してください。
+
 cabal: At least the following dependencies are missing:
+
 FTGL -any,
+
 GLFW-b -any,　　　：
 
 
