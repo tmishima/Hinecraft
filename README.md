@@ -3,9 +3,11 @@ Hinecraftビルド・インストール手順(windows)
 
 WindowsでHinecraftをビルドするためには、ビルドに使用するPCに以下のプログラムおよびライブラリがインストールされている必要があります。
 
-Haskell Platform
-FTGL（注１）
-その他依存パッケージ
+●Haskell Platform
+
+●FTGL（注１）
+
+●その他依存パッケージ
 
 ビルドに必要な環境が整った後、以下の手順を実行します。
 
