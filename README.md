@@ -1,9 +1,9 @@
 Hinecraftビルド・インストール手順(windows)
 =========
 
-+!This is a simple Minecraft Clone (DEMO) written in Haskell.
-+!ScreenShot](https://raw.github.com/tmishima/Hinecraft/master/Hinecraft_title.png)
-+![ScreenShot](https://raw.github.com/tmishima/Hinecraft/master/Hinecraft_blocks.png)
+This is a simple Minecraft Clone (DEMO) written in Haskell.
+![ScreenShot](https://raw.github.com/tmishima/Hinecraft/master/Hinecraft_title.png)
+![ScreenShot](https://raw.github.com/tmishima/Hinecraft/master/Hinecraft_blocks.png)
 
 WindowsでHinecraftをビルドするためには、ビルドに使用するPCに以下のプログラムおよびライブラリがインストールされている必要があります。
 
@@ -54,18 +54,12 @@ FTGL -any,
 GLFW-b -any,　　　：
 
 
-
-Twitter：　@tty_mishima
-
-テクスチャは以下をお借りしてます。
-
-* TEX-D2
-http://forum.minecraftuser.jp/viewtopic.php?f=14&t=3132
-（タイトルの一部を変更しています）
+* TEX-D2  
+http://forum.minecraftuser.jp/viewtopic.php?f=14&t=3132  
+（タイトルの一部を変更しています）  
 
 * あずき
-解像度：16*16px
-対応バージョン：1.7.x
-配布ページ：http://hashibami.nobody.jp/
-作者名：ueda 
-
+解像度：16*16px  
+対応バージョン：1.7.x  
+配布ページ：http://hashibami.nobody.jp/  
+作者名：ueda  
