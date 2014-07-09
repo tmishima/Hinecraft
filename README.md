@@ -38,7 +38,7 @@ WindowsでHinecraftをビルドするためには、ビルドに使用するPC�
 
 注１）	Hinecraftは
 
-FTGL[http://sourceforge.net/apps/mediawiki/ftgl/index.php?title=Main_Page]
+[FTGL](http://sourceforge.net/apps/mediawiki/ftgl/index.php?title=Main_Page)
 に依存しています。cabalを使用してFTGLパッケージをインストールする際にインクルードフォルダとlibファイルを指定する必要があります。
 インクルードフォルダはFTGLサイトよりソースファイルをダウンロードして指定してください。libファイルは（作業フォルダ）\extra_lib_for_Windows7_32bitフォルダ内のftgl.libを指定してください。
 
@@ -56,10 +56,11 @@ FTGL -any,
 
 GLFW-b -any,　　　：
 
+=========
+
 Twitter：　@tty_mishima  
 
 テクスチャは以下をお借りしてます。  
-
 
 * TEX-D2  
 http://forum.minecraftuser.jp/viewtopic.php?f=14&t=3132  
