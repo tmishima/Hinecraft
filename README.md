@@ -3,11 +3,11 @@ Hinecraftビルド・インストール手順(windows)
 
 WindowsでHinecraftをビルドするためには、ビルドに使用するPCに以下のプログラムおよびライブラリがインストールされている必要があります。
 
-●Haskell Platform
+* Haskell Platform
 
-●FTGL（注１）
+* FTGL（注１）
 
-●その他依存パッケージ
+* その他依存パッケージ
 
 ビルドに必要な環境が整った後、以下の手順を実行します。
 
@@ -30,7 +30,7 @@ WindowsでHinecraftをビルドするためには、ビルドに使用するPC�
 6.	プログラムを実行します。
   A)	作業フォルダでcabal runを実行します。
 
-* 注１）	Hinecraftは
+注１）	Hinecraftは
 
 FTGL[http://sourceforge.net/apps/mediawiki/ftgl/index.php?title=Main_Page]に依存しています。cabalを使用してFTGLパッケージをインストールする際にインクルードフォルダとlibファイルを指定する必要があります。
 
