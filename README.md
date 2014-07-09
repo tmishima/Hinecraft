@@ -19,8 +19,11 @@ WindowsでHinecraftをビルドするためには、ビルドに使用するPC�
 3.	（作業フォルダ）\dll_for_Windows7_32bitフォルダに存在するftgl.dllファイルを作業フォルダへコピーします。
 4.	以下のコマンドを実行しプログラムをビルドします。
   A)	 cabal clean
+
   B)	 cabal configure　　（注3）
+  
   C)	 cabal build
+  
 5.	リソースファイル類をインストールします。
   A)	“.Hinecraft”フォルダをユーザのhomeフォルダ（注2）へコピーします。
 6.	プログラムを実行します。
