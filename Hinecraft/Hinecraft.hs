@@ -111,7 +111,7 @@ runHinecraft resouce@(glfwHdl,guiRes) = do
       threadDelay 5000
       dt <- getDeltTime glfwHdl
       exitflg' <- getExitReqGLFW glfwHdl
-      sunDeg <- getSunDeg sHdl
+      sunDeg <- return 80 -- getSunDeg sHdl
       !(ntmstat',niniMode',nplstat',runMode') <- mainProcess
                    resouce tmstat' iniMode' plstat' dtHdl runMode wvHdl dt
       tglWin <- getScreenModeKeyOpe glfwHdl
@@ -172,10 +172,11 @@ mainProcess (glfwHdl, guiRes) tmstat instat plstat
       return $! (md,plstat,ntstat,instat)
     InitMode -> do
       (i,n) <- getChunkNum dtHdl
-      if i == (-1) 
+      if n == 0 
         then do
           let !(ux,uy,uz) =  userPos $ usrStat plstat
-          reconfData dtHdl (round' ux, round' uy, round' uz)
+              !clist = chunkArea (round' ux, round' uy, round' uz) 4
+          reconfData dtHdl clist
           Dbg.traceIO $ "reconf start end = " ++ show n
           return (InitMode,plstat,tmstat,InitModeState 0)
         else if i == n
@@ -206,8 +207,8 @@ mainProcess (glfwHdl, guiRes) tmstat instat plstat
           !(ci1,_,_) = wIndexToChunkpos newPos
           !(ci2,_,_) = wIndexToChunkpos $ d2i $ userPos u'
           d2i (px,py,pz) = (round' px, round' py, round' pz)
-
-      unless (ci1 == ci2) $ reconfData dtHdl newPos
+          !clist = chunkArea newPos 5
+      unless (ci1 == ci2) $ reconfData dtHdl clist
 
       when (or [(not.null) acs, (not.null) dcs]) $ do 
         let !bNum = (blockNum chunkParam) - 1

@@ -26,6 +26,7 @@ import Graphics.Rendering.OpenGL as GL
 -- Common
 --import Debug.Trace as Dbg
 import Control.Monad (  forM_ {-,when, unless,void,filterM-} )
+import qualified Data.ByteString.Char8 as B
 
 import Hinecraft.Model
 import Hinecraft.Types
@@ -171,7 +172,7 @@ initGL = do
 loadGuiResource :: FilePath -> (Int,Int) -> IO GuiResource
 loadGuiResource home (w,h) = do
   wtex' <- loadTexture widPng
-  font' <- Ft.createBitmapFont fontPath
+  font' <- Ft.createBitmapFont $ B.pack fontPath
   itex' <- loadTexture invDlgPng
   ibtex' <- loadTexture invTabPng
   return GuiResource

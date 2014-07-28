@@ -22,6 +22,7 @@ module Hinecraft.Data
   , getChunkNum
   -- 
   , wIndexToChunkpos
+  , chunkArea
   ) where
 
 import qualified Data.Vector.Unboxed as DVS
@@ -37,6 +38,9 @@ import Control.Monad (foldM,when)
 import Control.Concurrent (forkIO)
 import Control.Applicative
 
+import Math.Noise.NoiseModule
+import Math.Noise.Modules.Perlin
+
 import Hinecraft.Types
 import Hinecraft.Model
 import Hinecraft.Util
@@ -49,7 +53,7 @@ data DataHdl = DataHdl
   { dbHdl :: DBHandle
   , wldDat :: IORef ( Maybe WorldData
                     , ([ChunkIdx],[(ChunkIdx,BlockNo)],[ChunkIdx]))
-  , loadState :: IORef (Maybe Int)
+  , loadState :: IORef (Int,Int)
   }
 
 type CellChunk = [DVS.Vector BlockIDNum]
@@ -68,7 +72,7 @@ initData :: FilePath -> IO DataHdl
 initData home = do
   !dbHdl' <- initDB home
   !w <- newIORef (Nothing,([],[],[]))
-  !s <- newIORef Nothing
+  !s <- newIORef (0,0) 
   return $! DataHdl
     { dbHdl = dbHdl'
     , wldDat = w
@@ -85,11 +89,7 @@ isEmpty dhdl = do
 
 getChunkNum :: DataHdl -> IO (Int,Int)
 getChunkNum dhdl = do
-  i <- readIORef $ loadState dhdl 
-  return $ case i of
-    Nothing -> (-1,cMax)
-    Just i' -> (i',cMax)
-  where cMax = length $ chunkArea (0,0,0)
+  readIORef $ loadState dhdl 
 
 getAllSurfaceData :: Maybe WorldData -> [((Int, Int), [SurfacePos])]
 getAllSurfaceData wldDat = case wldDat of
@@ -119,10 +119,9 @@ getWorldData' :: DataHdl
                    , ([ChunkIdx],[(ChunkIdx,BlockNo)],[ChunkIdx]))
 getWorldData' dhdl = readIORef $ wldDat dhdl
 
-
-reconfData :: DataHdl -> WorldIndex -> IO ()
-reconfData dhdl upos = do 
-  writeIORef (loadState dhdl) $ Just 0
+reconfData :: DataHdl -> [ChunkIdx] -> IO ()
+reconfData dhdl clist = do 
+  writeIORef (loadState dhdl) (0, clistNum)
   forkIO $ do
     wstck <- newIORef [] :: IO (IORef [ChunkIdx])
     (wldDat',(_,u,_)) <- getWorldData' dhdl
@@ -147,15 +146,17 @@ reconfData dhdl upos = do
         }
 
     let (acs,dcs) = diffcs (nowclist wldDat') clist
-    writeIORef (wldDat dhdl) (Just wld,(acs,u,dcs))
-    writeIORef (loadState dhdl) $ Just $ length clist 
 
     wstck' <- readIORef wstck
     mapM_ (\ (i,j) ->
       writeChunkData dbHdl' (i,j) (vec2list gc) (map M.toList gf)) wstck'  
+
+    writeIORef (wldDat dhdl) (Just wld,(acs,u,dcs))
+    writeIORef (loadState dhdl) ( clistNum , clistNum)
     return ()
   return ()
   where
+    clistNum = length clist
     loadFromDB wstck itr (i,j) = do 
       readChunkReq dbHdl' (i,j)
       (_,cs,fs) <- readChunk dbHdl'
@@ -164,7 +165,7 @@ reconfData dhdl upos = do
           modifyIORef wstck (\ s -> ((i,j):s))
           return ((i,j),gc,gf)
         else return $ genCk (i,j) cs fs
-      writeIORef (loadState dhdl) $ Just itr 
+      writeIORef (loadState dhdl) (itr , clistNum)
       Dbg.traceIO $ unwords ["genChunk", show (i,j) , show itr]
       return chunk
     genCk (i,j) cs fs =
@@ -173,7 +174,6 @@ reconfData dhdl upos = do
       , map M.fromList fs) 
     (gc,gf) = genChunk
     dbHdl' = dbHdl dhdl
-    clist = chunkArea upos
     nowclist w = map (\ (i,_) -> i)
                 $ case w of
                    Just cs -> M.toList $ cellChunks cs
@@ -398,9 +398,9 @@ chkSuf'' vec (tag1,tag2) (itr1,itr2) clbk (x,y,z) = concat
     !fill2' = (\ v -> (v,v == airBlockID))
                <$> (vec DVS.!? ((pos2i . itr2) (x,y,z))) 
 
-chunkArea :: WorldIndex -> [(Int,Int)]
-chunkArea upos = [ (i + x,j + z) | x <- [-2,-1..3], z <- [-2,-1..3] ]
--- chunkArea upos = [ (i + x,j + z) | x <- [-1,0..1], z <- [-1,0..1] ]
+chunkArea :: WorldIndex -> Int -> [(Int,Int)]
+chunkArea upos r = [ (i + i',j + j') | i' <- [-r .. r ], j' <- [-r .. r ] 
+                                     , i' ^ 2 + j' ^2 <= r ^ 2 ]
   where        
     ((i,j),_,_) = wIndexToChunkpos upos
         
@@ -496,6 +496,14 @@ calcReGenArea (x,y,z) = if null blknos
     !org = (x `div` bsize, z `div` bsize)
     !chkIdx = nub $ map (\ (x',z') -> (x' `div` bsize, z' `div` bsize))
                [(x,z),(x+1,z),(x-1,z),(x,z+1),(x,z-1)]
+
+test x y z = getValue noiseF (xPos x, yPos y, z)
+  where
+    xPos x = fromIntegral x
+    yPos y = fromIntegral y
+    noiseF :: NoiseModule
+    noiseF = gen perlin { perlinFrequency = 1.1, perlinOctaves = 9 }
+
 
 genChunk :: (CellChunk, SurfaceChunk)
 genChunk = ( arrb ++ (arrs'' : arrt) , mapb ++ (maps : mapt))

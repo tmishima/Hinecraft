@@ -16,6 +16,7 @@ module Hinecraft.Rendering.Util
 import Graphics.Rendering.OpenGL 
 import Graphics.Rendering.OpenGL.Raw
 import Control.Monad ( void )
+import qualified Data.ByteString.Char8 as B
 --import Debug.Trace as Dbg
 
 import qualified Graphics.GLUtil as GU
@@ -142,7 +143,7 @@ putTextLine ft cl sz (x,y) str = preservingMatrix $ do
     Just s -> void $ Ft.setFontFaceSize ft s 72 
     _ -> return ()
   rasterPos $ Vertex2 x y
-  Ft.renderFont ft str Ft.Front
+  Ft.renderFont ft Ft.Front $ B.pack str
 
 drawIcon :: TextureObject -> GLfloat -> (GLfloat,GLfloat)
          -> BlockIDNum -> IO ()

@@ -30,9 +30,9 @@ executable Hinecraft
                      Hinecraft.DB.WithSqlite3 
   build-depends:       base , GLFW-b , OpenGL , mtl
                      , bytestring , array , vector , directory
-                     , process , OpenGLRaw , cereal , FTGL
+                     , process , OpenGLRaw , cereal , FTGL-bytestring
                      , time , containers , GLUtil , linear , text
-                     , sqlite-simple
+                     , sqlite-simple , Noise
 
   if os(windows)
     extra-lib-dirs:    extra_lib_for_Windows7_32bit
